@@ -82,13 +82,15 @@ final class ChatViewModel: ObservableObject {
         let history = store.currentMessages
         let entries = worldBookEntries(input: text, history: history)
         lastInjectedCount = entries.count
-        let worldBookText = WorldBookService.injectionText(for: entries)
+        let grouped = WorldBookService.groupByPosition(entries)
         let client = OpenAIClient(
             baseURL: settings.baseURL,
             apiKey: settings.apiKey,
             model: settings.modelName,
             systemPrompt: effectiveSystemPrompt,
-            worldBookText: worldBookText
+            beforeSystemText: WorldBookService.injectionText(for: grouped[.beforeSystem] ?? []),
+            afterSystemText: WorldBookService.injectionText(for: grouped[.afterSystem] ?? []),
+            afterHistoryText: WorldBookService.injectionText(for: grouped[.afterHistory] ?? [])
         )
 
         Task {
@@ -144,8 +146,7 @@ final class ChatViewModel: ObservableObject {
     private func worldBookEntries(input: String, history: [ChatMessage]) -> [WorldBookEntry] {
         guard settings.worldBookEnabled else { return [] }
         let book = worldBook.book(for: store.currentSession?.worldBookId)
-        let recentContext = history.suffix(4).map(\.content).joined(separator: "\n")
-        return WorldBookService.selectedEntries(for: input, context: recentContext, entries: book.entries)
+        return WorldBookService.selectedEntries(for: input, history: history, entries: book.entries)
     }
 
     private func message(for error: Error) -> String {

@@ -140,8 +140,7 @@ struct ChatView: View {
         guard settings.worldBookEnabled else { return 0 }
         let book = worldBook.book(for: store.currentSession?.worldBookId)
         let input = viewModel.input.trimmingCharacters(in: .whitespacesAndNewlines)
-        let context = viewModel.messages.suffix(4).map(\.content).joined(separator: "\n")
-        let entries = WorldBookService.selectedEntries(for: input, context: context, entries: book.entries)
+        let entries = WorldBookService.selectedEntries(for: input, history: viewModel.messages, entries: book.entries)
         return entries.reduce(0) { $0 + $1.title.count + $1.content.count }
     }
 

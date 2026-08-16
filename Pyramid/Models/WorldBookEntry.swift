@@ -5,11 +5,21 @@ enum WorldBookMatchMode: String, Codable, CaseIterable {
     case exact
 }
 
+enum WorldBookInsertionPosition: String, Codable, CaseIterable {
+    case beforeSystem
+    case afterSystem
+    case afterHistory
+}
+
 struct WorldBookEntry: Codable, Identifiable, Equatable {
     var id: UUID
     var title: String
     var content: String
     var keywords: [String]
+    var secondaryKeywords: [String]
+    var scanDepth: Int?
+    var probability: Int
+    var insertionPosition: WorldBookInsertionPosition
     var isEnabled: Bool
     var isConstant: Bool
     var priority: Int
@@ -20,6 +30,10 @@ struct WorldBookEntry: Codable, Identifiable, Equatable {
         title: String = "",
         content: String = "",
         keywords: [String] = [],
+        secondaryKeywords: [String] = [],
+        scanDepth: Int? = nil,
+        probability: Int = 100,
+        insertionPosition: WorldBookInsertionPosition = .afterSystem,
         isEnabled: Bool = true,
         isConstant: Bool = false,
         priority: Int = 0,
@@ -29,6 +43,10 @@ struct WorldBookEntry: Codable, Identifiable, Equatable {
         self.title = title
         self.content = content
         self.keywords = keywords
+        self.secondaryKeywords = secondaryKeywords
+        self.scanDepth = scanDepth
+        self.probability = probability
+        self.insertionPosition = insertionPosition
         self.isEnabled = isEnabled
         self.isConstant = isConstant
         self.priority = priority
@@ -41,6 +59,10 @@ struct WorldBookEntry: Codable, Identifiable, Equatable {
         title = try c.decode(String.self, forKey: .title)
         content = try c.decode(String.self, forKey: .content)
         keywords = try c.decode([String].self, forKey: .keywords)
+        secondaryKeywords = (try? c.decode([String].self, forKey: .secondaryKeywords)) ?? []
+        scanDepth = try? c.decodeIfPresent(Int.self, forKey: .scanDepth)
+        probability = (try? c.decode(Int.self, forKey: .probability)) ?? 100
+        insertionPosition = (try? c.decode(WorldBookInsertionPosition.self, forKey: .insertionPosition)) ?? .afterSystem
         isEnabled = try c.decode(Bool.self, forKey: .isEnabled)
         isConstant = try c.decode(Bool.self, forKey: .isConstant)
         priority = try c.decode(Int.self, forKey: .priority)

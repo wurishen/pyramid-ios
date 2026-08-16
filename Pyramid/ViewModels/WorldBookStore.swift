@@ -201,14 +201,33 @@ final class WorldBookStore: ObservableObject {
         if let keyArray = keyField as? [String] {
             entry.keywords = keyArray.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         } else if let keyString = keyField as? String {
-            entry.keywords = keyString.components(separatedBy: ",")
-                .map { $0.trimmingCharacters(in: .whitespaces) }
-                .filter { !$0.isEmpty }
+            // 酒馆单字符串 key 若含空格，按空白拆分（否则按逗号）
+            if keyString.contains(" ") {
+                entry.keywords = keyString.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+            } else {
+                entry.keywords = keyString.components(separatedBy: ",")
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                    .filter { !$0.isEmpty }
+            }
+        }
+
+        let secondaryField = raw["keysecondary"] ?? raw["keySecondary"]
+        if let secondaryArray = secondaryField as? [String] {
+            entry.secondaryKeywords = secondaryArray.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        } else if let secondaryString = secondaryField as? String {
+            if secondaryString.contains(" ") {
+                entry.secondaryKeywords = secondaryString.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+            } else {
+                entry.secondaryKeywords = secondaryString.components(separatedBy: ",")
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                    .filter { !$0.isEmpty }
+            }
         }
 
         entry.isConstant = (raw["constant"] as? Bool) ?? false
         entry.isEnabled = !((raw["disable"] as? Bool) ?? false)
 
+        // 酒馆 order 越小越优先，与原生 priority 升序排序（小=优先）一致，直接映射
         if let order = raw["order"] as? NSNumber {
             entry.priority = order.intValue
         } else if let priority = raw["priority"] as? NSNumber {
@@ -219,6 +238,31 @@ final class WorldBookStore: ObservableObject {
 
         if let matchWholeWords = raw["matchWholeWords"] as? Bool, matchWholeWords {
             entry.matchMode = .exact
+        }
+
+        // useProbability=false 视为不启用概率（=100 恒触发）
+        if let useProbability = raw["useProbability"] as? Bool, !useProbability {
+            entry.probability = 100
+        } else if let probability = raw["probability"] as? NSNumber {
+            entry.probability = min(max(probability.intValue, 0), 100)
+        }
+
+        if let depth = raw["depth"] as? NSNumber {
+            entry.scanDepth = depth.intValue
+        } else if let scanDepth = raw["scanDepth"] as? NSNumber {
+            entry.scanDepth = scanDepth.intValue
+        }
+
+        // 酒馆 position：0=角色定义前、1-2=角色定义/示例后、3-6=深度/历史处
+        if let position = raw["position"] as? NSNumber {
+            switch position.intValue {
+            case 0:
+                entry.insertionPosition = .beforeSystem
+            case 3, 4, 5, 6:
+                entry.insertionPosition = .afterHistory
+            default:
+                entry.insertionPosition = .afterSystem
+            }
         }
 
         return entry
