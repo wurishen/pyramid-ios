@@ -9,6 +9,9 @@ struct WorldBookView: View {
     @State private var searchText = ""
     @State private var showImporter = false
     @State private var pendingImportContent: WorldBookImportContent?
+    @State private var pendingImportContents: [WorldBookImportContent] = []
+    @State private var pendingImportFileNames: [String] = []
+    @State private var pendingImportIndex = 0
     @State private var pendingImportFileName: String?
     @State private var showImportModeDialog = false
     @State private var importErrorMessage: String?
@@ -120,7 +123,7 @@ struct WorldBookView: View {
                 }
             }
         }
-        .fileImporter(isPresented: $showImporter, allowedContentTypes: importContentTypes, allowsMultipleSelection: false) { result in
+        .fileImporter(isPresented: $showImporter, allowedContentTypes: importContentTypes, allowsMultipleSelection: true) { result in
             handleImportResult(result)
         }
         .confirmationDialog(
@@ -133,36 +136,38 @@ struct WorldBookView: View {
                     Button("新建世界书（\(importTitleSuggestion)）") {
                         let book = store.createBook(title: importTitleSuggestion, entries: content.entries)
                         viewingBookID = book.id
-                        pendingImportContent = nil
+                        advanceImportQueue()
                     }
                     Button("合并到当前世界书") {
                         store.mergeEntries(content.entries, into: currentBook.id)
-                        pendingImportContent = nil
+                        advanceImportQueue()
                     }
                     Button("覆盖当前世界书条目", role: .destructive) {
                         store.overwriteEntries(content.entries, in: currentBook.id)
-                        pendingImportContent = nil
+                        advanceImportQueue()
                     }
-                    Button("取消", role: .cancel) { pendingImportContent = nil }
+                    Button("取消", role: .cancel) { cancelImportQueue() }
                 } else {
                     Button("合并（按 id 去重）") {
                         store.importBooks(content.books, mode: .merge)
-                        pendingImportContent = nil
+                        advanceImportQueue()
                     }
                     Button("覆盖", role: .destructive) {
                         store.importBooks(content.books, mode: .overwrite)
                         viewingBookID = store.globalBook.id
-                        pendingImportContent = nil
+                        advanceImportQueue()
                     }
-                    Button("取消", role: .cancel) { pendingImportContent = nil }
+                    Button("取消", role: .cancel) { cancelImportQueue() }
                 }
             }
         } message: {
             if let content = pendingImportContent {
+                let remaining = pendingImportContents.count - pendingImportIndex - 1
+                let suffix = remaining > 0 ? "（还有 \(remaining) 个文件待处理）" : ""
                 if content.isSillyTavern {
-                    Text("识别为酒馆（SillyTavern）世界书，共 \(content.entries.count) 条条目。合并会追加到当前世界书并按内容去重；覆盖会替换当前世界书的全部条目。")
+                    Text("识别为酒馆（SillyTavern）世界书，共 \(content.entries.count) 条条目。合并会追加到当前世界书并按内容去重；覆盖会替换当前世界书的全部条目。\(suffix)")
                 } else {
-                    Text("覆盖将替换当前全部世界书。")
+                    Text("覆盖将替换当前全部世界书。\(suffix)")
                 }
             }
         }
@@ -206,31 +211,46 @@ struct WorldBookView: View {
         case .failure(let error):
             importErrorMessage = error.localizedDescription
         case .success(let urls):
-            guard let url = urls.first else { return }
-            let didAccess = url.startAccessingSecurityScopedResource()
-            defer {
-                if didAccess {
-                    url.stopAccessingSecurityScopedResource()
+            guard !urls.isEmpty else { return }
+            pendingImportContents = []
+            pendingImportFileNames = []
+            pendingImportIndex = 0
+            for url in urls {
+                let didAccess = url.startAccessingSecurityScopedResource()
+                defer {
+                    if didAccess {
+                        url.stopAccessingSecurityScopedResource()
+                    }
+                }
+                do {
+                    let data = try Data(contentsOf: url)
+                    let content = try store.parseImportData(data)
+                    pendingImportContents.append(content)
+                    pendingImportFileNames.append(url.deletingPathExtension().lastPathComponent)
+                } catch {
+                    importErrorMessage = error.localizedDescription
+                    return
                 }
             }
-            do {
-                let data = try Data(contentsOf: url)
-                let content = try store.parseImportData(data)
-                pendingImportContent = content
-                pendingImportFileName = url.deletingPathExtension().lastPathComponent
-                showImportModeDialog = true
-            } catch {
-                importErrorMessage = error.localizedDescription
-            }
+            showNextImportDialog()
         }
+    }
+
+    private func showNextImportDialog() {
+        guard pendingImportIndex < pendingImportContents.count else { return }
+        pendingImportContent = pendingImportContents[pendingImportIndex]
+        pendingImportFileName = pendingImportFileNames[pendingImportIndex]
+        showImportModeDialog = true
     }
 
     private var importContentTypes: [UTType] {
         [
             .json,
             .text,
+            .plainText,
             .data,
-            UTType(filenameExtension: "json") ?? .json,
+            .item,
+            UTType(filenameExtension: "json", conformingTo: .data) ?? .json,
         ]
     }
 
@@ -249,6 +269,19 @@ struct WorldBookView: View {
         for id in ids {
             store.deleteEntry(id, in: currentBook.id)
         }
+    }
+
+    private func advanceImportQueue() {
+        pendingImportContent = nil
+        pendingImportIndex += 1
+        showNextImportDialog()
+    }
+
+    private func cancelImportQueue() {
+        pendingImportContent = nil
+        pendingImportContents = []
+        pendingImportFileNames = []
+        pendingImportIndex = 0
     }
 }
 
