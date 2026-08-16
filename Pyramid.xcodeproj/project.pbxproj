@@ -111,7 +111,7 @@
 				AB0000000000000000000020 /* ChatSession.swift */,
 				AB0000000000000000000023 /* WorldBookEntry.swift */,
 				AB0000000000000000000028 /* WorldBook.swift */,
-				AB00000000000000000000104 /* Preset.swift */,
+				AB0000000000000000000104 /* Preset.swift */,
 				AB0000000000000000000205 /* Character.swift */,
 			);
 			path = Models;
