@@ -5,7 +5,7 @@ struct CharacterListView: View {
     @ObservedObject var store: CharacterStore
     @ObservedObject var worldBook: WorldBookStore
     @State private var editingCharacter: Character?
-    @State private var showImporter = false
+    @State private var showDocumentPicker = false
     @State private var importError: String?
     @State private var importSuccess: String?
 
@@ -42,7 +42,7 @@ struct CharacterListView: View {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Menu {
                     Button {
-                        showImporter = true
+                        showDocumentPicker = true
                     } label: {
                         Label("导入 JSON", systemImage: "square.and.arrow.down")
                     }
@@ -56,8 +56,13 @@ struct CharacterListView: View {
                 }
             }
         }
-        .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json, .png, .data, .item]) { result in
-            handleImport(result)
+        .sheet(isPresented: $showDocumentPicker) {
+            DocumentPicker(
+                allowedTypes: [.json, .png, .data, .item],
+                allowsMultipleSelection: true,
+                onPicked: { urls in handleImport(urls) },
+                onCancel: {}
+            )
         }
         .alert("导入失败", isPresented: importErrorBinding) {
             Button("好", role: .cancel) { importError = nil }
@@ -83,23 +88,27 @@ struct CharacterListView: View {
         }
     }
 
-    private func handleImport(_ result: Result<URL, Error>) {
+    private func handleImport(_ urls: [URL]) {
         DispatchQueue.main.async { [self] in
-            switch result {
-            case .failure(let error):
-                importError = error.localizedDescription
-            case .success(let url):
+            guard !urls.isEmpty else {
+                importError = "未选择任何文件"
+                return
+            }
+            var total = 0
+            for url in urls {
                 do {
                     let data = try ImportSupport.readImportedData(from: url)
                     let characters = try ImportSupport.parseCharacters(from: data)
                     for character in characters {
                         store.upsert(character)
+                        total += 1
                     }
-                    importSuccess = "已导入 \(characters.count) 张角色卡"
                 } catch {
                     importError = error.localizedDescription
+                    return
                 }
             }
+            importSuccess = "已导入 \(total) 张角色卡"
         }
     }
 

@@ -10,7 +10,7 @@ struct WorldBookView: View {
     @State private var viewingBookID: UUID
     @State private var editingEntry: WorldBookEntry?
     @State private var searchText = ""
-    @State private var showImporter = false
+    @State private var showDocumentPicker = false
     @State private var pendingImportContent: WorldBookImportContent?
     @State private var pendingImportContents: [WorldBookImportContent] = []
     @State private var pendingImportFileNames: [String] = []
@@ -124,7 +124,7 @@ struct WorldBookView: View {
                     }
                     Divider()
                     Button {
-                        showImporter = true
+                        showDocumentPicker = true
                     } label: {
                         Label("导入…", systemImage: "square.and.arrow.down")
                     }
@@ -139,8 +139,13 @@ struct WorldBookView: View {
                 }
             }
         }
-        .fileImporter(isPresented: $showImporter, allowedContentTypes: importContentTypes, allowsMultipleSelection: true) { result in
-            handleImportResult(result)
+        .sheet(isPresented: $showDocumentPicker) {
+            DocumentPicker(
+                allowedTypes: importContentTypes,
+                allowsMultipleSelection: true,
+                onPicked: { urls in handleImportResult(.success(urls)) },
+                onCancel: {}
+            )
         }
         .confirmationDialog(
             "如何导入？",
@@ -246,11 +251,11 @@ struct WorldBookView: View {
         DispatchQueue.main.async { [self] in
             switch result {
             case .failure(let error):
-                importLog.error("fileImporter returned failure: \(error.localizedDescription)")
+                importLog.error("import callback returned failure: \(error.localizedDescription)")
                 importErrorMessage = error.localizedDescription
             case .success(let urls):
                 guard !urls.isEmpty else {
-                    importLog.error("fileImporter returned no URLs")
+                    importLog.error("import callback returned no URLs")
                     importErrorMessage = "未选择任何文件"
                     return
                 }
