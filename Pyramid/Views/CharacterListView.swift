@@ -77,21 +77,19 @@ struct CharacterListView: View {
         }
     }
 
-    private func handleImport(_ result: Result<[URL], Error>) {
+    private func handleImport(_ result: Result<URL, Error>) {
         switch result {
         case .failure(let error):
             importError = error.localizedDescription
-        case .success(let urls):
-            for url in urls {
-                let didAccess = url.startAccessingSecurityScopedResource()
-                defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
-                do {
-                    let data = try Data(contentsOf: url)
-                    let decoded = try JSONDecoder().decode(Character.self, from: data)
-                    store.upsert(decoded)
-                } catch {
-                    importError = error.localizedDescription
-                }
+        case .success(let url):
+            let didAccess = url.startAccessingSecurityScopedResource()
+            defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
+            do {
+                let data = try Data(contentsOf: url)
+                let decoded = try JSONDecoder().decode(Character.self, from: data)
+                store.upsert(decoded)
+            } catch {
+                importError = error.localizedDescription
             }
         }
     }
