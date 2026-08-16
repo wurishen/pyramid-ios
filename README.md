@@ -61,8 +61,70 @@ Pyramid/
   ViewModels/          ChatViewModel、ChatStore、WorldBookStore（持久化）
   Views/               ChatView、SettingsView、SessionListView、SessionDetailView、WorldBookView、WorldBookEditView
   Assets.xcassets/     图标与颜色资源
-.github/workflows/    GitHub Actions（macOS 上 xcodebuild 编译）
+.github/workflows/    GitHub Actions（编译检查 + archive/IPA 产物打包）
 ```
+
+## 构建与打包（IPA）
+
+应用仓库未配置签名证书（需要你的 Apple Team / 开发者证书 / 描述文件），所以 CI 产出的是**未签名（开发用）产物**，无法直接通过正常途径安装到真机。
+
+### 当前 CI 产物（Actions Artifacts）
+
+推送到 `main` 后，GitHub Actions 会依次执行：
+
+1. Simulator 快速编译检查；
+2. `xcodebuild archive`（`generic/platform=iOS`，`CODE_SIGNING_ALLOWED=NO`）；
+3. 尝试无证书导出 IPA；CI 环境没有签名证书时导出会失败，并**自动回退**为「手动打包未签名 IPA」；
+4. 上传两个 artifact：
+   - `Pyramid-xcarchive-unsigned`：未签名的 `.xcarchive`
+   - `Pyramid-ipa`：IPA（成功导出时为 `Pyramid.ipa`，回退时为 `Pyramid-unsigned.ipa`）
+
+> ⚠️ **当前 CI 无签名证书，产出的是未签名/开发用产物，真机安装需本地用 Xcode 签名。** 未签名 IPA 可用于验证包体结构、配合 sideload 工具自行重签名，或下载 `.xcarchive` 后在本机 Xcode 里补签名再导出。
+
+### 用 Xcode（推荐）
+
+1. Xcode 打开 `Pyramid.xcodeproj`；
+2. 选中 `Pyramid` target → **Signing & Capabilities** → 勾选 *Automatically manage signing*，选择你的 **Team**（没有则到 Apple Developer 创建免费/付费开发者账号）；
+3. 菜单 **Product → Archive**（设备连接或选择 "Any iOS Device"）；
+4. 在 **Organizer** 中选中刚生成的 archive → **Distribute App** → 选择分发方式（App Store Connect / Ad Hoc / Development）→ 按向导完成。
+
+### 命令行打包
+
+先确认签名配置（在 Xcode 的 Signing & Capabilities 或 `project.pbxproj` 中设置 Team），然后：
+
+```sh
+xcodebuild archive \
+  -project Pyramid.xcodeproj \
+  -scheme Pyramid \
+  -destination 'generic/platform=iOS' \
+  -archivePath build/Pyramid.xcarchive
+
+xcodebuild -exportArchive \
+  -archivePath build/Pyramid.xcarchive \
+  -exportPath build/export \
+  -exportOptionsPlist exportOptions.plist
+```
+
+`exportOptions.plist` 示例（按你的签名方式调整 `method` / `teamID`）：
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>method</key>
+    <string>development</string>
+    <key>teamID</key>
+    <string>YOUR_TEAM_ID</string>
+    <key>signingStyle</key>
+    <string>automatic</string>
+</dict>
+</plist>
+```
+
+导出产物位于 `build/export/`（`*.ipa`），可上传 App Store Connect，或通过 Xcode Organizer / Apple Configurator 安装到真机。
+
+> **关键前提**：archive 前必须配置好有效的 **Team / 签名证书 / 描述文件**（App ID 与 Bundle ID `com.pyramid.ios` 匹配），否则无法生成能安装到真机的正式 IPA。
 
 ## 编译验证
 
@@ -76,4 +138,4 @@ xcodebuild build \
   CODE_SIGNING_ALLOWED=NO
 ```
 
-CI：推送到 `main` 后，GitHub Actions 会在 macOS runner 上执行同样的 `xcodebuild build`，可在仓库 **Actions** 页查看结果。
+CI：推送到 `main` 后，GitHub Actions 会在 macOS runner 上执行 simulator 编译检查，并产出未签名 archive / IPA 作为 Actions Artifact（见「构建与打包（IPA）」），可在仓库 **Actions** 页查看结果。

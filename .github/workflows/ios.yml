@@ -9,8 +9,67 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+
       - name: Xcode version
         run: xcodebuild -version
-      - name: Build
+
+      - name: Simulator build (quick check)
         run: |
           xcodebuild -project Pyramid.xcodeproj -scheme Pyramid -destination 'generic/platform=iOS Simulator' -configuration Debug CODE_SIGNING_ALLOWED=NO build
+
+      - name: Archive for device (unsigned)
+        run: |
+          xcodebuild -project Pyramid.xcodeproj -scheme Pyramid \
+            -destination 'generic/platform=iOS' \
+            -configuration Release \
+            -archivePath "$RUNNER_TEMP/Pyramid.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO \
+            archive
+
+      - name: Try to export IPA
+        id: export-ipa
+        continue-on-error: true
+        run: |
+          cat > "$RUNNER_TEMP/exportOptions.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>ad-hoc</string>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>signingAllowed</key>
+              <false/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Pyramid.xcarchive" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist "$RUNNER_TEMP/exportOptions.plist"
+
+      - name: Package unsigned IPA (fallback)
+        if: steps.export-ipa.outcome == 'failure'
+        run: |
+          APP_PATH="$RUNNER_TEMP/Pyramid.xcarchive/Products/Applications/Pyramid.app"
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/Payload/"
+          cd "$RUNNER_TEMP"
+          zip -qry "Pyramid-unsigned.ipa" Payload
+
+      - name: Upload archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pyramid-xcarchive-unsigned
+          path: ${{ runner.temp }}/Pyramid.xcarchive
+          if-no-files-found: error
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pyramid-ipa
+          path: |
+            ${{ runner.temp }}/export/Pyramid.ipa
+            ${{ runner.temp }}/Pyramid-unsigned.ipa
+          if-no-files-found: warn
