@@ -64,6 +64,16 @@ Pyramid/
 .github/workflows/    GitHub Actions（编译检查 + archive/IPA 产物打包）
 ```
 
+## 下载（CI 构建）
+
+每次推送到 `main` 且构建成功后，GitHub Actions 会自动发布一个 **pre-release**，并把 IPA 挂到仓库 Releases 页：
+
+👉 https://github.com/wurishen/pyramid-ios/releases
+
+- 附件文件名：`Pyramid-unsigned.ipa`（正式导出成功时同样命名为该名）
+- 标签形如 `build-<run_number>`，发布备注里写明来源 commit 与分支
+- ⚠️ 均为**未签名（开发用）产物**，无法直接安装到真机；请下载后本地用 Xcode 重新签名（方法见下节），或下载同名的 Actions Artifact `.xcarchive` 在本机补签名
+
 ## 构建与打包（IPA）
 
 应用仓库未配置签名证书（需要你的 Apple Team / 开发者证书 / 描述文件），所以 CI 产出的是**未签名（开发用）产物**，无法直接通过正常途径安装到真机。
@@ -78,6 +88,7 @@ Pyramid/
 4. 上传两个 artifact：
    - `Pyramid-xcarchive-unsigned`：未签名的 `.xcarchive`
    - `Pyramid-ipa`：IPA（成功导出时为 `Pyramid.ipa`，回退时为 `Pyramid-unsigned.ipa`）
+5. 发布 **GitHub Release**（pre-release，标签 `build-<run_number>`）：把 IPA 作为附件 `Pyramid-unsigned.ipa` 挂到 [Releases 页](https://github.com/wurishen/pyramid-ios/releases)，备注含来源 commit，见「下载（CI 构建）」。
 
 > ⚠️ **当前 CI 无签名证书，产出的是未签名/开发用产物，真机安装需本地用 Xcode 签名。** 未签名 IPA 可用于验证包体结构、配合 sideload 工具自行重签名，或下载 `.xcarchive` 后在本机 Xcode 里补签名再导出。
 

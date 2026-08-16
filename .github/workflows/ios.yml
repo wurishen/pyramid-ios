@@ -7,6 +7,8 @@ on:
 jobs:
   build:
     runs-on: macos-14
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -73,3 +75,40 @@ jobs:
             ${{ runner.temp }}/export/Pyramid.ipa
             ${{ runner.temp }}/Pyramid-unsigned.ipa
           if-no-files-found: warn
+
+      - name: Publish IPA to GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          IPA="$RUNNER_TEMP/export/Pyramid.ipa"
+          [ -f "$IPA" ] || IPA="$RUNNER_TEMP/Pyramid-unsigned.ipa"
+          [ -f "$IPA" ] || { echo "没有可发布的 IPA，跳过发布"; exit 0; }
+
+          TAG="build-${{ github.run_number }}"
+          TITLE="Pyramid 未签名构建 #${{ github.run_number }}"
+          SHORT_SHA="${{ github.sha }}"
+          REF_NAME="${{ github.ref_name }}"
+
+          cat > "$RUNNER_TEMP/release_body.md" <<EOF
+          ## Pyramid 未签名构建
+
+          - 标签：\`$TAG\`
+          - 提交：\`$SHORT_SHA\`（分支 \`$REF_NAME\`）
+          - 类型：pre-release
+          - 附件：\`Pyramid-unsigned.ipa\`
+
+          > ⚠️ **未签名（开发用）产物**，无法直接安装到真机。
+          > 请下载后用 Xcode 或其他工具重新签名，或下载同名 Actions Artifact 中的 \`.xcarchive\` 在本机补签名。
+          > 打包与签名方法见仓库 README「构建与打包（IPA）」。
+          EOF
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$IPA#Pyramid-unsigned.ipa" --clobber
+            gh release edit "$TAG" --title "$TITLE" --notes-file "$RUNNER_TEMP/release_body.md"
+          else
+            gh release create "$TAG" "$IPA#Pyramid-unsigned.ipa" \
+              --title "$TITLE" \
+              --notes-file "$RUNNER_TEMP/release_body.md" \
+              --prerelease
+          fi
