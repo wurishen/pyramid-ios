@@ -2,10 +2,11 @@ import SwiftUI
 
 struct ContentView: View {
     @ObservedObject var settings: AppSettings
+    @ObservedObject var store: ChatStore
 
     var body: some View {
         TabView {
-            ChatView(settings: settings)
+            ChatView(settings: settings, store: store)
                 .tabItem {
                     Label("聊天", systemImage: "bubble.left.and.bubble.right")
                 }

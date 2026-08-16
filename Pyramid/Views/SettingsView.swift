@@ -19,6 +19,10 @@ struct SettingsView: View {
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                 }
+                Section("系统提示词") {
+                    TextField("系统提示词（可留空）", text: $settings.systemPrompt, axis: .vertical)
+                        .lineLimit(3...8)
+                }
                 Section("对话") {
                     Toggle("流式输出（默认开启）", isOn: $settings.useStreaming)
                 }

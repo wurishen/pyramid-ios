@@ -27,6 +27,7 @@ struct OpenAIClient {
     let baseURL: String
     let apiKey: String
     let model: String
+    let systemPrompt: String
 
     func send(messages: [ChatMessage]) async throws -> String {
         let data: Data
@@ -111,9 +112,15 @@ struct OpenAIClient {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
 
+        var requestMessages: [ChatCompletionRequest.Message] = []
+        if !systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            requestMessages.append(.init(role: "system", content: systemPrompt))
+        }
+        requestMessages += messages.map { .init(role: $0.role.rawValue, content: $0.content) }
+
         let body = ChatCompletionRequest(
             model: model,
-            messages: messages.map { .init(role: $0.role.rawValue, content: $0.content) },
+            messages: requestMessages,
             stream: stream
         )
         request.httpBody = try JSONEncoder().encode(body)

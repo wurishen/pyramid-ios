@@ -2,19 +2,26 @@ import SwiftUI
 
 @MainActor
 final class ChatViewModel: ObservableObject {
-    @Published var messages: [ChatMessage] = []
     @Published var input = ""
     @Published var isSending = false
     @Published var errorMessage: String?
     @Published var scrollVersion = 0
 
+    let store: ChatStore
     private let settings: AppSettings
 
-    init(settings: AppSettings) {
+    init(settings: AppSettings, store: ChatStore) {
         self.settings = settings
+        self.store = store
+    }
+
+    var messages: [ChatMessage] {
+        store.currentMessages
     }
 
     func send() {
+        guard let sessionID = store.currentSessionID else { return }
+
         let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !isSending else { return }
 
@@ -27,50 +34,48 @@ final class ChatViewModel: ObservableObject {
             return
         }
 
-        messages.append(ChatMessage(role: .user, content: text))
+        store.appendMessage(ChatMessage(role: .user, content: text), to: sessionID)
         input = ""
         isSending = true
         errorMessage = nil
         scrollVersion += 1
 
-        let history = messages
+        let history = store.currentMessages
         let client = OpenAIClient(
             baseURL: settings.baseURL,
             apiKey: settings.apiKey,
-            model: settings.modelName
+            model: settings.modelName,
+            systemPrompt: settings.systemPrompt
         )
 
         Task {
             if settings.useStreaming {
-                await streamReply(with: client, history: history)
+                await streamReply(with: client, history: history, sessionID: sessionID)
             } else {
-                await sendReply(with: client, history: history)
+                await sendReply(with: client, history: history, sessionID: sessionID)
             }
             isSending = false
             scrollVersion += 1
         }
     }
 
-    private func sendReply(with client: OpenAIClient, history: [ChatMessage]) async {
+    private func sendReply(with client: OpenAIClient, history: [ChatMessage], sessionID: UUID) async {
         do {
             let reply = try await client.send(messages: history)
-            messages.append(ChatMessage(role: .assistant, content: reply))
+            store.appendMessage(ChatMessage(role: .assistant, content: reply), to: sessionID)
         } catch {
             errorMessage = message(for: error)
         }
     }
 
-    private func streamReply(with client: OpenAIClient, history: [ChatMessage]) async {
+    private func streamReply(with client: OpenAIClient, history: [ChatMessage], sessionID: UUID) async {
         let assistant = ChatMessage(role: .assistant, content: "")
-        messages.append(assistant)
+        store.appendMessage(assistant, to: sessionID)
         var full = ""
         do {
             for try await delta in client.stream(messages: history) {
                 full += delta
-                guard let index = messages.firstIndex(where: { $0.id == assistant.id }) else {
-                    continue
-                }
-                messages[index].content = full
+                store.updateMessage(content: full, id: assistant.id, in: sessionID)
                 scrollVersion += 1
             }
             if full.isEmpty {
@@ -79,7 +84,7 @@ final class ChatViewModel: ObservableObject {
         } catch {
             errorMessage = message(for: error)
             if full.isEmpty {
-                messages.removeAll { $0.id == assistant.id }
+                store.removeMessage(id: assistant.id, in: sessionID)
             }
         }
     }

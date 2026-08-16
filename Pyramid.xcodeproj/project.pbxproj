@@ -17,6 +17,9 @@
 		AB0000000000000000000008 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000018 /* ChatViewModel.swift */; };
 		AB0000000000000000000009 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000019 /* ChatView.swift */; };
 		AB000000000000000000000A /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000001A /* SettingsView.swift */; };
+		AB000000000000000000000B /* ChatSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000001B /* ChatSession.swift */; };
+		AB000000000000000000000C /* ChatStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000001C /* ChatStore.swift */; };
+		AB000000000000000000000D /* SessionListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000001D /* SessionListView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -31,6 +34,9 @@
 		AB0000000000000000000018 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
 		AB0000000000000000000019 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		AB000000000000000000001A /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		AB000000000000000000001B /* ChatSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSession.swift; sourceTree = "<group>"; };
+		AB000000000000000000001C /* ChatStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatStore.swift; sourceTree = "<group>"; };
+		AB000000000000000000001D /* SessionListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionListView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -72,6 +78,7 @@
 			children = (
 				AB0000000000000000000015 /* ChatMessage.swift */,
 				AB0000000000000000000016 /* ChatCompletionResponse.swift */,
+				AB000000000000000000001B /* ChatSession.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -88,6 +95,7 @@
 			isa = PBXGroup;
 			children = (
 				AB0000000000000000000018 /* ChatViewModel.swift */,
+				AB000000000000000000001C /* ChatStore.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -97,6 +105,7 @@
 			children = (
 				AB0000000000000000000019 /* ChatView.swift */,
 				AB000000000000000000001A /* SettingsView.swift */,
+				AB000000000000000000001D /* SessionListView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -187,6 +196,9 @@
 				AB0000000000000000000008 /* ChatViewModel.swift in Sources */,
 				AB0000000000000000000009 /* ChatView.swift in Sources */,
 				AB000000000000000000000A /* SettingsView.swift in Sources */,
+				AB000000000000000000000B /* ChatSession.swift in Sources */,
+				AB000000000000000000000C /* ChatStore.swift in Sources */,
+				AB000000000000000000000D /* SessionListView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

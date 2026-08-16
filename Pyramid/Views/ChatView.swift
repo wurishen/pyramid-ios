@@ -2,9 +2,12 @@ import SwiftUI
 
 struct ChatView: View {
     @StateObject private var viewModel: ChatViewModel
+    @ObservedObject var store: ChatStore
+    @State private var showSessions = false
 
-    init(settings: AppSettings) {
-        _viewModel = StateObject(wrappedValue: ChatViewModel(settings: settings))
+    init(settings: AppSettings, store: ChatStore) {
+        self.store = store
+        _viewModel = StateObject(wrappedValue: ChatViewModel(settings: settings, store: store))
     }
 
     var body: some View {
@@ -15,13 +18,32 @@ struct ChatView: View {
             messageList
             inputBar
         }
-        .navigationTitle("Pyramid")
+        .navigationTitle(store.currentSession?.title ?? "Pyramid")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    showSessions = true
+                } label: {
+                    Image(systemName: "text.bubble")
+                }
+                .accessibilityLabel("会话列表")
+            }
+        }
+        .sheet(isPresented: $showSessions) {
+            SessionListView(store: store)
+        }
     }
 
     private var messageList: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 12) {
+                    if viewModel.messages.isEmpty {
+                        Text("发送一条消息开始对话")
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 40)
+                    }
                     ForEach(viewModel.messages) { message in
                         MessageBubble(message: message)
                     }
@@ -98,6 +120,6 @@ struct MessageBubble: View {
 
 #Preview {
     NavigationStack {
-        ChatView(settings: AppSettings())
+        ChatView(settings: AppSettings(), store: ChatStore())
     }
 }
