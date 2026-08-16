@@ -1,4 +1,5 @@
 import Foundation
+import Compression
 
 enum ImportSupport {
 
@@ -27,8 +28,13 @@ enum ImportSupport {
         if let list = try? JSONDecoder().decode([Character].self, from: data) {
             return list
         }
-        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            return [parseSillyTavernCard(json)]
+        if let object = try? JSONSerialization.jsonObject(with: data) {
+            if let dict = object as? [String: Any] {
+                return [parseSillyTavernCard(dict)]
+            }
+            if let array = object as? [[String: Any]] {
+                return array.map { parseSillyTavernCard($0) }
+            }
         }
         if let png = try? parsePngCharacters(data) {
             return png
@@ -73,14 +79,47 @@ enum ImportSupport {
             if type == "tEXt", let nul = chunk.firstIndex(of: 0) {
                 let keyword = String(data: Data(chunk[..<nul]), encoding: .ascii) ?? ""
                 if keyword == "chara" {
-                    let jsonData = Data(chunk[(nul + 1)...])
-                    if let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+                    let value = Data(chunk[(nul + 1)...])
+                    if let jsonData = charaJSONData(from: value),
+                       let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
                         return [parseSillyTavernCard(json)]
                     }
                 }
             }
         }
         throw CharacterImportError.invalidData
+    }
+
+    /// 酒馆 PNG 的 chara 数据通常是 zlib 压缩 + base64；个别实现直接放明文或纯 base64 JSON。
+    private static func charaJSONData(from value: Data) -> Data? {
+        if (try? JSONSerialization.jsonObject(with: value)) != nil { return value }
+        if let inflated = inflateBase64(value),
+           (try? JSONSerialization.jsonObject(with: inflated)) != nil { return inflated }
+        if let b64String = String(data: value, encoding: .utf8),
+           let plain = Data(base64Encoded: b64String),
+           (try? JSONSerialization.jsonObject(with: plain)) != nil { return plain }
+        return nil
+    }
+
+    private static func inflateBase64(_ value: Data) -> Data? {
+        guard let b64String = String(data: value, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            let compressed = Data(base64Encoded: b64String) else { return nil }
+        var buffer = [UInt8](repeating: 0, count: 2_000_000)
+        let decodedLength = compressed.withUnsafeBytes { src in
+            buffer.withUnsafeMutableBytes { dst in
+                compression_decode_buffer(
+                    dst.bindMemory(to: UInt8.self).baseAddress!,
+                    buffer.count,
+                    src.bindMemory(to: UInt8.self).baseAddress!,
+                    compressed.count,
+                    nil,
+                    COMPRESSION_ZLIB
+                )
+            }
+        }
+        guard decodedLength > 0 else { return nil }
+        return Data(buffer.prefix(decodedLength))
     }
 }
 
