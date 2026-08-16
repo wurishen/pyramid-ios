@@ -13,6 +13,10 @@ struct ChatView: View {
     @State private var messageToDelete: ChatMessage?
     @State private var regenerateMessage: ChatMessage?
     @State private var showCopiedFeedback = false
+    @State private var showRolePicker = false
+    @State private var pendingRole: Character?
+    @State private var showRoleAction = false
+    @State private var showDuplicateAlert = false
     @FocusState private var inputFocused: Bool
 
     init(settings: AppSettings, store: ChatStore, worldBook: WorldBookStore, presets: PresetStore, characters: CharacterStore) {
@@ -33,9 +37,7 @@ struct ChatView: View {
             if let error = viewModel.errorMessage {
                 errorBanner(error)
             }
-            if settings.showAvatars, let char = currentCharacter {
-                characterHeader(char)
-            }
+            sessionBar
             messageList
             if settings.showContextHint {
                 contextHintBar
@@ -81,6 +83,45 @@ struct ChatView: View {
         .sheet(isPresented: $showSessions) {
             SessionListView(store: store, worldBook: worldBook, settings: settings, presets: presets, characters: characters)
         }
+        .sheet(isPresented: $showRolePicker) {
+            RolePickerView(characters: characters.characters) { role in
+                handleRoleSelection(role)
+            }
+        }
+        .confirmationDialog(
+            "应用到当前会话？",
+            isPresented: $showRoleAction,
+            titleVisibility: .visible
+        ) {
+            if let role = pendingRole {
+                Button("绑定到当前会话") {
+                    if let sid = store.currentSessionID { store.setCharacter(role.id, for: sid) }
+                    pendingRole = nil
+                }
+                Button("新建对话窗") {
+                    if store.sessions.contains(where: { $0.characterId == role.id && $0.id != store.currentSessionID }) {
+                        showDuplicateAlert = true
+                    } else {
+                        createSession(with: role)
+                        pendingRole = nil
+                    }
+                }
+                Button("取消", role: .cancel) { pendingRole = nil }
+            }
+        } message: {
+            Text("选择「绑定到当前会话」会替换本对话的角色；选择「新建对话窗」会新开一个对话。")
+        }
+        .alert("该角色已有对话窗", isPresented: $showDuplicateAlert) {
+            if let role = pendingRole {
+                Button("仍要新建") {
+                    createSession(with: role)
+                    pendingRole = nil
+                }
+                Button("取消", role: .cancel) { pendingRole = nil }
+            }
+        } message: {
+            Text("该角色已绑定其他对话窗，仍要新建一个吗？")
+        }
         .sheet(item: $editingMessage) { message in
             EditMessageSheet(initialText: message.content) { text in
                 viewModel.editMessage(message, newContent: text)
@@ -119,17 +160,54 @@ struct ChatView: View {
         }
     }
 
-    private func characterHeader(_ char: Character) -> some View {
-        HStack(spacing: 8) {
-            AvatarView(imageData: char.avatarData, name: char.name, size: 28)
-            Text(char.name)
-                .font(.subheadline)
-                .fontWeight(.medium)
+    private func sessionBar() -> some View {
+        HStack(spacing: 12) {
+            Button {
+                showRolePicker = true
+            } label: {
+                HStack(spacing: 8) {
+                    AvatarView(
+                        imageData: currentCharacter?.avatarData,
+                        name: currentCharacter?.name ?? "选择角色",
+                        size: 24
+                    )
+                    Text(currentCharacter?.name ?? "选择角色")
+                        .font(.subheadline)
+                        .fontWeight(currentCharacter == nil ? .regular : .medium)
+                        .foregroundStyle(currentCharacter == nil ? Color.secondary : Color.primary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("选择角色卡")
             Spacer()
+            Text(store.currentSession?.title ?? "新会话")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(.bar)
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
+    }
+
+    private func handleRoleSelection(_ role: Character?) {
+        if let role {
+            pendingRole = role
+            showRoleAction = true
+        } else {
+            if let sid = store.currentSessionID {
+                store.setCharacter(nil, for: sid)
+            }
+        }
+    }
+
+    private func createSession(with role: Character) {
+        let session = store.createSession()
+        store.setCharacter(role.id, for: session.id)
     }
 
     private var deleteDialogBinding: Binding<Bool> {
@@ -275,6 +353,49 @@ struct ChatView: View {
     }
 }
 
+struct RolePickerView: View {
+    let characters: [Character]
+    var onSelect: (Character?) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Button {
+                    dismiss()
+                    onSelect(nil)
+                } label: {
+                    Label("不绑定角色", systemImage: "person.crop.circle.badge.minus")
+                }
+                if characters.isEmpty {
+                    Text("还没有角色卡，请在「设置 → 角色卡」中新建或导入。")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(characters) { character in
+                    Button {
+                        dismiss()
+                        onSelect(character)
+                    } label: {
+                        HStack(spacing: 12) {
+                            AvatarView(imageData: character.avatarData, name: character.name, size: 32)
+                            Text(character.name.isEmpty ? "未命名" : character.name)
+                                .foregroundStyle(.primary)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("选择角色卡")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+}
+
 struct MessageBubble: View {
     let message: ChatMessage
     var floorNumber: Int = 0
@@ -294,9 +415,6 @@ struct MessageBubble: View {
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             if message.role == .user {
-                if showAvatar {
-                    AvatarView(imageData: userAvatarData, name: "我", size: 28)
-                }
                 Spacer(minLength: 48)
             }
             VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 3) {
@@ -328,7 +446,11 @@ struct MessageBubble: View {
                 }
                 .padding(.horizontal, 4)
             }
-            if message.role == .assistant {
+            if message.role == .user {
+                if showAvatar {
+                    AvatarView(imageData: userAvatarData, name: "我", size: 28)
+                }
+            } else {
                 Spacer(minLength: 48)
             }
         }
