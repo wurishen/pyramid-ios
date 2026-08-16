@@ -73,6 +73,15 @@ final class ChatStore: ObservableObject {
         save()
     }
 
+    func removeMessages(from id: UUID, in sessionID: UUID) {
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }),
+              let start = sessions[sessionIndex].messages.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        sessions[sessionIndex].messages.removeSubrange(start...)
+        save()
+    }
+
     func setWorldBook(_ worldBookId: UUID?, for sessionID: UUID) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         sessions[index].worldBookId = worldBookId

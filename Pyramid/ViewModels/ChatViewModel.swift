@@ -26,18 +26,54 @@ final class ChatViewModel: ObservableObject {
 
         let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !isSending else { return }
-
-        guard !settings.baseURL.isEmpty else {
-            errorMessage = "请先在「设置」中填写 API Base URL"
-            return
-        }
-        guard !settings.modelName.isEmpty else {
-            errorMessage = "请先在「设置」中填写模型名"
-            return
-        }
+        guard validateSettings() else { return }
 
         store.appendMessage(ChatMessage(role: .user, content: text), to: sessionID)
         input = ""
+        request(text: text)
+    }
+
+    func editMessage(_ message: ChatMessage, newContent: String) {
+        guard let sessionID = store.currentSessionID else { return }
+        let text = newContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        store.updateMessage(content: text, id: message.id, in: sessionID)
+        scrollVersion += 1
+    }
+
+    func deleteMessage(_ message: ChatMessage) {
+        guard let sessionID = store.currentSessionID else { return }
+        store.removeMessage(id: message.id, in: sessionID)
+        scrollVersion += 1
+    }
+
+    func regenerate(at index: Int) {
+        guard !isSending, let sessionID = store.currentSessionID else { return }
+        let msgs = store.currentMessages
+        guard index >= 1, index < msgs.count,
+              msgs[index].role == .assistant, msgs[index - 1].role == .user else { return }
+        guard validateSettings() else { return }
+
+        let original = msgs[index - 1].content
+        store.removeMessages(from: msgs[index].id, in: sessionID)
+        request(text: original)
+    }
+
+    private func validateSettings() -> Bool {
+        guard !settings.baseURL.isEmpty else {
+            errorMessage = "请先在「设置」中填写 API Base URL"
+            return false
+        }
+        guard !settings.modelName.isEmpty else {
+            errorMessage = "请先在「设置」中填写模型名"
+            return false
+        }
+        return true
+    }
+
+    private func request(text: String) {
+        guard let sessionID = store.currentSessionID else { return }
+
         isSending = true
         errorMessage = nil
         scrollVersion += 1

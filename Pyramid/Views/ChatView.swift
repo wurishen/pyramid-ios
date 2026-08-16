@@ -1,10 +1,13 @@
 import SwiftUI
+import UIKit
 
 struct ChatView: View {
     @StateObject private var viewModel: ChatViewModel
     @ObservedObject var store: ChatStore
     @ObservedObject var worldBook: WorldBookStore
     @State private var showSessions = false
+    @State private var editingMessage: ChatMessage?
+    @State private var editText = ""
 
     init(settings: AppSettings, store: ChatStore, worldBook: WorldBookStore) {
         self.store = store
@@ -35,6 +38,23 @@ struct ChatView: View {
         .sheet(isPresented: $showSessions) {
             SessionListView(store: store, worldBook: worldBook)
         }
+        .alert("编辑消息", isPresented: editAlertBinding) {
+            TextField("内容", text: $editText)
+            Button("取消", role: .cancel) { editingMessage = nil }
+            Button("保存") {
+                if let message = editingMessage {
+                    viewModel.editMessage(message, newContent: editText)
+                }
+                editingMessage = nil
+            }
+        }
+    }
+
+    private var editAlertBinding: Binding<Bool> {
+        Binding(
+            get: { editingMessage != nil },
+            set: { if !$0 { editingMessage = nil } }
+        )
     }
 
     private var messageList: some View {
@@ -46,8 +66,17 @@ struct ChatView: View {
                             .foregroundStyle(.secondary)
                             .padding(.top, 40)
                     }
-                    ForEach(viewModel.messages) { message in
-                        MessageBubble(message: message)
+                    ForEach(Array(viewModel.messages.enumerated()), id: \.element.id) { index, message in
+                        MessageBubble(
+                            message: message,
+                            onCopy: { UIPasteboard.general.string = message.content },
+                            onEdit: {
+                                editingMessage = message
+                                editText = message.content
+                            },
+                            onRegenerate: { viewModel.regenerate(at: index) },
+                            onDelete: { viewModel.deleteMessage(message) }
+                        )
                     }
                     if viewModel.isSending {
                         ProgressView()
@@ -101,6 +130,10 @@ struct ChatView: View {
 
 struct MessageBubble: View {
     let message: ChatMessage
+    var onCopy: () -> Void = {}
+    var onEdit: () -> Void = {}
+    var onRegenerate: () -> Void = {}
+    var onDelete: () -> Void = {}
 
     var body: some View {
         HStack {
@@ -113,6 +146,22 @@ struct MessageBubble: View {
                 .background(message.role == .user ? Color.accentColor : Color(.secondarySystemBackground))
                 .foregroundStyle(message.role == .user ? .white : .primary)
                 .clipShape(RoundedRectangle(cornerRadius: 14))
+                .contextMenu {
+                    Button(action: onCopy) {
+                        Label("复制", systemImage: "doc.on.doc")
+                    }
+                    Button(action: onEdit) {
+                        Label("编辑", systemImage: "pencil")
+                    }
+                    if message.role == .assistant {
+                        Button(action: onRegenerate) {
+                            Label("重新生成", systemImage: "arrow.clockwise")
+                        }
+                    }
+                    Button(role: .destructive, action: onDelete) {
+                        Label("删除", systemImage: "trash")
+                    }
+                }
             if message.role == .assistant {
                 Spacer(minLength: 48)
             }
