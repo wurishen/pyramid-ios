@@ -1,5 +1,8 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import os
+
+private let importLog = Logger(subsystem: "pyramid.import", category: "WorldBookView")
 
 struct WorldBookView: View {
     @ObservedObject var store: WorldBookStore
@@ -166,15 +169,15 @@ struct WorldBookView: View {
                     Button("取消", role: .cancel) { cancelImportQueue() }
                 } else {
                     Button("合并（按 id 去重）") {
-                        let count = store.importBooks(content.books, mode: .merge)
+                        let result = store.importBooks(content.books, mode: .merge)
                         advanceImportQueue()
-                        showImportSuccess("已导入 \(count) 条")
+                        showImportSuccess("已导入 \(result.books) 本 / \(result.entries) 条")
                     }
                     Button("覆盖", role: .destructive) {
-                        let count = store.importBooks(content.books, mode: .overwrite)
+                        let result = store.importBooks(content.books, mode: .overwrite)
                         viewingBookID = store.globalBook.id
                         advanceImportQueue()
-                        showImportSuccess("已导入 \(count) 条")
+                        showImportSuccess("已导入 \(result.books) 本 / \(result.entries) 条")
                     }
                     Button("取消", role: .cancel) { cancelImportQueue() }
                 }
@@ -240,9 +243,11 @@ struct WorldBookView: View {
     private func handleImportResult(_ result: Result<[URL], Error>) {
         switch result {
         case .failure(let error):
+            importLog.error("fileImporter returned failure: \(error.localizedDescription)")
             importErrorMessage = error.localizedDescription
         case .success(let urls):
             guard !urls.isEmpty else {
+                importLog.error("fileImporter returned no URLs")
                 importErrorMessage = "未选择任何文件"
                 return
             }
@@ -252,10 +257,13 @@ struct WorldBookView: View {
             for url in urls {
                 do {
                     let data = try Self.readImportedData(from: url)
+                    importLog.info("read \(data.count) bytes from \(url.lastPathComponent)")
                     let content = try store.parseImportData(data)
+                    importLog.info("parsed \(content.books.count) book(s) / \(content.entries.count) entry(ies) from \(url.lastPathComponent)")
                     pendingImportContents.append(content)
                     pendingImportFileNames.append(url.deletingPathExtension().lastPathComponent)
                 } catch {
+                    importLog.error("import failed for \(url.lastPathComponent): \(error.localizedDescription)")
                     importErrorMessage = error.localizedDescription
                     return
                 }

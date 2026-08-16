@@ -1,5 +1,8 @@
 import Foundation
 import SwiftUI
+import os
+
+private let worldBookLog = Logger(subsystem: "pyramid.import", category: "WorldBook")
 
 final class WorldBookStore: ObservableObject {
     @Published var books: [WorldBook] = []
@@ -80,45 +83,53 @@ final class WorldBookStore: ObservableObject {
     func parseImportData(_ data: Data) throws -> WorldBookImportContent {
         if let export = try? JSONDecoder().decode(WorldBookExport.self, from: data) {
             guard !export.books.isEmpty else { throw WorldBookImportError.noBooks }
+            worldBookLog.info("recognized native export: \(export.books.count) book(s), \(export.books.reduce(0) { $0 + $1.entries.count }) entries")
             return WorldBookImportContent(books: export.books)
         }
         if let array = try? JSONDecoder().decode([WorldBook].self, from: data) {
             guard !array.isEmpty else { throw WorldBookImportError.noBooks }
+            worldBookLog.info("recognized bare book array: \(array.count) book(s)")
             return WorldBookImportContent(books: array)
         }
         if let single = try? JSONDecoder().decode(WorldBook.self, from: data) {
+            worldBookLog.info("recognized single book: \(single.entries.count) entries")
             return WorldBookImportContent(books: [single])
         }
         if let st = try? Self.parseSillyTavernData(data) {
+            worldBookLog.info("recognized SillyTavern world book: \(st.entries.count) entries")
             return WorldBookImportContent(entries: st.entries, suggestedTitle: st.name)
         }
         throw WorldBookImportError.invalidData
     }
 
     @discardableResult
-    func importBooks(_ decoded: [WorldBook], mode: WorldBookImportMode) -> Int {
-        var importedCount = 0
+    func importBooks(_ decoded: [WorldBook], mode: WorldBookImportMode) -> WorldBookImportResult {
         switch mode {
         case .overwrite:
             books = decoded
-            importedCount = decoded.reduce(0) { $0 + $1.entries.count }
+            save()
+            let entries = decoded.reduce(0) { $0 + $1.entries.count }
+            worldBookLog.info("overwrite import: \(decoded.count) book(s), \(entries) entries")
+            return WorldBookImportResult(books: decoded.count, entries: entries)
         case .merge:
+            var addedEntries = 0
             for book in decoded {
                 if let bookIndex = books.firstIndex(where: { $0.id == book.id }) {
                     var merged = books[bookIndex]
                     for entry in book.entries where !merged.entries.contains(where: { $0.id == entry.id }) {
                         merged.entries.append(entry)
-                        importedCount += 1
+                        addedEntries += 1
                     }
                     books[bookIndex] = merged
                 } else {
                     books.append(book)
-                    importedCount += book.entries.count
+                    addedEntries += book.entries.count
                 }
             }
+            save()
+            worldBookLog.info("merge import: \(decoded.count) book(s) processed, \(addedEntries) entries added")
+            return WorldBookImportResult(books: decoded.count, entries: addedEntries)
         }
-        save()
-        return importedCount
     }
 
     @discardableResult
@@ -313,6 +324,11 @@ private enum StorageKeys {
 enum WorldBookImportMode {
     case merge
     case overwrite
+}
+
+struct WorldBookImportResult {
+    var books: Int
+    var entries: Int
 }
 
 struct WorldBookImportContent {
