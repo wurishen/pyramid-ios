@@ -15,6 +15,7 @@ struct WorldBookView: View {
     @State private var pendingImportFileName: String?
     @State private var showImportModeDialog = false
     @State private var importErrorMessage: String?
+    @State private var importSuccessMessage: String?
     @State private var exportFileURL: URL?
     @State private var exportTitle = ""
 
@@ -146,28 +147,34 @@ struct WorldBookView: View {
             if let content = pendingImportContent {
                 if content.isSillyTavern {
                     Button("新建世界书（\(importTitleSuggestion)）") {
+                        let count = content.entries.count
                         let book = store.createBook(title: importTitleSuggestion, entries: content.entries)
                         viewingBookID = book.id
                         advanceImportQueue()
+                        showImportSuccess("已导入 \(count) 条")
                     }
                     Button("合并到当前世界书") {
-                        store.mergeEntries(content.entries, into: currentBook.id)
+                        let count = store.mergeEntries(content.entries, into: currentBook.id)
                         advanceImportQueue()
+                        showImportSuccess("已导入 \(count) 条")
                     }
                     Button("覆盖当前世界书条目", role: .destructive) {
-                        store.overwriteEntries(content.entries, in: currentBook.id)
+                        let count = store.overwriteEntries(content.entries, in: currentBook.id)
                         advanceImportQueue()
+                        showImportSuccess("已导入 \(count) 条")
                     }
                     Button("取消", role: .cancel) { cancelImportQueue() }
                 } else {
                     Button("合并（按 id 去重）") {
-                        store.importBooks(content.books, mode: .merge)
+                        let count = store.importBooks(content.books, mode: .merge)
                         advanceImportQueue()
+                        showImportSuccess("已导入 \(count) 条")
                     }
                     Button("覆盖", role: .destructive) {
-                        store.importBooks(content.books, mode: .overwrite)
+                        let count = store.importBooks(content.books, mode: .overwrite)
                         viewingBookID = store.globalBook.id
                         advanceImportQueue()
+                        showImportSuccess("已导入 \(count) 条")
                     }
                     Button("取消", role: .cancel) { cancelImportQueue() }
                 }
@@ -187,6 +194,11 @@ struct WorldBookView: View {
             Button("好", role: .cancel) { importErrorMessage = nil }
         } message: {
             Text(importErrorMessage ?? "")
+        }
+        .alert("导入完成", isPresented: importSuccessBinding) {
+            Button("好", role: .cancel) { importSuccessMessage = nil }
+        } message: {
+            Text(importSuccessMessage ?? "")
         }
         .sheet(isPresented: exportSheetBinding) {
             if let url = exportFileURL {
@@ -218,6 +230,13 @@ struct WorldBookView: View {
         )
     }
 
+    private var importSuccessBinding: Binding<Bool> {
+        Binding(
+            get: { importSuccessMessage != nil },
+            set: { if !$0 { importSuccessMessage = nil } }
+        )
+    }
+
     private func handleImportResult(_ result: Result<[URL], Error>) {
         switch result {
         case .failure(let error):
@@ -231,14 +250,8 @@ struct WorldBookView: View {
             pendingImportFileNames = []
             pendingImportIndex = 0
             for url in urls {
-                let didAccess = url.startAccessingSecurityScopedResource()
-                defer {
-                    if didAccess {
-                        url.stopAccessingSecurityScopedResource()
-                    }
-                }
                 do {
-                    let data = try Data(contentsOf: url)
+                    let data = try Self.readImportedData(from: url)
                     let content = try store.parseImportData(data)
                     pendingImportContents.append(content)
                     pendingImportFileNames.append(url.deletingPathExtension().lastPathComponent)
@@ -250,6 +263,27 @@ struct WorldBookView: View {
             DispatchQueue.main.async { [self] in
                 self.showNextImportDialog()
             }
+        }
+    }
+
+    /// fileImporter 返回的是 security-scoped URL，须先 start/stop 访问，再拷贝到临时目录读取，
+    /// 直接 `Data(contentsOf:)` 在真机上可能因权限/iCloud 占位文件失败。
+    private static func readImportedData(from url: URL) throws -> Data {
+        let didStart = url.startAccessingSecurityScopedResource()
+        defer {
+            if didStart { url.stopAccessingSecurityScopedResource() }
+        }
+        let ext = url.pathExtension.isEmpty ? "json" : url.pathExtension
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension(ext)
+        do {
+            try FileManager.default.copyItem(at: url, to: tempURL)
+            return try Data(contentsOf: tempURL)
+        } catch {
+            throw error
+        } finally {
+            try? FileManager.default.removeItem(at: tempURL)
         }
     }
 
@@ -299,6 +333,10 @@ struct WorldBookView: View {
         pendingImportContents = []
         pendingImportFileNames = []
         pendingImportIndex = 0
+    }
+
+    private func showImportSuccess(_ message: String) {
+        importSuccessMessage = message
     }
 }
 

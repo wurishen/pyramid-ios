@@ -95,24 +95,30 @@ final class WorldBookStore: ObservableObject {
         throw WorldBookImportError.invalidData
     }
 
-    func importBooks(_ decoded: [WorldBook], mode: WorldBookImportMode) {
+    @discardableResult
+    func importBooks(_ decoded: [WorldBook], mode: WorldBookImportMode) -> Int {
+        var importedCount = 0
         switch mode {
         case .overwrite:
             books = decoded
+            importedCount = decoded.reduce(0) { $0 + $1.entries.count }
         case .merge:
             for book in decoded {
                 if let bookIndex = books.firstIndex(where: { $0.id == book.id }) {
                     var merged = books[bookIndex]
                     for entry in book.entries where !merged.entries.contains(where: { $0.id == entry.id }) {
                         merged.entries.append(entry)
+                        importedCount += 1
                     }
                     books[bookIndex] = merged
                 } else {
                     books.append(book)
+                    importedCount += book.entries.count
                 }
             }
         }
         save()
+        return importedCount
     }
 
     @discardableResult
@@ -123,20 +129,26 @@ final class WorldBookStore: ObservableObject {
         return book
     }
 
-    func mergeEntries(_ entries: [WorldBookEntry], into bookID: UUID) {
-        guard let index = books.firstIndex(where: { $0.id == bookID }) else { return }
+    @discardableResult
+    func mergeEntries(_ entries: [WorldBookEntry], into bookID: UUID) -> Int {
+        guard let index = books.firstIndex(where: { $0.id == bookID }) else { return 0 }
         var existingContents = Set(books[index].entries.map(\.content))
+        var importedCount = 0
         for entry in entries where !existingContents.contains(entry.content) {
             books[index].entries.append(entry)
             existingContents.insert(entry.content)
+            importedCount += 1
         }
         save()
+        return importedCount
     }
 
-    func overwriteEntries(_ entries: [WorldBookEntry], in bookID: UUID) {
-        guard let index = books.firstIndex(where: { $0.id == bookID }) else { return }
+    @discardableResult
+    func overwriteEntries(_ entries: [WorldBookEntry], in bookID: UUID) -> Int {
+        guard let index = books.firstIndex(where: { $0.id == bookID }) else { return 0 }
         books[index].entries = entries
         save()
+        return entries.count
     }
 
     private struct SillyTavernParseResult {
@@ -205,29 +217,16 @@ final class WorldBookStore: ObservableObject {
 
         let keyField = raw["key"] ?? raw["keys"]
         if let keyArray = keyField as? [String] {
-            entry.keywords = keyArray.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            entry.keywords = keyArray.flatMap { Self.splitKeywords($0) }
         } else if let keyString = keyField as? String {
-            // 酒馆单字符串 key 若含空格，按空白拆分（否则按逗号）
-            if keyString.contains(" ") {
-                entry.keywords = keyString.split(whereSeparator: { $0.isWhitespace }).map(String.init)
-            } else {
-                entry.keywords = keyString.components(separatedBy: ",")
-                    .map { $0.trimmingCharacters(in: .whitespaces) }
-                    .filter { !$0.isEmpty }
-            }
+            entry.keywords = Self.splitKeywords(keyString)
         }
 
         let secondaryField = raw["keysecondary"] ?? raw["keySecondary"]
         if let secondaryArray = secondaryField as? [String] {
-            entry.secondaryKeywords = secondaryArray.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            entry.secondaryKeywords = secondaryArray.flatMap { Self.splitKeywords($0) }
         } else if let secondaryString = secondaryField as? String {
-            if secondaryString.contains(" ") {
-                entry.secondaryKeywords = secondaryString.split(whereSeparator: { $0.isWhitespace }).map(String.init)
-            } else {
-                entry.secondaryKeywords = secondaryString.components(separatedBy: ",")
-                    .map { $0.trimmingCharacters(in: .whitespaces) }
-                    .filter { !$0.isEmpty }
-            }
+            entry.secondaryKeywords = Self.splitKeywords(secondaryString)
         }
 
         entry.isConstant = (raw["constant"] as? Bool) ?? false
@@ -272,6 +271,13 @@ final class WorldBookStore: ObservableObject {
         }
 
         return entry
+    }
+
+    private static func splitKeywords(_ text: String) -> [String] {
+        text.components(separatedBy: CharacterSet(charactersIn: ",，")
+            .union(.whitespacesAndNewlines))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
 
     private func load() {
