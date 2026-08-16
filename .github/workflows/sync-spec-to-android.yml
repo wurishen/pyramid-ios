@@ -10,18 +10,25 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Check token
-        if: ${{ secrets.ANDROID_SYNC_TOKEN == '' }}
-        run: |
-          echo "::warning::ANDROID_SYNC_TOKEN not set — skipping sync."
-          exit 0
-
       - name: Checkout iOS repo
         uses: actions/checkout@v4
         with:
           path: ios
 
+      - name: Check token availability
+        id: check-token
+        env:
+          ANDROID_SYNC_TOKEN: ${{ secrets.ANDROID_SYNC_TOKEN }}
+        run: |
+          if [ -z "$ANDROID_SYNC_TOKEN" ]; then
+            echo "::warning::ANDROID_SYNC_TOKEN not set — skipping sync."
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout Android repo
+        if: steps.check-token.outputs.has_token == 'true'
         uses: actions/checkout@v4
         with:
           repository: wurishen/pyramid-android
@@ -29,12 +36,16 @@ jobs:
           path: android
 
       - name: Sync docs/
+        if: steps.check-token.outputs.has_token == 'true'
         run: |
           mkdir -p android/docs
           cp -r ios/docs/* android/docs/
 
       - name: Commit and push
+        if: steps.check-token.outputs.has_token == 'true'
         working-directory: android
+        env:
+          ANDROID_SYNC_TOKEN: ${{ secrets.ANDROID_SYNC_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -43,11 +54,12 @@ jobs:
             echo "No changes to commit."
           else
             git commit -m "docs: sync SPEC from pyramid-ios"
-            git push
+            git pull --rebase origin main || true
+            git push origin main
           fi
 
       - name: Open sync issue (best effort)
-        if: success() && hashFiles('android/docs/*') != ''
+        if: steps.check-token.outputs.has_token == 'true'
         working-directory: android
         env:
           GH_TOKEN: ${{ secrets.ANDROID_SYNC_TOKEN }}
@@ -55,4 +67,4 @@ jobs:
           gh issue create \
             --title "[同步] docs 已从 pyramid-ios 更新" \
             --body "自动同步的文档已推送到 main，请检查是否需要适配到 Android 端。" \
-            --label "sync" || echo "::warning::Failed to create issue — skipping."
+            || echo "::warning::Failed to create issue — skipping."
