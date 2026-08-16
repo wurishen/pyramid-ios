@@ -59,6 +59,13 @@ final class WorldBookStore: ObservableObject {
         return String(data: data, encoding: .utf8) ?? ""
     }
 
+    func writeExport(books: [WorldBook], suffix: String) -> URL {
+        let filename = "pyramid-worldbook-\(suffix)-\(Int(Date().timeIntervalSince1970)).json"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+        try? exportJSON(books: books).write(to: url, atomically: true, encoding: .utf8)
+        return url
+    }
+
     func importBooks(from data: Data, mode: WorldBookImportMode) throws {
         let decoded: [WorldBook]
         if let export = try? JSONDecoder().decode(WorldBookExport.self, from: data) {

@@ -11,6 +11,8 @@ struct WorldBookView: View {
     @State private var pendingImportData: Data?
     @State private var showImportModeDialog = false
     @State private var importErrorMessage: String?
+    @State private var exportFileURL: URL?
+    @State private var exportTitle = ""
 
     init(store: WorldBookStore, settings: AppSettings) {
         self.store = store
@@ -88,14 +90,18 @@ struct WorldBookView: View {
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Menu {
-                    ShareLink(
-                        item: JSONFileDocument(text: store.exportJSON(books: [currentBook])),
-                        preview: SharePreview("世界书：\(currentBook.title)", image: Image(systemName: "book"))
-                    )
-                    ShareLink(
-                        item: JSONFileDocument(text: store.exportJSON(books: store.books)),
-                        preview: SharePreview("全部世界书", image: Image(systemName: "books.vertical"))
-                    )
+                    Button {
+                        exportTitle = currentBook.title.isEmpty ? "当前世界书" : currentBook.title
+                        exportFileURL = store.writeExport(books: [currentBook], suffix: "current")
+                    } label: {
+                        Label("导出当前世界书", systemImage: "book")
+                    }
+                    Button {
+                        exportTitle = "全部世界书"
+                        exportFileURL = store.writeExport(books: store.books, suffix: "all")
+                    } label: {
+                        Label("导出全部世界书", systemImage: "books.vertical")
+                    }
                     Divider()
                     Button {
                         showImporter = true
@@ -132,6 +138,11 @@ struct WorldBookView: View {
         } message: {
             Text(importErrorMessage ?? "")
         }
+        .sheet(isPresented: exportSheetBinding) {
+            if let url = exportFileURL {
+                ExportShareSheet(url: url, title: exportTitle)
+            }
+        }
         .sheet(item: $editingEntry) { entry in
             WorldBookEditView(entry: entry) { updated in
                 if currentBook.entries.contains(where: { $0.id == updated.id }) {
@@ -141,6 +152,13 @@ struct WorldBookView: View {
                 }
             }
         }
+    }
+
+    private var exportSheetBinding: Binding<Bool> {
+        Binding(
+            get: { exportFileURL != nil },
+            set: { if !$0 { exportFileURL = nil } }
+        )
     }
 
     private var importErrorBinding: Binding<Bool> {
@@ -193,20 +211,34 @@ struct WorldBookView: View {
     }
 }
 
-struct JSONFileDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.json] }
-    var text: String
+struct ExportShareSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let url: URL
+    let title: String
 
-    init(text: String) {
-        self.text = text
-    }
-
-    init(configuration: ReadConfiguration) throws {
-        text = String(decoding: configuration.file.regularFileContents ?? Data(), as: UTF8.self)
-    }
-
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        FileWrapper(regularFileWithContents: Data(text.utf8))
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 12) {
+                Image(systemName: "books.vertical")
+                    .font(.system(size: 44))
+                    .foregroundStyle(.secondary)
+                Text("「\(title)」已生成，点击右上角分享导出。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle("导出世界书")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    ShareLink(item: url, preview: SharePreview("世界书", image: Image(systemName: "book")))
+                }
+            }
+        }
     }
 }
 
