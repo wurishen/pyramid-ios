@@ -22,6 +22,13 @@ struct SessionDetailView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+            Section("系统提示词") {
+                TextEditor(text: systemPromptBinding)
+                    .frame(minHeight: 100)
+                Text("留空则使用全局系统提示词。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
             Section("会话信息") {
                 LabeledContent("创建时间", value: session?.createdAt.formatted(date: .abbreviated, time: .shortened) ?? "—")
                 LabeledContent("消息数", value: "\(session?.messages.count ?? 0)")
@@ -34,6 +41,13 @@ struct SessionDetailView: View {
         Binding(
             get: { store.sessions.first { $0.id == sessionID }?.worldBookId },
             set: { store.setWorldBook($0, for: sessionID) }
+        )
+    }
+
+    private var systemPromptBinding: Binding<String> {
+        Binding(
+            get: { store.sessions.first { $0.id == sessionID }?.systemPrompt ?? "" },
+            set: { store.setSystemPrompt($0, for: sessionID) }
         )
     }
 }

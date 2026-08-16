@@ -6,18 +6,21 @@ struct ChatSession: Codable, Identifiable, Equatable {
     var messages: [ChatMessage]
     var createdAt: Date
     var worldBookId: UUID?
+    var systemPrompt: String?
 
     init(
         id: UUID = UUID(),
         title: String = "新会话",
         messages: [ChatMessage] = [],
         createdAt: Date = Date(),
-        worldBookId: UUID? = nil
+        worldBookId: UUID? = nil,
+        systemPrompt: String? = nil
     ) {
         self.id = id
         self.title = title
         self.messages = messages
         self.createdAt = createdAt
         self.worldBookId = worldBookId
+        self.systemPrompt = systemPrompt
     }
 }

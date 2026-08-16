@@ -84,7 +84,7 @@ final class ChatViewModel: ObservableObject {
             baseURL: settings.baseURL,
             apiKey: settings.apiKey,
             model: settings.modelName,
-            systemPrompt: settings.systemPrompt,
+            systemPrompt: effectiveSystemPrompt,
             worldBookText: worldBookText
         )
 
@@ -127,6 +127,15 @@ final class ChatViewModel: ObservableObject {
                 store.removeMessage(id: assistant.id, in: sessionID)
             }
         }
+    }
+
+    private var effectiveSystemPrompt: String {
+        let sessionPrompt = store.currentSession?.systemPrompt?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !sessionPrompt.isEmpty {
+            return sessionPrompt
+        }
+        return settings.systemPrompt
     }
 
     private func buildWorldBookText(input: String, history: [ChatMessage]) -> String {
