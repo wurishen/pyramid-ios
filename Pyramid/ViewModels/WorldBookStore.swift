@@ -34,6 +34,21 @@ final class WorldBookStore: ObservableObject {
         return book
     }
 
+    @discardableResult
+    func createBook(title: String) -> WorldBook {
+        let book = WorldBook(title: title)
+        books.append(book)
+        save()
+        return book
+    }
+
+    func renameBook(_ id: UUID, to title: String) {
+        guard let index = books.firstIndex(where: { $0.id == id }),
+              !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        books[index].title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        save()
+    }
+
     func resetBooks() {
         books = [WorldBook(title: "全局世界书")]
         save()

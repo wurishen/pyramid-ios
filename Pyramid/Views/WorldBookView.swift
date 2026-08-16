@@ -21,6 +21,11 @@ struct WorldBookView: View {
     @State private var importSuccessMessage: String?
     @State private var exportFileURL: URL?
     @State private var exportTitle = ""
+    @State private var showCreateBookDialog = false
+    @State private var newBookName = ""
+    @State private var renameTargetID: UUID?
+    @State private var showRenameDialog = false
+    @State private var showDeleteBookConfirm = false
 
     init(store: WorldBookStore, settings: AppSettings) {
         self.store = store
@@ -55,8 +60,16 @@ struct WorldBookView: View {
                     }
                     if store.books.count > 1 {
                         Button {
-                            store.deleteBook(viewingBookID)
-                            viewingBookID = store.globalBook.id
+                            renameTargetID = viewingBookID
+                            newBookName = store.book(for: viewingBookID).title
+                            showRenameDialog = true
+                        } label: {
+                            Label("重命名", systemImage: "pencil")
+                                .foregroundStyle(Color.accentColor)
+                        }
+                        .buttonStyle(.borderless)
+                        Button(role: .destructive) {
+                            showDeleteBookConfirm = true
                         } label: {
                             Label("删除", systemImage: "trash")
                                 .foregroundStyle(.red)
@@ -65,8 +78,8 @@ struct WorldBookView: View {
                     }
                 }
                 Button {
-                    let book = store.createBook()
-                    viewingBookID = book.id
+                    newBookName = ""
+                    showCreateBookDialog = true
                 } label: {
                     Label("新建世界书", systemImage: "plus.circle")
                 }
@@ -221,6 +234,38 @@ struct WorldBookView: View {
                     store.add(updated, to: currentBook.id)
                 }
             }
+        }
+        .alert("新建世界书", isPresented: $showCreateBookDialog) {
+            TextField("世界书名称", text: $newBookName)
+            Button("创建") {
+                let name = newBookName.trimmingCharacters(in: .whitespacesAndNewlines)
+                let book = name.isEmpty ? store.createBook() : store.createBook(title: name)
+                viewingBookID = book.id
+            }
+            Button("取消", role: .cancel) {}
+        }
+        .alert("重命名世界书", isPresented: $showRenameDialog) {
+            TextField("世界书名称", text: $newBookName)
+            Button("保存") {
+                if let id = renameTargetID {
+                    store.renameBook(id, to: newBookName)
+                }
+                renameTargetID = nil
+            }
+            Button("取消", role: .cancel) { renameTargetID = nil }
+        }
+        .confirmationDialog(
+            "删除世界书？",
+            isPresented: $showDeleteBookConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("删除", role: .destructive) {
+                store.deleteBook(viewingBookID)
+                viewingBookID = store.globalBook.id
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("删除后其中的条目无法恢复。")
         }
     }
 
