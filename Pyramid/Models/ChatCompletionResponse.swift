@@ -35,3 +35,15 @@ struct ChatCompletionStreamChunk: Decodable {
         let content: String?
     }
 }
+
+struct ModelListResponse: Decodable {
+    let data: [ModelItem]
+
+    struct ModelItem: Decodable {
+        let id: String
+    }
+}
+
+struct ModelListStringResponse: Decodable {
+    let data: [String]
+}

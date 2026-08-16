@@ -17,5 +17,6 @@ struct ContentView: View {
                     Label("设置", systemImage: "gearshape")
                 }
         }
+        .dismissKeyboardOnOutsideTap()
     }
 }

@@ -211,6 +211,7 @@ struct ChatView: View {
                     }
                 }
             }
+            .scrollDismissesKeyboard(.interactively)
         }
     }
 

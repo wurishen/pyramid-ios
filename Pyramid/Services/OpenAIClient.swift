@@ -131,7 +131,81 @@ struct OpenAIClient {
         return request
     }
 
+    static func fetchModels(baseURL: String, apiKey: String) async throws -> [String] {
+        var attempts: [URL] = []
+        if let url = try? Self.endpointURL(baseURL: baseURL, suffix: "/models") {
+            attempts.append(url)
+        }
+        if let url = Self.modelsFallbackURL(baseURL: baseURL), !attempts.contains(url) {
+            attempts.append(url)
+        }
+        guard !attempts.isEmpty else { throw ChatError.invalidEndpoint }
+
+        var lastError: Error = ChatError.invalidEndpoint
+        for url in attempts {
+            do {
+                return try await Self.fetchModels(from: url, apiKey: apiKey)
+            } catch let error as ChatError {
+                if case .badStatus(let code, _) = error, code == 404 || code == 405 {
+                    lastError = error
+                    continue
+                }
+                throw error
+            }
+        }
+        throw lastError
+    }
+
+    private static func fetchModels(from url: URL, apiKey: String) async throws -> [String] {
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 30
+        if !apiKey.isEmpty {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
+
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            throw ChatError.network(error.localizedDescription)
+        }
+        guard let http = response as? HTTPURLResponse else {
+            throw ChatError.network("无效的 HTTP 响应")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            let bodyText = String(data: data, encoding: .utf8) ?? ""
+            throw ChatError.badStatus(http.statusCode, bodyText)
+        }
+
+        let decoder = JSONDecoder()
+        if let list = try? decoder.decode(ModelListResponse.self, from: data) {
+            return list.data.map(\.id)
+        }
+        if let list = try? decoder.decode(ModelListStringResponse.self, from: data) {
+            return list.data
+        }
+        throw ChatError.decoding("无法解析模型列表（期望 OpenAI 格式 data[].id）")
+    }
+
+    private static func modelsFallbackURL(baseURL: String) -> URL? {
+        let trimmed = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard var components = URLComponents(string: trimmed), components.scheme != nil else {
+            return nil
+        }
+        var path = components.path
+        if path.hasSuffix("/") { path.removeLast() }
+        if path.hasSuffix("/v1") { path.removeLast(3) }
+        components.path = path + "/models"
+        return components.url
+    }
+
     private func endpointURL() throws -> URL {
+        try Self.endpointURL(baseURL: baseURL, suffix: "/chat/completions")
+    }
+
+    private static func endpointURL(baseURL: String, suffix: String) throws -> URL {
         let trimmed = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,
               var components = URLComponents(string: trimmed),
@@ -146,7 +220,7 @@ struct OpenAIClient {
         if !path.hasSuffix("/v1") {
             path += "/v1"
         }
-        components.path = path + "/chat/completions"
+        components.path = path + suffix
 
         guard let url = components.url else {
             throw ChatError.invalidEndpoint

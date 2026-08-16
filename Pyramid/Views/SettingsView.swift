@@ -7,6 +7,10 @@ struct SettingsView: View {
     @ObservedObject var presets: PresetStore
     @State private var showClearSessionsDialog = false
     @State private var showResetWorldBookDialog = false
+    @State private var isLoadingModels = false
+    @State private var showModelPicker = false
+    @State private var fetchedModels: [String] = []
+    @State private var modelError: String?
 
     var body: some View {
         NavigationStack {
@@ -23,6 +27,22 @@ struct SettingsView: View {
                     TextField("模型名", text: $settings.modelName)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
+                    Button {
+                        Task { await loadModels() }
+                    } label: {
+                        if isLoadingModels {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                Text("正在获取模型列表…")
+                            }
+                        } else {
+                            Label("拉取可用模型", systemImage: "arrow.down.circle")
+                        }
+                    }
+                    .disabled(
+                        isLoadingModels
+                            || settings.baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    )
                 }
                 Section("系统提示词") {
                     TextField("系统提示词（可留空）", text: $settings.systemPrompt, axis: .vertical)
@@ -74,6 +94,15 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("设置")
+            .scrollDismissesKeyboard(.interactively)
+            .sheet(isPresented: $showModelPicker) {
+                modelPickerSheet
+            }
+            .alert("获取模型失败", isPresented: modelErrorBinding) {
+                Button("好", role: .cancel) {}
+            } message: {
+                Text(modelError ?? "")
+            }
             .confirmationDialog(
                 "清空全部会话？",
                 isPresented: $showClearSessionsDialog,
@@ -98,6 +127,66 @@ struct SettingsView: View {
             } message: {
                 Text("将删除所有世界书及其全部条目，并重建一本空的「全局世界书」，此操作不可恢复。")
             }
+        }
+    }
+
+    private var modelPickerSheet: some View {
+        NavigationStack {
+            List(fetchedModels, id: \.self) { model in
+                Button {
+                    settings.modelName = model
+                    showModelPicker = false
+                } label: {
+                    HStack {
+                        Text(model)
+                        Spacer()
+                        if model == settings.modelName {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(Color.accentColor)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("选择模型")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("取消") { showModelPicker = false }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private var modelErrorBinding: Binding<Bool> {
+        Binding(
+            get: { modelError != nil },
+            set: { if !$0 { modelError = nil } }
+        )
+    }
+
+    private func loadModels() async {
+        isLoadingModels = true
+        modelError = nil
+        defer { isLoadingModels = false }
+        do {
+            let models = try await OpenAIClient.fetchModels(
+                baseURL: settings.baseURL,
+                apiKey: settings.apiKey
+            )
+            guard !models.isEmpty else {
+                modelError = "服务器返回了空的模型列表"
+                return
+            }
+            let current = settings.modelName.trimmingCharacters(in: .whitespacesAndNewlines)
+            var list = models
+            if !current.isEmpty && !list.contains(current) {
+                list.insert(current, at: 0)
+            }
+            fetchedModels = list
+            showModelPicker = true
+        } catch {
+            modelError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
 }

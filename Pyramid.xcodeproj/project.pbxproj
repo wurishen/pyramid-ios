@@ -30,6 +30,7 @@
 		AB0000000000000000000101 /* Preset.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000104 /* Preset.swift */; };
 		AB0000000000000000000102 /* PresetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000105 /* PresetStore.swift */; };
 		AB0000000000000000000103 /* PresetListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000106 /* PresetListView.swift */; };
+		AB0000000000000000000107 /* KeyboardDismiss.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000108 /* KeyboardDismiss.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -57,6 +58,7 @@
 		AB0000000000000000000104 /* Preset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Preset.swift; sourceTree = "<group>"; };
 		AB0000000000000000000105 /* PresetStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetStore.swift; sourceTree = "<group>"; };
 		AB0000000000000000000106 /* PresetListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetListView.swift; sourceTree = "<group>"; };
+		AB0000000000000000000108 /* KeyboardDismiss.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardDismiss.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -136,6 +138,7 @@
 				AB0000000000000000000027 /* WorldBookEditView.swift */,
 				AB0000000000000000000029 /* SessionDetailView.swift */,
 				AB0000000000000000000106 /* PresetListView.swift */,
+				AB0000000000000000000108 /* KeyboardDismiss.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -239,6 +242,7 @@
 				AB0000000000000000000101 /* Preset.swift in Sources */,
 				AB0000000000000000000102 /* PresetStore.swift in Sources */,
 				AB0000000000000000000103 /* PresetListView.swift in Sources */,
+				AB0000000000000000000107 /* KeyboardDismiss.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
