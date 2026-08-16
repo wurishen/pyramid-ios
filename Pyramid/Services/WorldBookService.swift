@@ -93,7 +93,7 @@ enum WorldBookService {
         return false
     }
 
-    private static func isWordCharacter(_ character: Character) -> Bool {
-        character.isLetter || character.isNumber || character == "_"
+    private static func isWordCharacter(_ char: Swift.Character) -> Bool {
+        char.isLetter || char.isNumber || char == "_"
     }
 }
