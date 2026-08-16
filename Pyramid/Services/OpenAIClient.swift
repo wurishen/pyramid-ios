@@ -29,24 +29,10 @@ struct OpenAIClient {
     let model: String
 
     func send(messages: [ChatMessage]) async throws -> String {
-        var request = URLRequest(url: try endpointURL())
-        request.httpMethod = "POST"
-        request.timeoutInterval = 60
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if !apiKey.isEmpty {
-            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        }
-
-        let body = ChatCompletionRequest(
-            model: model,
-            messages: messages.map { .init(role: $0.role.rawValue, content: $0.content) }
-        )
-        request.httpBody = try JSONEncoder().encode(body)
-
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await URLSession.shared.data(for: request)
+            (data, response) = try await URLSession.shared.data(for: makeRequest(messages: messages, stream: false))
         } catch {
             throw ChatError.network(error.localizedDescription)
         }
@@ -70,6 +56,68 @@ struct OpenAIClient {
         } catch {
             throw ChatError.decoding(error.localizedDescription)
         }
+    }
+
+    func stream(messages: [ChatMessage]) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    let (bytes, response) = try await URLSession.shared.bytes(for: makeRequest(messages: messages, stream: true))
+                    guard let http = response as? HTTPURLResponse else {
+                        throw ChatError.network("无效的 HTTP 响应")
+                    }
+                    guard (200..<300).contains(http.statusCode) else {
+                        var body = Data()
+                        for try await byte in bytes {
+                            body.append(byte)
+                        }
+                        throw ChatError.badStatus(http.statusCode, String(data: body, encoding: .utf8) ?? "")
+                    }
+
+                    for try await line in bytes.lines {
+                        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard trimmed.hasPrefix("data:") else { continue }
+                        let payload = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !payload.isEmpty else { continue }
+                        if payload == "[DONE]" { break }
+                        if let chunk = try? JSONDecoder().decode(ChatCompletionStreamChunk.self, from: Data(payload.utf8)),
+                           let delta = chunk.choices.first?.delta.content {
+                            continuation.yield(delta)
+                        }
+                    }
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish()
+                } catch let error as URLError where error.code == .cancelled {
+                    continuation.finish()
+                } catch let error as ChatError {
+                    continuation.finish(throwing: error)
+                } catch {
+                    continuation.finish(throwing: ChatError.network(error.localizedDescription))
+                }
+            }
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
+        }
+    }
+
+    private func makeRequest(messages: [ChatMessage], stream: Bool) throws -> URLRequest {
+        var request = URLRequest(url: try endpointURL())
+        request.httpMethod = "POST"
+        request.timeoutInterval = 60
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if !apiKey.isEmpty {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
+
+        let body = ChatCompletionRequest(
+            model: model,
+            messages: messages.map { .init(role: $0.role.rawValue, content: $0.content) },
+            stream: stream
+        )
+        request.httpBody = try JSONEncoder().encode(body)
+        return request
     }
 
     private func endpointURL() throws -> URL {

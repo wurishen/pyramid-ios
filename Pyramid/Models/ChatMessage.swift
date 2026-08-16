@@ -3,7 +3,7 @@ import Foundation
 struct ChatMessage: Identifiable, Equatable {
     let id: UUID
     let role: Role
-    let content: String
+    var content: String
 
     init(id: UUID = UUID(), role: Role, content: String) {
         self.id = id
