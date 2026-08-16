@@ -1,6 +1,6 @@
 # Pyramid (iOS)
 
-Pyramid 的最小原生 iOS 工程骨架 —— 纯 SwiftUI，不依赖 WKWebView / 浏览器。
+Pyramid 的最小原生 iOS 应用 —— 纯 SwiftUI，不依赖 WKWebView / 浏览器。
 
 ## 打开工程
 
@@ -9,20 +9,38 @@ Pyramid 的最小原生 iOS 工程骨架 —— 纯 SwiftUI，不依赖 WKWebVie
 3. 选择 `Pyramid` scheme 与任意 iOS Simulator，⌘R 运行即可。
 4. 首次打开若提示 scheme，选 **Pyramid**（工程内已共享 scheme，正常应直接可用）。
 
-## v0.1 范围
+## 使用（v0.2）
 
-- 仅空壳：App 启动后主界面显示「Pyramid」标题与版本号。
-- 包含内容：SwiftUI App 生命周期、单视图 `ContentView`、App 图标/强调色资源目录。
-- 不含内容：聊天、角色卡、扩展系统、任何 Web 套壳。这些属于后续版本规划。
+应用包含两个 Tab：**聊天** 与 **设置**。
+
+1. 进入 **设置**，填写：
+   - `API Base URL`：OpenAI 兼容接口地址。带或不带 `/v1` 均可（如 `https://api.openai.com/v1` 或 `https://api.openai.com`），应用会自动拼接 `/chat/completions`。
+   - `API Key`：可留空（适用于无需鉴权的本地服务）；填写时会以 `Authorization: Bearer <key>` 发送。
+   - `模型名`：如 `gpt-4o-mini`、`qwen-plus` 等。
+   - 填写即自动保存在本机（UserDefaults），无需手动保存。
+2. 回到 **聊天**，输入消息并发送。用户与助手消息会按轮次展示，助手回复来自 `chat/completions` 接口。
+3. 出错时（网络不可达、非 2xx 状态码、响应解析失败、未填 Base URL/模型名等）会在聊天列表上方显示红色错误信息。
+
+## v0.2 功能范围
+
+- 设置页：Base URL / API Key / 模型名，本地持久化。
+- 聊天页：消息列表、输入框、发送；`URLSession` 请求 OpenAI 兼容 `chat/completions`；主线程更新 UI。
+- 错误提示：网络、状态码、解析失败均在界面展示。
+- 不含：角色卡、世界书、扩展系统、流式输出。
 
 ## 目录结构
 
 ```
 Pyramid.xcodeproj/   Xcode 工程（含共享 scheme）
 Pyramid/
-  PyramidApp.swift    App 入口（@main）
-  ContentView.swift   主界面
-  Assets.xcassets/    图标与颜色资源
+  PyramidApp.swift     App 入口（@main）
+  ContentView.swift    Tab 容器（聊天 / 设置）
+  AppSettings.swift    API 配置（@AppStorage 本地持久化）
+  Models/              消息模型与 chat/completions 请求/响应
+  Services/            OpenAIClient（URLSession）
+  ViewModels/          ChatViewModel（@MainActor）
+  Views/               ChatView、SettingsView
+  Assets.xcassets/     图标与颜色资源
 .github/workflows/    GitHub Actions（macOS 上 xcodebuild 编译）
 ```
 
