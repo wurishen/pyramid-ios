@@ -5,6 +5,7 @@ struct WorldBookView: View {
     @ObservedObject var settings: AppSettings
     @State private var viewingBookID: UUID
     @State private var editingEntry: WorldBookEntry?
+    @State private var searchText = ""
 
     init(store: WorldBookStore, settings: AppSettings) {
         self.store = store
@@ -14,6 +15,15 @@ struct WorldBookView: View {
 
     private var currentBook: WorldBook {
         store.book(for: viewingBookID)
+    }
+
+    private var filteredEntries: [WorldBookEntry] {
+        guard !searchText.isEmpty else { return currentBook.entries }
+        let query = searchText.lowercased()
+        return currentBook.entries.filter { entry in
+            entry.title.lowercased().contains(query)
+                || entry.keywords.contains { $0.lowercased().contains(query) }
+        }
     }
 
     var body: some View {
@@ -34,12 +44,12 @@ struct WorldBookView: View {
                     Label("新建世界书", systemImage: "plus.circle")
                 }
             }
-            Section("条目（\(currentBook.entries.count)）") {
-                if currentBook.entries.isEmpty {
-                    Text("暂无条目，点右上角 + 新建")
+            Section("条目（\(filteredEntries.count)）") {
+                if filteredEntries.isEmpty {
+                    Text(searchText.isEmpty ? "暂无条目，点右上角 + 新建" : "没有匹配的条目")
                         .foregroundStyle(.secondary)
                 }
-                ForEach(currentBook.entries) { entry in
+                ForEach(filteredEntries) { entry in
                     Button {
                         editingEntry = entry
                     } label: {
@@ -69,6 +79,7 @@ struct WorldBookView: View {
             }
         }
         .navigationTitle("世界书")
+        .searchable(text: $searchText, prompt: "搜索标题或关键词")
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button {
@@ -90,7 +101,7 @@ struct WorldBookView: View {
     }
 
     private func deleteEntries(at offsets: IndexSet) {
-        let ids = offsets.map { currentBook.entries[$0].id }
+        let ids = offsets.map { filteredEntries[$0].id }
         for id in ids {
             store.deleteEntry(id, in: currentBook.id)
         }

@@ -5,6 +5,7 @@ struct ChatView: View {
     @StateObject private var viewModel: ChatViewModel
     @ObservedObject var store: ChatStore
     @ObservedObject var worldBook: WorldBookStore
+    @ObservedObject var settings: AppSettings
     @State private var showSessions = false
     @State private var editingMessage: ChatMessage?
     @State private var messageToDelete: ChatMessage?
@@ -13,6 +14,7 @@ struct ChatView: View {
     init(settings: AppSettings, store: ChatStore, worldBook: WorldBookStore) {
         self.store = store
         self.worldBook = worldBook
+        self.settings = settings
         _viewModel = StateObject(wrappedValue: ChatViewModel(settings: settings, store: store, worldBook: worldBook))
     }
 
@@ -114,6 +116,15 @@ struct ChatView: View {
                         ProgressView()
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
+                    }
+                    if settings.showInjectionIndicator,
+                       viewModel.lastInjectedCount > 0,
+                       viewModel.messages.last?.role == .assistant {
+                        Text("已注入世界书 \(viewModel.lastInjectedCount) 条")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.top, -4)
                     }
                 }
                 .padding()

@@ -11,7 +11,14 @@ enum WorldBookService {
             guard entry.isEnabled else { return false }
             if entry.isConstant { return true }
             return entry.keywords.contains { keyword in
-                !keyword.isEmpty && searchable.contains(keyword.lowercased())
+                guard !keyword.isEmpty else { return false }
+                let keywordLower = keyword.lowercased()
+                switch entry.matchMode {
+                case .contains:
+                    return searchable.contains(keywordLower)
+                case .exact:
+                    return matchesExact(keyword: keywordLower, in: searchable)
+                }
             }
         }
 
@@ -37,5 +44,24 @@ enum WorldBookService {
             parts.append(entry.content)
         }
         return parts.joined(separator: "\n\n")
+    }
+
+    private static func matchesExact(keyword: String, in text: String) -> Bool {
+        var searchStart = text.startIndex
+        while let range = text.range(of: keyword, range: searchStart..<text.endIndex) {
+            let beforeOK = range.lowerBound == text.startIndex
+                || !isWordCharacter(text[text.index(before: range.lowerBound)])
+            let afterOK = range.upperBound == text.endIndex
+                || !isWordCharacter(text[range.upperBound])
+            if beforeOK && afterOK {
+                return true
+            }
+            searchStart = range.upperBound
+        }
+        return false
+    }
+
+    private static func isWordCharacter(_ character: Character) -> Bool {
+        character.isLetter || character.isNumber || character == "_"
     }
 }

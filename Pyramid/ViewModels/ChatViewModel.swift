@@ -6,6 +6,7 @@ final class ChatViewModel: ObservableObject {
     @Published var isSending = false
     @Published var errorMessage: String?
     @Published var scrollVersion = 0
+    @Published var lastInjectedCount = 0
 
     let store: ChatStore
     private let settings: AppSettings
@@ -79,7 +80,9 @@ final class ChatViewModel: ObservableObject {
         scrollVersion += 1
 
         let history = store.currentMessages
-        let worldBookText = buildWorldBookText(input: text, history: history)
+        let entries = worldBookEntries(input: text, history: history)
+        lastInjectedCount = entries.count
+        let worldBookText = WorldBookService.injectionText(for: entries)
         let client = OpenAIClient(
             baseURL: settings.baseURL,
             apiKey: settings.apiKey,
@@ -138,16 +141,11 @@ final class ChatViewModel: ObservableObject {
         return settings.systemPrompt
     }
 
-    private func buildWorldBookText(input: String, history: [ChatMessage]) -> String {
-        guard settings.worldBookEnabled else { return "" }
+    private func worldBookEntries(input: String, history: [ChatMessage]) -> [WorldBookEntry] {
+        guard settings.worldBookEnabled else { return [] }
         let book = worldBook.book(for: store.currentSession?.worldBookId)
         let recentContext = history.suffix(4).map(\.content).joined(separator: "\n")
-        let selected = WorldBookService.selectedEntries(
-            for: input,
-            context: recentContext,
-            entries: book.entries
-        )
-        return WorldBookService.injectionText(for: selected)
+        return WorldBookService.selectedEntries(for: input, context: recentContext, entries: book.entries)
     }
 
     private func message(for error: Error) -> String {

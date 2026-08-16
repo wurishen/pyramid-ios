@@ -8,4 +8,5 @@ final class AppSettings: ObservableObject {
     @AppStorage("systemPrompt") var systemPrompt = ""
     @AppStorage("useStreaming") var useStreaming = true
     @AppStorage("worldBookEnabled") var worldBookEnabled = true
+    @AppStorage("worldBookShowInjection") var showInjectionIndicator = false
 }

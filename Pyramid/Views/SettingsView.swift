@@ -29,6 +29,7 @@ struct SettingsView: View {
                 }
                 Section("世界书") {
                     Toggle("启用世界书", isOn: $settings.worldBookEnabled)
+                    Toggle("显示注入提示（调试）", isOn: $settings.showInjectionIndicator)
                     NavigationLink("管理世界书条目") {
                         WorldBookView(store: worldBook, settings: settings)
                     }

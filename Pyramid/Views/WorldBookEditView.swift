@@ -10,6 +10,7 @@ struct WorldBookEditView: View {
     @State private var keywordsText: String
     @State private var isConstant: Bool
     @State private var priority: Int
+    @State private var matchMode: WorldBookMatchMode
 
     init(entry: WorldBookEntry, onSave: @escaping (WorldBookEntry) -> Void) {
         self.entry = entry
@@ -19,6 +20,7 @@ struct WorldBookEditView: View {
         _keywordsText = State(initialValue: entry.keywords.joined(separator: "，"))
         _isConstant = State(initialValue: entry.isConstant)
         _priority = State(initialValue: entry.priority)
+        _matchMode = State(initialValue: entry.matchMode)
     }
 
     var body: some View {
@@ -34,13 +36,20 @@ struct WorldBookEditView: View {
                 Section("关键词") {
                     TextField("关键词（逗号分隔）", text: $keywordsText)
                         .autocorrectionDisabled()
-                    Text("最近消息中包含任一关键词即触发本条。")
+                    Text("包含：消息中含任一关键词即触发；全词：按词边界整词匹配。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
                 Section("行为") {
                     Toggle("常驻（总是注入）", isOn: $isConstant)
                     Stepper("优先级：\(priority)", value: $priority, in: -10...10)
+                }
+                Section("匹配方式") {
+                    Picker("匹配方式", selection: $matchMode) {
+                        Text("包含（默认）").tag(WorldBookMatchMode.contains)
+                        Text("全词匹配").tag(WorldBookMatchMode.exact)
+                    }
+                    .pickerStyle(.segmented)
                 }
             }
             .navigationTitle(entry.title.isEmpty ? "新建条目" : "编辑条目")
@@ -71,6 +80,7 @@ struct WorldBookEditView: View {
         updated.keywords = keywords
         updated.isConstant = isConstant
         updated.priority = priority
+        updated.matchMode = matchMode
         onSave(updated)
         dismiss()
     }
