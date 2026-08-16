@@ -8,7 +8,8 @@ struct WorldBookView: View {
     @State private var editingEntry: WorldBookEntry?
     @State private var searchText = ""
     @State private var showImporter = false
-    @State private var pendingImportData: Data?
+    @State private var pendingImportContent: WorldBookImportContent?
+    @State private var pendingImportFileName: String?
     @State private var showImportModeDialog = false
     @State private var importErrorMessage: String?
     @State private var exportFileURL: URL?
@@ -127,11 +128,43 @@ struct WorldBookView: View {
             isPresented: $showImportModeDialog,
             titleVisibility: .visible
         ) {
-            Button("合并（按 id 去重）") { performImport(mode: .merge) }
-            Button("覆盖", role: .destructive) { performImport(mode: .overwrite) }
-            Button("取消", role: .cancel) { pendingImportData = nil }
+            if let content = pendingImportContent {
+                if content.isSillyTavern {
+                    Button("新建世界书（\(importTitleSuggestion)）") {
+                        let book = store.createBook(title: importTitleSuggestion, entries: content.entries)
+                        viewingBookID = book.id
+                        pendingImportContent = nil
+                    }
+                    Button("合并到当前世界书") {
+                        store.mergeEntries(content.entries, into: currentBook.id)
+                        pendingImportContent = nil
+                    }
+                    Button("覆盖当前世界书条目", role: .destructive) {
+                        store.overwriteEntries(content.entries, in: currentBook.id)
+                        pendingImportContent = nil
+                    }
+                    Button("取消", role: .cancel) { pendingImportContent = nil }
+                } else {
+                    Button("合并（按 id 去重）") {
+                        store.importBooks(content.books, mode: .merge)
+                        pendingImportContent = nil
+                    }
+                    Button("覆盖", role: .destructive) {
+                        store.importBooks(content.books, mode: .overwrite)
+                        viewingBookID = store.globalBook.id
+                        pendingImportContent = nil
+                    }
+                    Button("取消", role: .cancel) { pendingImportContent = nil }
+                }
+            }
         } message: {
-            Text("覆盖将替换当前全部世界书。")
+            if let content = pendingImportContent {
+                if content.isSillyTavern {
+                    Text("识别为酒馆（SillyTavern）世界书，共 \(content.entries.count) 条条目。合并会追加到当前世界书并按内容去重；覆盖会替换当前世界书的全部条目。")
+                } else {
+                    Text("覆盖将替换当前全部世界书。")
+                }
+            }
         }
         .alert("导入失败", isPresented: importErrorBinding) {
             Button("好", role: .cancel) { importErrorMessage = nil }
@@ -182,25 +215,24 @@ struct WorldBookView: View {
             }
             do {
                 let data = try Data(contentsOf: url)
-                pendingImportData = data
+                let content = try store.parseImportData(data)
+                pendingImportContent = content
+                pendingImportFileName = url.deletingPathExtension().lastPathComponent
                 showImportModeDialog = true
             } catch {
-                importErrorMessage = "无法读取文件：\(error.localizedDescription)"
+                importErrorMessage = error.localizedDescription
             }
         }
     }
 
-    private func performImport(mode: WorldBookImportMode) {
-        guard let data = pendingImportData else { return }
-        pendingImportData = nil
-        do {
-            try store.importBooks(from: data, mode: mode)
-            if mode == .overwrite {
-                viewingBookID = store.globalBook.id
-            }
-        } catch {
-            importErrorMessage = error.localizedDescription
+    private var importTitleSuggestion: String {
+        if let name = pendingImportFileName, !name.isEmpty {
+            return name
         }
+        if let name = pendingImportContent?.suggestedTitle, !name.isEmpty {
+            return name
+        }
+        return "世界书 \(store.books.count + 1)"
     }
 
     private func deleteEntries(at offsets: IndexSet) {

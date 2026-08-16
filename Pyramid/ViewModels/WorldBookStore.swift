@@ -71,19 +71,25 @@ final class WorldBookStore: ObservableObject {
         return url
     }
 
-    func importBooks(from data: Data, mode: WorldBookImportMode) throws {
-        let decoded: [WorldBook]
+    func parseImportData(_ data: Data) throws -> WorldBookImportContent {
         if let export = try? JSONDecoder().decode(WorldBookExport.self, from: data) {
-            decoded = export.books
-        } else if let array = try? JSONDecoder().decode([WorldBook].self, from: data) {
-            decoded = array
-        } else if let single = try? JSONDecoder().decode(WorldBook.self, from: data) {
-            decoded = [single]
-        } else {
-            throw WorldBookImportError.invalidData
+            guard !export.books.isEmpty else { throw WorldBookImportError.noBooks }
+            return WorldBookImportContent(books: export.books)
         }
-        guard !decoded.isEmpty else { throw WorldBookImportError.noBooks }
+        if let array = try? JSONDecoder().decode([WorldBook].self, from: data) {
+            guard !array.isEmpty else { throw WorldBookImportError.noBooks }
+            return WorldBookImportContent(books: array)
+        }
+        if let single = try? JSONDecoder().decode(WorldBook.self, from: data) {
+            return WorldBookImportContent(books: [single])
+        }
+        if let st = try? Self.parseSillyTavernData(data) {
+            return WorldBookImportContent(entries: st.entries, suggestedTitle: st.name)
+        }
+        throw WorldBookImportError.invalidData
+    }
 
+    func importBooks(_ decoded: [WorldBook], mode: WorldBookImportMode) {
         switch mode {
         case .overwrite:
             books = decoded
@@ -101,6 +107,121 @@ final class WorldBookStore: ObservableObject {
             }
         }
         save()
+    }
+
+    @discardableResult
+    func createBook(title: String, entries: [WorldBookEntry]) -> WorldBook {
+        let book = WorldBook(title: title, entries: entries)
+        books.append(book)
+        save()
+        return book
+    }
+
+    func mergeEntries(_ entries: [WorldBookEntry], into bookID: UUID) {
+        guard let index = books.firstIndex(where: { $0.id == bookID }) else { return }
+        var existingContents = Set(books[index].entries.map(\.content))
+        for entry in entries where !existingContents.contains(entry.content) {
+            books[index].entries.append(entry)
+            existingContents.insert(entry.content)
+        }
+        save()
+    }
+
+    func overwriteEntries(_ entries: [WorldBookEntry], in bookID: UUID) {
+        guard let index = books.firstIndex(where: { $0.id == bookID }) else { return }
+        books[index].entries = entries
+        save()
+    }
+
+    private struct SillyTavernParseResult {
+        var entries: [WorldBookEntry]
+        var name: String?
+    }
+
+    private static func parseSillyTavernData(_ data: Data) throws -> SillyTavernParseResult {
+        let json: Any
+        do {
+            json = try JSONSerialization.jsonObject(with: data)
+        } catch {
+            throw WorldBookImportError.invalidData
+        }
+
+        var entriesRaw: Any?
+        var name: String?
+        if let dict = json as? [String: Any] {
+            name = dict["name"] as? String
+            entriesRaw = dict["entries"]
+        } else if let array = json as? [Any] {
+            entriesRaw = array
+        }
+
+        guard let entriesRaw else { throw WorldBookImportError.invalidData }
+
+        var entryObjects: [Any] = []
+        if let entriesDict = entriesRaw as? [String: Any] {
+            let keys = entriesDict.keys.sorted { lhs, rhs in
+                let left = Int(lhs) ?? Int.max
+                let right = Int(rhs) ?? Int.max
+                return left == right ? lhs < rhs : left < right
+            }
+            entryObjects = keys.compactMap { entriesDict[$0] }
+        } else if let entriesArray = entriesRaw as? [Any] {
+            entryObjects = entriesArray
+        }
+
+        let entries = entryObjects.compactMap { object -> WorldBookEntry? in
+            guard let raw = object as? [String: Any] else { return nil }
+            return Self.parseSillyTavernEntry(raw)
+        }
+        guard !entries.isEmpty else { throw WorldBookImportError.noEntries }
+        return SillyTavernParseResult(entries: entries, name: name)
+    }
+
+    private static func parseSillyTavernEntry(_ raw: [String: Any]) -> WorldBookEntry {
+        var entry = WorldBookEntry()
+
+        let content = (raw["content"] as? String) ?? ""
+        entry.content = content
+
+        let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let comment = raw["comment"] as? String, !comment.trimmingCharacters(in: .whitespaces).isEmpty {
+            entry.title = comment
+        } else if let name = raw["name"] as? String, !name.trimmingCharacters(in: .whitespaces).isEmpty {
+            entry.title = name
+        } else if !trimmedContent.isEmpty {
+            let maxLen = 50
+            entry.title = trimmedContent.count > maxLen
+                ? String(trimmedContent.prefix(maxLen)) + "…"
+                : trimmedContent
+        } else {
+            entry.title = "未命名"
+        }
+
+        let keyField = raw["key"] ?? raw["keys"]
+        if let keyArray = keyField as? [String] {
+            entry.keywords = keyArray.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        } else if let keyString = keyField as? String {
+            entry.keywords = keyString.components(separatedBy: ",")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+        }
+
+        entry.isConstant = (raw["constant"] as? Bool) ?? false
+        entry.isEnabled = !((raw["disable"] as? Bool) ?? false)
+
+        if let order = raw["order"] as? NSNumber {
+            entry.priority = order.intValue
+        } else if let priority = raw["priority"] as? NSNumber {
+            entry.priority = priority.intValue
+        } else if let insertion = raw["insertion_order"] as? NSNumber {
+            entry.priority = insertion.intValue
+        }
+
+        if let matchWholeWords = raw["matchWholeWords"] as? Bool, matchWholeWords {
+            entry.matchMode = .exact
+        }
+
+        return entry
     }
 
     private func load() {
@@ -138,16 +259,26 @@ enum WorldBookImportMode {
     case overwrite
 }
 
+struct WorldBookImportContent {
+    var books: [WorldBook] = []
+    var entries: [WorldBookEntry] = []
+    var suggestedTitle: String?
+    var isSillyTavern: Bool { !entries.isEmpty }
+}
+
 enum WorldBookImportError: LocalizedError {
     case invalidData
     case noBooks
+    case noEntries
 
     var errorDescription: String? {
         switch self {
         case .invalidData:
-            return "文件不是有效的世界书 JSON（需要 WorldBookExport / 世界书数组 / 单本世界书结构）"
+            return "不是 Pyramid 或 SillyTavern（酒馆）世界书格式"
         case .noBooks:
             return "文件中没有可导入的世界书"
+        case .noEntries:
+            return "文件中没有可导入的条目"
         }
     }
 }
