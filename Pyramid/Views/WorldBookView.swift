@@ -241,34 +241,36 @@ struct WorldBookView: View {
     }
 
     private func handleImportResult(_ result: Result<[URL], Error>) {
-        switch result {
-        case .failure(let error):
-            importLog.error("fileImporter returned failure: \(error.localizedDescription)")
-            importErrorMessage = error.localizedDescription
-        case .success(let urls):
-            guard !urls.isEmpty else {
-                importLog.error("fileImporter returned no URLs")
-                importErrorMessage = "未选择任何文件"
-                return
-            }
-            pendingImportContents = []
-            pendingImportFileNames = []
-            pendingImportIndex = 0
-            for url in urls {
-                do {
-                    let data = try Self.readImportedData(from: url)
-                    importLog.info("read \(data.count) bytes from \(url.lastPathComponent)")
-                    let content = try store.parseImportData(data)
-                    importLog.info("parsed \(content.books.count) book(s) / \(content.entries.count) entry(ies) from \(url.lastPathComponent)")
-                    pendingImportContents.append(content)
-                    pendingImportFileNames.append(url.deletingPathExtension().lastPathComponent)
-                } catch {
-                    importLog.error("import failed for \(url.lastPathComponent): \(error.localizedDescription)")
-                    importErrorMessage = error.localizedDescription
+        // fileImporter 的回调可能在后台线程触发，所有 @State 修改与后续弹窗都必须在主线程，
+        // 否则点「打开」后零反馈。整段放主线程保证结果一定呈到 UI。
+        DispatchQueue.main.async { [self] in
+            switch result {
+            case .failure(let error):
+                importLog.error("fileImporter returned failure: \(error.localizedDescription)")
+                importErrorMessage = error.localizedDescription
+            case .success(let urls):
+                guard !urls.isEmpty else {
+                    importLog.error("fileImporter returned no URLs")
+                    importErrorMessage = "未选择任何文件"
                     return
                 }
-            }
-            DispatchQueue.main.async { [self] in
+                pendingImportContents = []
+                pendingImportFileNames = []
+                pendingImportIndex = 0
+                for url in urls {
+                    do {
+                        let data = try Self.readImportedData(from: url)
+                        importLog.info("read \(data.count) bytes from \(url.lastPathComponent)")
+                        let content = try store.parseImportData(data)
+                        importLog.info("parsed \(content.books.count) book(s) / \(content.entries.count) entry(ies) from \(url.lastPathComponent)")
+                        pendingImportContents.append(content)
+                        pendingImportFileNames.append(url.deletingPathExtension().lastPathComponent)
+                    } catch {
+                        importLog.error("import failed for \(url.lastPathComponent): \(error.localizedDescription)")
+                        importErrorMessage = error.localizedDescription
+                        return
+                    }
+                }
                 self.showNextImportDialog()
             }
         }
