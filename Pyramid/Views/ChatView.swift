@@ -3,10 +3,12 @@ import SwiftUI
 struct ChatView: View {
     @StateObject private var viewModel: ChatViewModel
     @ObservedObject var store: ChatStore
+    @ObservedObject var worldBook: WorldBookStore
     @State private var showSessions = false
 
     init(settings: AppSettings, store: ChatStore, worldBook: WorldBookStore) {
         self.store = store
+        self.worldBook = worldBook
         _viewModel = StateObject(wrappedValue: ChatViewModel(settings: settings, store: store, worldBook: worldBook))
     }
 
@@ -31,7 +33,7 @@ struct ChatView: View {
             }
         }
         .sheet(isPresented: $showSessions) {
-            SessionListView(store: store)
+            SessionListView(store: store, worldBook: worldBook)
         }
     }
 

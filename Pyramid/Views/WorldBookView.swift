@@ -3,19 +3,43 @@ import SwiftUI
 struct WorldBookView: View {
     @ObservedObject var store: WorldBookStore
     @ObservedObject var settings: AppSettings
+    @State private var viewingBookID: UUID
     @State private var editingEntry: WorldBookEntry?
+
+    init(store: WorldBookStore, settings: AppSettings) {
+        self.store = store
+        self.settings = settings
+        _viewingBookID = State(initialValue: store.globalBook.id)
+    }
+
+    private var currentBook: WorldBook {
+        store.book(for: viewingBookID)
+    }
 
     var body: some View {
         List {
             Section {
                 Toggle("启用世界书", isOn: $settings.worldBookEnabled)
             }
-            Section("条目（\(store.entries.count)）") {
-                if store.entries.isEmpty {
+            Section("当前世界书") {
+                Picker("世界书", selection: $viewingBookID) {
+                    ForEach(store.books) { book in
+                        Text(book.title).tag(book.id)
+                    }
+                }
+                Button {
+                    let book = store.createBook()
+                    viewingBookID = book.id
+                } label: {
+                    Label("新建世界书", systemImage: "plus.circle")
+                }
+            }
+            Section("条目（\(currentBook.entries.count)）") {
+                if currentBook.entries.isEmpty {
                     Text("暂无条目，点右上角 + 新建")
                         .foregroundStyle(.secondary)
                 }
-                ForEach(store.entries) { entry in
+                ForEach(currentBook.entries) { entry in
                     Button {
                         editingEntry = entry
                     } label: {
@@ -56,19 +80,19 @@ struct WorldBookView: View {
         }
         .sheet(item: $editingEntry) { entry in
             WorldBookEditView(entry: entry) { updated in
-                if store.entries.contains(where: { $0.id == updated.id }) {
-                    store.update(updated)
+                if currentBook.entries.contains(where: { $0.id == updated.id }) {
+                    store.update(updated, in: currentBook.id)
                 } else {
-                    store.add(updated)
+                    store.add(updated, to: currentBook.id)
                 }
             }
         }
     }
 
     private func deleteEntries(at offsets: IndexSet) {
-        let ids = offsets.map { store.entries[$0].id }
+        let ids = offsets.map { currentBook.entries[$0].id }
         for id in ids {
-            store.delete(id)
+            store.deleteEntry(id, in: currentBook.id)
         }
     }
 }

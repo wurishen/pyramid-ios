@@ -5,11 +5,19 @@ struct ChatSession: Codable, Identifiable, Equatable {
     var title: String
     var messages: [ChatMessage]
     var createdAt: Date
+    var worldBookId: UUID?
 
-    init(id: UUID = UUID(), title: String = "新会话", messages: [ChatMessage] = [], createdAt: Date = Date()) {
+    init(
+        id: UUID = UUID(),
+        title: String = "新会话",
+        messages: [ChatMessage] = [],
+        createdAt: Date = Date(),
+        worldBookId: UUID? = nil
+    ) {
         self.id = id
         self.title = title
         self.messages = messages
         self.createdAt = createdAt
+        self.worldBookId = worldBookId
     }
 }

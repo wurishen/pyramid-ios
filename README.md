@@ -21,8 +21,10 @@ Pyramid 的最小原生 iOS 应用 —— 纯 SwiftUI，不依赖 WKWebView / �
    - `流式输出`：默认开启（SSE），关闭则一次性返回。
    - `启用世界书`：总开关；`管理世界书条目` 进入条目列表。
    - 填写即自动保存在本机（UserDefaults），无需手动保存。
-2. **世界书**：设置里进入「管理世界书条目」，可新建/编辑（点条目）/删除（左滑）条目。每条含：标题、内容、关键词（逗号分隔，多个）、启用开关、常驻开关（总是注入）、优先级（数值越小越靠前）。
+2. **世界书**：设置里进入「管理世界书条目」，可新建/编辑（点条目）/删除（左滑）条目。每条含：标题、内容、关键词（逗号分隔，多个）、启用开关、常驻开关（总是注入）、优先级（数值越小越靠前）。顶部可选择当前管理的书，并可「新建世界书」。
+   - 支持**按会话绑定世界书**：会话列表中左滑任意会话 →「绑定世界书」，选择「不绑定（使用全局）」或某个具体世界书。绑定后该会话只使用被绑定的书做匹配注入；未绑定则回退到全局世界书（第一本，默认行为）。
    - 发送聊天消息时，应用会用「当前消息 + 最近几条上下文」匹配关键词；命中条目与「常驻」条目作为独立 `system` 段注入请求，最多 20 条 / 约 2000 字符，避免塞爆上下文。
+   - 旧版本单本条目会自动迁移为「全局世界书」。
 3. 回到 **聊天**：
    - 左上角气泡按钮打开**会话列表**：可新建、切换、删除（左滑）会话；每个会话的消息记录独立保存，重启应用仍在。
    - 导航栏标题显示当前会话名（默认以首条用户消息自动命名）。
@@ -32,11 +34,11 @@ Pyramid 的最小原生 iOS 应用 —— 纯 SwiftUI，不依赖 WKWebView / �
 ## 功能范围
 
 - 设置页：Base URL / API Key / 模型名 / 系统提示词 / 启用世界书，本地持久化；流式输出开关（默认开启）。
-- 世界书（原生，全局共享一本）：条目增删改、启用开关、常驻、优先级、关键词匹配注入，带注入上限。
+- 世界书（原生）：多本世界书（全局 + 自定义）、条目增删改、启用开关、常驻、优先级、关键词匹配注入、**按会话绑定**、注入上限。
 - 多会话：会话列表（新建/切换/删除），每个会话独立消息记录并本地持久化；聊天页显示当前会话。
 - 聊天页：消息列表、输入框、发送；`URLSession` 请求 OpenAI 兼容 `chat/completions`，支持 `stream=true`（SSE，逐 delta 更新助手气泡）；主线程更新 UI。
 - 错误提示：网络、状态码、解析失败均在界面展示。
-- 不含：角色卡 PNG/JSON 导入、正则/脚本/扩展、按会话绑定世界书。
+- 不含：角色卡 PNG/JSON 导入、正则/脚本/扩展、多世界书同时注入。
 
 ## 目录结构
 
@@ -46,10 +48,10 @@ Pyramid/
   PyramidApp.swift     App 入口（@main）
   ContentView.swift    Tab 容器（聊天 / 设置）
   AppSettings.swift    API 配置（@AppStorage 本地持久化）
-  Models/              消息、请求/响应、会话、世界书条目模型
+  Models/              消息、请求/响应、会话、世界书/条目模型
   Services/            OpenAIClient、WorldBookService（关键词匹配与注入）
   ViewModels/          ChatViewModel、ChatStore、WorldBookStore（持久化）
-  Views/               ChatView、SettingsView、SessionListView、WorldBookView、WorldBookEditView
+  Views/               ChatView、SettingsView、SessionListView、SessionDetailView、WorldBookView、WorldBookEditView
   Assets.xcassets/     图标与颜色资源
 .github/workflows/    GitHub Actions（macOS 上 xcodebuild 编译）
 ```

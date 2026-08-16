@@ -95,11 +95,12 @@ final class ChatViewModel: ObservableObject {
 
     private func buildWorldBookText(input: String, history: [ChatMessage]) -> String {
         guard settings.worldBookEnabled else { return "" }
+        let book = worldBook.book(for: store.currentSession?.worldBookId)
         let recentContext = history.suffix(4).map(\.content).joined(separator: "\n")
         let selected = WorldBookService.selectedEntries(
             for: input,
             context: recentContext,
-            entries: worldBook.entries
+            entries: book.entries
         )
         return WorldBookService.injectionText(for: selected)
     }
