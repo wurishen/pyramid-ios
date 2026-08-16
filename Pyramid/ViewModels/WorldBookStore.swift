@@ -52,6 +52,45 @@ final class WorldBookStore: ObservableObject {
         save()
     }
 
+    func exportJSON(books: [WorldBook]) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = (try? encoder.encode(WorldBookExport(books: books))) ?? Data()
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+
+    func importBooks(from data: Data, mode: WorldBookImportMode) throws {
+        let decoded: [WorldBook]
+        if let export = try? JSONDecoder().decode(WorldBookExport.self, from: data) {
+            decoded = export.books
+        } else if let array = try? JSONDecoder().decode([WorldBook].self, from: data) {
+            decoded = array
+        } else if let single = try? JSONDecoder().decode(WorldBook.self, from: data) {
+            decoded = [single]
+        } else {
+            throw WorldBookImportError.invalidData
+        }
+        guard !decoded.isEmpty else { throw WorldBookImportError.noBooks }
+
+        switch mode {
+        case .overwrite:
+            books = decoded
+        case .merge:
+            for book in decoded {
+                if let bookIndex = books.firstIndex(where: { $0.id == book.id }) {
+                    var merged = books[bookIndex]
+                    for entry in book.entries where !merged.entries.contains(where: { $0.id == entry.id }) {
+                        merged.entries.append(entry)
+                    }
+                    books[bookIndex] = merged
+                } else {
+                    books.append(book)
+                }
+            }
+        }
+        save()
+    }
+
     private func load() {
         guard let data = UserDefaults.standard.data(forKey: StorageKeys.books),
               let decoded = try? JSONDecoder().decode([WorldBook].self, from: data) else {
@@ -80,4 +119,23 @@ final class WorldBookStore: ObservableObject {
 private enum StorageKeys {
     static let books = "worldBookList"
     static let legacyEntries = "worldBookEntries"
+}
+
+enum WorldBookImportMode {
+    case merge
+    case overwrite
+}
+
+enum WorldBookImportError: LocalizedError {
+    case invalidData
+    case noBooks
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidData:
+            return "文件不是有效的世界书 JSON（需要 WorldBookExport / 世界书数组 / 单本世界书结构）"
+        case .noBooks:
+            return "文件中没有可导入的世界书"
+        }
+    }
 }

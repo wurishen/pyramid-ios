@@ -11,3 +11,13 @@ struct WorldBook: Codable, Identifiable, Equatable {
         self.entries = entries
     }
 }
+
+struct WorldBookExport: Codable {
+    var version: Int
+    var books: [WorldBook]
+
+    init(version: Int = 1, books: [WorldBook]) {
+        self.version = version
+        self.books = books
+    }
+}
