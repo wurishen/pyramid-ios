@@ -37,6 +37,12 @@ final class ChatStore: ObservableObject {
         save()
     }
 
+    func clearAllSessions() {
+        sessions.removeAll()
+        currentSessionID = nil
+        _ = createSession()
+    }
+
     func delete(_ id: UUID) {
         sessions.removeAll { $0.id == id }
         if currentSessionID == id {

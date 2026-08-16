@@ -16,12 +16,27 @@ struct SessionListView: View {
                             dismiss()
                         } label: {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(session.title)
-                                    .foregroundStyle(.primary)
+                                HStack(spacing: 6) {
+                                    Text(session.title)
+                                        .foregroundStyle(.primary)
+                                        .lineLimit(1)
+                                    if hasCustomSystemPrompt(session) {
+                                        Text("自定义提示")
+                                            .font(.caption2)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+                                            .foregroundStyle(Color.accentColor)
+                                    }
+                                    Spacer(minLength: 0)
+                                }
+                                Text(metaText(for: session))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                                     .lineLimit(1)
                                 Text(session.createdAt.formatted(date: .abbreviated, time: .shortened))
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(.tertiary)
                             }
                         }
                         .swipeActions(edge: .trailing) {
@@ -63,6 +78,24 @@ struct SessionListView: View {
         for id in ids {
             store.delete(id)
         }
+    }
+
+    private func metaText(for session: ChatSession) -> String {
+        var parts = ["\(session.messages.count) 条消息"]
+        if let bookTitle = boundWorldBookTitle(for: session) {
+            parts.append(bookTitle)
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func boundWorldBookTitle(for session: ChatSession) -> String? {
+        guard let id = session.worldBookId else { return nil }
+        return worldBook.books.first(where: { $0.id == id })?.title
+    }
+
+    private func hasCustomSystemPrompt(_ session: ChatSession) -> Bool {
+        let prompt = session.systemPrompt ?? ""
+        return !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }
 

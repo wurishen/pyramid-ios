@@ -10,6 +10,8 @@ struct ChatView: View {
     @State private var editingMessage: ChatMessage?
     @State private var messageToDelete: ChatMessage?
     @State private var regenerateMessage: ChatMessage?
+    @State private var showCopiedFeedback = false
+    @FocusState private var inputFocused: Bool
 
     init(settings: AppSettings, store: ChatStore, worldBook: WorldBookStore) {
         self.store = store
@@ -36,6 +38,30 @@ struct ChatView: View {
                     Image(systemName: "text.bubble")
                 }
                 .accessibilityLabel("会话列表")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    UIPasteboard.general.string = conversationText
+                    withAnimation { showCopiedFeedback = true }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        withAnimation { showCopiedFeedback = false }
+                    }
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                }
+                .disabled(viewModel.messages.isEmpty)
+                .accessibilityLabel("复制本会话全部对话")
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if showCopiedFeedback {
+                Text("已复制本会话全部对话")
+                    .font(.footnote)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.bottom, 8)
+                    .transition(.opacity)
             }
         }
         .sheet(isPresented: $showSessions) {
@@ -93,6 +119,13 @@ struct ChatView: View {
         )
     }
 
+    private var conversationText: String {
+        viewModel.messages.map { message in
+            "\(message.role == .user ? "用户" : "助手")：\n\(message.content)"
+        }
+        .joined(separator: "\n\n")
+    }
+
     private var messageList: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -144,8 +177,10 @@ struct ChatView: View {
             TextField("输入消息…", text: $viewModel.input, axis: .vertical)
                 .lineLimit(1...4)
                 .textFieldStyle(.roundedBorder)
+                .focused($inputFocused)
             Button {
                 viewModel.send()
+                inputFocused = false
             } label: {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.title2)
@@ -179,6 +214,9 @@ struct MessageBubble: View {
     var onRegenerate: () -> Void = {}
     var onDelete: () -> Void = {}
 
+    private static let collapseThreshold = 800
+    @State private var expanded = false
+
     var body: some View {
         HStack {
             if message.role == .user {
@@ -186,7 +224,7 @@ struct MessageBubble: View {
             }
             Group {
                 if message.role == .assistant {
-                    MarkdownTextView(text: message.content)
+                    assistantContent
                 } else {
                     Text(message.content)
                 }
@@ -218,6 +256,26 @@ struct MessageBubble: View {
                 Spacer(minLength: 48)
             }
         }
+    }
+
+    private var assistantContent: some View {
+        let isLong = message.content.count > Self.collapseThreshold
+        return VStack(alignment: .leading, spacing: 6) {
+            MarkdownTextView(text: expanded ? message.content : collapsedContent)
+            if isLong {
+                Button(expanded ? "收起" : "展开") {
+                    withAnimation { expanded.toggle() }
+                }
+                .font(.caption)
+                .foregroundStyle(Color.accentColor)
+            }
+        }
+    }
+
+    private var collapsedContent: String {
+        guard message.content.count > Self.collapseThreshold else { return message.content }
+        let end = message.content.index(message.content.startIndex, offsetBy: Self.collapseThreshold)
+        return String(message.content[..<end]) + "…"
     }
 }
 

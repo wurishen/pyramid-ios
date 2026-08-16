@@ -11,7 +11,7 @@ struct ContentView: View {
                 .tabItem {
                     Label("聊天", systemImage: "bubble.left.and.bubble.right")
                 }
-            SettingsView(settings: settings, worldBook: worldBook)
+            SettingsView(settings: settings, worldBook: worldBook, store: store)
                 .tabItem {
                     Label("设置", systemImage: "gearshape")
                 }

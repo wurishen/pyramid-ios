@@ -31,6 +31,11 @@ final class WorldBookStore: ObservableObject {
         return book
     }
 
+    func resetBooks() {
+        books = [WorldBook(title: "全局世界书")]
+        save()
+    }
+
     func add(_ entry: WorldBookEntry, to bookID: UUID) {
         guard let index = books.firstIndex(where: { $0.id == bookID }) else { return }
         books[index].entries.append(entry)
