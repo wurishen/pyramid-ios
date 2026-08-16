@@ -1,0 +1,58 @@
+name: Sync docs to Android
+
+on:
+  push:
+    branches: [main]
+    paths: ["docs/**"]
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check token
+        if: ${{ secrets.ANDROID_SYNC_TOKEN == '' }}
+        run: |
+          echo "::warning::ANDROID_SYNC_TOKEN not set — skipping sync."
+          exit 0
+
+      - name: Checkout iOS repo
+        uses: actions/checkout@v4
+        with:
+          path: ios
+
+      - name: Checkout Android repo
+        uses: actions/checkout@v4
+        with:
+          repository: wurishen/pyramid-android
+          token: ${{ secrets.ANDROID_SYNC_TOKEN }}
+          path: android
+
+      - name: Sync docs/
+        run: |
+          mkdir -p android/docs
+          cp -r ios/docs/* android/docs/
+
+      - name: Commit and push
+        working-directory: android
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "docs: sync SPEC from pyramid-ios"
+            git push
+          fi
+
+      - name: Open sync issue (best effort)
+        if: success() && hashFiles('android/docs/*') != ''
+        working-directory: android
+        env:
+          GH_TOKEN: ${{ secrets.ANDROID_SYNC_TOKEN }}
+        run: |
+          gh issue create \
+            --title "[同步] docs 已从 pyramid-ios 更新" \
+            --body "自动同步的文档已推送到 main，请检查是否需要适配到 Android 端。" \
+            --label "sync" || echo "::warning::Failed to create issue — skipping."
