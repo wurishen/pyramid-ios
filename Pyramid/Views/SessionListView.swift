@@ -3,6 +3,8 @@ import SwiftUI
 struct SessionListView: View {
     @ObservedObject var store: ChatStore
     @ObservedObject var worldBook: WorldBookStore
+    @ObservedObject var settings: AppSettings
+    @ObservedObject var presets: PresetStore
     @Environment(\.dismiss) private var dismiss
     @State private var detailSession: ChatSession?
 
@@ -69,7 +71,13 @@ struct SessionListView: View {
             }
         }
         .sheet(item: $detailSession) { session in
-            SessionDetailView(store: store, worldBook: worldBook, sessionID: session.id)
+            SessionDetailView(
+                store: store,
+                worldBook: worldBook,
+                settings: settings,
+                presets: presets,
+                sessionID: session.id
+            )
         }
     }
 
@@ -100,5 +108,10 @@ struct SessionListView: View {
 }
 
 #Preview {
-    SessionListView(store: ChatStore(), worldBook: WorldBookStore())
+    SessionListView(
+        store: ChatStore(),
+        worldBook: WorldBookStore(),
+        settings: AppSettings(),
+        presets: PresetStore()
+    )
 }

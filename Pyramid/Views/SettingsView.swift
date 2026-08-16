@@ -4,6 +4,7 @@ struct SettingsView: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var worldBook: WorldBookStore
     @ObservedObject var store: ChatStore
+    @ObservedObject var presets: PresetStore
     @State private var showClearSessionsDialog = false
     @State private var showResetWorldBookDialog = false
 
@@ -36,6 +37,27 @@ struct SettingsView: View {
                     NavigationLink("管理世界书条目") {
                         WorldBookView(store: worldBook, settings: settings)
                     }
+                }
+                Section("预设") {
+                    NavigationLink("预设管理") {
+                        PresetListView(store: presets, worldBook: worldBook)
+                    }
+                }
+                Section("上下文") {
+                    Toggle("显示上下文长度提示", isOn: $settings.showContextHint)
+                    Stepper(
+                        "警告阈值：\(settings.contextLimit.formatted()) 字符",
+                        value: $settings.contextLimit,
+                        in: 2000...50000,
+                        step: 1000
+                    )
+                    Text("按字符数粗略估算会话长度与即将注入的世界书内容，超过阈值时提示。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Section("界面") {
+                    Toggle("紧凑模式", isOn: $settings.compactMode)
+                    Toggle("显示消息时间戳", isOn: $settings.showTimestamps)
                 }
                 Section("数据管理") {
                     Button("清空全部会话", role: .destructive) {
@@ -81,5 +103,10 @@ struct SettingsView: View {
 }
 
 #Preview {
-    SettingsView(settings: AppSettings(), worldBook: WorldBookStore(), store: ChatStore())
+    SettingsView(
+        settings: AppSettings(),
+        worldBook: WorldBookStore(),
+        store: ChatStore(),
+        presets: PresetStore()
+    )
 }

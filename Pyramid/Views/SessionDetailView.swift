@@ -3,6 +3,8 @@ import SwiftUI
 struct SessionDetailView: View {
     @ObservedObject var store: ChatStore
     @ObservedObject var worldBook: WorldBookStore
+    @ObservedObject var settings: AppSettings
+    @ObservedObject var presets: PresetStore
     let sessionID: UUID
 
     private var session: ChatSession? {
@@ -11,6 +13,17 @@ struct SessionDetailView: View {
 
     var body: some View {
         Form {
+            Section("预设") {
+                Picker("应用预设", selection: appliedPresetBinding) {
+                    Text("无").tag(Optional<UUID>.none)
+                    ForEach(presets.presets) { preset in
+                        Text(preset.name).tag(Optional(preset.id))
+                    }
+                }
+                Text("应用后会把预设的模型名、系统提示词和世界书绑定写入当前会话，立即生效。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
             Section("世界书绑定") {
                 Picker("绑定世界书", selection: binding) {
                     Text("不绑定（使用全局）").tag(Optional<UUID>.none)
@@ -50,10 +63,37 @@ struct SessionDetailView: View {
             set: { store.setSystemPrompt($0, for: sessionID) }
         )
     }
+
+    private var appliedPresetBinding: Binding<UUID?> {
+        Binding(
+            get: { store.sessions.first { $0.id == sessionID }?.appliedPresetId },
+            set: { newValue in
+                store.setAppliedPreset(newValue, for: sessionID)
+                if let presetID = newValue,
+                   let preset = presets.presets.first(where: { $0.id == presetID }) {
+                    apply(preset)
+                }
+            }
+        )
+    }
+
+    private func apply(_ preset: Preset) {
+        store.setSystemPrompt(preset.systemPrompt, for: sessionID)
+        store.setWorldBook(preset.worldBookId, for: sessionID)
+        if let model = preset.modelName, !model.isEmpty {
+            settings.modelName = model
+        }
+    }
 }
 
 #Preview {
     NavigationStack {
-        SessionDetailView(store: ChatStore(), worldBook: WorldBookStore(), sessionID: UUID())
+        SessionDetailView(
+            store: ChatStore(),
+            worldBook: WorldBookStore(),
+            settings: AppSettings(),
+            presets: PresetStore(),
+            sessionID: UUID()
+        )
     }
 }

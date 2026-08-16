@@ -100,6 +100,12 @@ final class ChatStore: ObservableObject {
         save()
     }
 
+    func setAppliedPreset(_ presetId: UUID?, for sessionID: UUID) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        sessions[index].appliedPresetId = presetId
+        save()
+    }
+
     private static func defaultTitle(for content: String) -> String {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         let maxLength = 20

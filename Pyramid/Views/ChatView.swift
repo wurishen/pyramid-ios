@@ -6,6 +6,7 @@ struct ChatView: View {
     @ObservedObject var store: ChatStore
     @ObservedObject var worldBook: WorldBookStore
     @ObservedObject var settings: AppSettings
+    @ObservedObject var presets: PresetStore
     @State private var showSessions = false
     @State private var editingMessage: ChatMessage?
     @State private var messageToDelete: ChatMessage?
@@ -13,10 +14,11 @@ struct ChatView: View {
     @State private var showCopiedFeedback = false
     @FocusState private var inputFocused: Bool
 
-    init(settings: AppSettings, store: ChatStore, worldBook: WorldBookStore) {
+    init(settings: AppSettings, store: ChatStore, worldBook: WorldBookStore, presets: PresetStore) {
         self.store = store
         self.worldBook = worldBook
         self.settings = settings
+        self.presets = presets
         _viewModel = StateObject(wrappedValue: ChatViewModel(settings: settings, store: store, worldBook: worldBook))
     }
 
@@ -26,6 +28,9 @@ struct ChatView: View {
                 errorBanner(error)
             }
             messageList
+            if settings.showContextHint {
+                contextHintBar
+            }
             inputBar
         }
         .navigationTitle(store.currentSession?.title ?? "Pyramid")
@@ -65,7 +70,7 @@ struct ChatView: View {
             }
         }
         .sheet(isPresented: $showSessions) {
-            SessionListView(store: store, worldBook: worldBook)
+            SessionListView(store: store, worldBook: worldBook, settings: settings, presets: presets)
         }
         .sheet(item: $editingMessage) { message in
             EditMessageSheet(initialText: message.content) { text in
@@ -126,12 +131,47 @@ struct ChatView: View {
         .joined(separator: "\n\n")
     }
 
+    private var contextCharacterCount: Int {
+        let messageChars = viewModel.messages.reduce(0) { $0 + $1.content.count }
+        return messageChars + injectedCharacterEstimate
+    }
+
+    private var injectedCharacterEstimate: Int {
+        guard settings.worldBookEnabled else { return 0 }
+        let book = worldBook.book(for: store.currentSession?.worldBookId)
+        let input = viewModel.input.trimmingCharacters(in: .whitespacesAndNewlines)
+        let context = viewModel.messages.suffix(4).map(\.content).joined(separator: "\n")
+        let entries = WorldBookService.selectedEntries(for: input, context: context, entries: book.entries)
+        return entries.reduce(0) { $0 + $1.title.count + $1.content.count }
+    }
+
+    private var contextHintBar: some View {
+        let count = contextCharacterCount
+        let over = count > settings.contextLimit
+        return HStack(spacing: 4) {
+            Image(systemName: over ? "exclamationmark.triangle.fill" : "text.alignleft")
+                .font(.caption2)
+            Text("上下文约 \(count.formatted()) 字符")
+                .font(.caption2)
+            if over {
+                Text("上下文较长")
+                    .font(.caption2)
+                    .bold()
+            }
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(over ? Color.orange : Color.secondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 4)
+        .background(.bar)
+    }
+
     private var messageList: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: settings.compactMode ? 6 : 12) {
                     if viewModel.messages.isEmpty {
-                        Text("发送一条消息开始对话")
+                        Text("还没有消息，打个招呼开始对话吧")
                             .foregroundStyle(.secondary)
                             .padding(.top, 40)
                     }
@@ -139,6 +179,8 @@ struct ChatView: View {
                         MessageBubble(
                             message: message,
                             isSending: viewModel.isSending,
+                            compact: settings.compactMode,
+                            showTimestamp: settings.showTimestamps,
                             onCopy: { UIPasteboard.general.string = message.content },
                             onEdit: { editingMessage = message },
                             onRegenerate: { regenerateMessage = message },
@@ -209,6 +251,8 @@ struct ChatView: View {
 struct MessageBubble: View {
     let message: ChatMessage
     var isSending = false
+    var compact = false
+    var showTimestamp = false
     var onCopy: () -> Void = {}
     var onEdit: () -> Void = {}
     var onRegenerate: () -> Void = {}
@@ -222,38 +266,50 @@ struct MessageBubble: View {
             if message.role == .user {
                 Spacer(minLength: 48)
             }
-            Group {
-                if message.role == .assistant {
-                    assistantContent
-                } else {
-                    Text(message.content)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(message.role == .user ? Color.accentColor : Color(.secondarySystemBackground))
-            .foregroundStyle(message.role == .user ? .white : .primary)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-            .contextMenu {
-                Button(action: onCopy) {
-                    Label("复制", systemImage: "doc.on.doc")
-                }
-                if !isSending {
-                    Button(action: onEdit) {
-                        Label("编辑", systemImage: "pencil")
-                    }
-                    if message.role == .assistant {
-                        Button(action: onRegenerate) {
-                            Label("重新生成", systemImage: "arrow.clockwise")
-                        }
-                    }
-                    Button(role: .destructive, action: onDelete) {
-                        Label("删除", systemImage: "trash")
-                    }
+            VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 3) {
+                bubbleContent
+                if showTimestamp, let createdAt = message.createdAt {
+                    Text(createdAt.formatted(date: .omitted, time: .shortened))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 4)
                 }
             }
             if message.role == .assistant {
                 Spacer(minLength: 48)
+            }
+        }
+    }
+
+    private var bubbleContent: some View {
+        Group {
+            if message.role == .assistant {
+                assistantContent
+            } else {
+                Text(message.content)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, compact ? 4 : 8)
+        .background(message.role == .user ? Color.accentColor : Color(.systemGray5))
+        .foregroundStyle(message.role == .user ? .white : .primary)
+        .clipShape(RoundedRectangle(cornerRadius: compact ? 10 : 14))
+        .contextMenu {
+            Button(action: onCopy) {
+                Label("复制", systemImage: "doc.on.doc")
+            }
+            if !isSending {
+                Button(action: onEdit) {
+                    Label("编辑", systemImage: "pencil")
+                }
+                if message.role == .assistant {
+                    Button(action: onRegenerate) {
+                        Label("重新生成", systemImage: "arrow.clockwise")
+                    }
+                }
+                Button(role: .destructive, action: onDelete) {
+                    Label("删除", systemImage: "trash")
+                }
             }
         }
     }
@@ -456,6 +512,11 @@ struct EditMessageSheet: View {
 
 #Preview {
     NavigationStack {
-        ChatView(settings: AppSettings(), store: ChatStore(), worldBook: WorldBookStore())
+        ChatView(
+            settings: AppSettings(),
+            store: ChatStore(),
+            worldBook: WorldBookStore(),
+            presets: PresetStore()
+        )
     }
 }
