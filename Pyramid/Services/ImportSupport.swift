@@ -105,12 +105,13 @@ enum ImportSupport {
         guard let b64String = String(data: value, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines),
             let compressed = Data(base64Encoded: b64String) else { return nil }
-        var buffer = [UInt8](repeating: 0, count: 2_000_000)
-        let decodedLength = compressed.withUnsafeBytes { src in
-            buffer.withUnsafeMutableBytes { dst in
+        let capacity = 2_000_000
+        var output = [UInt8](repeating: 0, count: capacity)
+        let decodedLength: Int = compressed.withUnsafeBytes { src in
+            output.withUnsafeMutableBytes { dst in
                 compression_decode_buffer(
                     dst.bindMemory(to: UInt8.self).baseAddress!,
-                    buffer.count,
+                    capacity,
                     src.bindMemory(to: UInt8.self).baseAddress!,
                     compressed.count,
                     nil,
@@ -119,7 +120,7 @@ enum ImportSupport {
             }
         }
         guard decodedLength > 0 else { return nil }
-        return Data(buffer.prefix(decodedLength))
+        return Data(output.prefix(decodedLength))
     }
 }
 
