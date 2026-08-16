@@ -259,7 +259,7 @@ struct WorldBookView: View {
                 pendingImportIndex = 0
                 for url in urls {
                     do {
-                        let data = try Self.readImportedData(from: url)
+                        let data = try ImportSupport.readImportedData(from: url)
                         importLog.info("read \(data.count) bytes from \(url.lastPathComponent)")
                         let content = try store.parseImportData(data)
                         importLog.info("parsed \(content.books.count) book(s) / \(content.entries.count) entry(ies) from \(url.lastPathComponent)")
@@ -274,22 +274,6 @@ struct WorldBookView: View {
                 self.showNextImportDialog()
             }
         }
-    }
-
-    /// fileImporter 返回的是 security-scoped URL，须先 start/stop 访问，再拷贝到临时目录读取，
-    /// 直接 `Data(contentsOf:)` 在真机上可能因权限/iCloud 占位文件失败。
-    private static func readImportedData(from url: URL) throws -> Data {
-        let didStart = url.startAccessingSecurityScopedResource()
-        defer {
-            if didStart { url.stopAccessingSecurityScopedResource() }
-        }
-        let ext = url.pathExtension.isEmpty ? "json" : url.pathExtension
-        let tempURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension(ext)
-        defer { try? FileManager.default.removeItem(at: tempURL) }
-        try FileManager.default.copyItem(at: url, to: tempURL)
-        return try Data(contentsOf: tempURL)
     }
 
     private func showNextImportDialog() {

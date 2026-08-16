@@ -7,6 +7,7 @@ struct CharacterListView: View {
     @State private var editingCharacter: Character?
     @State private var showImporter = false
     @State private var importError: String?
+    @State private var importSuccess: String?
 
     var body: some View {
         List {
@@ -55,13 +56,18 @@ struct CharacterListView: View {
                 }
             }
         }
-        .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
+        .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json, .png, .data, .item]) { result in
             handleImport(result)
         }
         .alert("导入失败", isPresented: importErrorBinding) {
             Button("好", role: .cancel) { importError = nil }
         } message: {
             Text(importError ?? "")
+        }
+        .alert("导入完成", isPresented: importSuccessBinding) {
+            Button("好", role: .cancel) { importSuccess = nil }
+        } message: {
+            Text(importSuccess ?? "")
         }
         .sheet(item: $editingCharacter) { character in
             CharacterEditView(character: character, worldBook: worldBook) { updated in
@@ -78,18 +84,21 @@ struct CharacterListView: View {
     }
 
     private func handleImport(_ result: Result<URL, Error>) {
-        switch result {
-        case .failure(let error):
-            importError = error.localizedDescription
-        case .success(let url):
-            let didAccess = url.startAccessingSecurityScopedResource()
-            defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
-            do {
-                let data = try Data(contentsOf: url)
-                let decoded = try JSONDecoder().decode(Character.self, from: data)
-                store.upsert(decoded)
-            } catch {
+        DispatchQueue.main.async { [self] in
+            switch result {
+            case .failure(let error):
                 importError = error.localizedDescription
+            case .success(let url):
+                do {
+                    let data = try ImportSupport.readImportedData(from: url)
+                    let characters = try ImportSupport.parseCharacters(from: data)
+                    for character in characters {
+                        store.upsert(character)
+                    }
+                    importSuccess = "已导入 \(characters.count) 张角色卡"
+                } catch {
+                    importError = error.localizedDescription
+                }
             }
         }
     }
@@ -98,6 +107,13 @@ struct CharacterListView: View {
         Binding(
             get: { importError != nil },
             set: { if !$0 { importError = nil } }
+        )
+    }
+
+    private var importSuccessBinding: Binding<Bool> {
+        Binding(
+            get: { importSuccess != nil },
+            set: { if !$0 { importSuccess = nil } }
         )
     }
 }
