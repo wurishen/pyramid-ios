@@ -51,6 +51,12 @@ final class WorldBookStore: ObservableObject {
         save()
     }
 
+    func deleteBook(_ id: UUID) {
+        guard books.count > 1 else { return }
+        books.removeAll { $0.id == id }
+        save()
+    }
+
     func deleteEntry(_ id: UUID, in bookID: UUID) {
         guard let bookIndex = books.firstIndex(where: { $0.id == bookID }) else { return }
         books[bookIndex].entries.removeAll { $0.id == id }

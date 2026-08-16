@@ -43,9 +43,21 @@ struct WorldBookView: View {
                 Toggle("启用世界书", isOn: $settings.worldBookEnabled)
             }
             Section("当前世界书") {
-                Picker("世界书", selection: $viewingBookID) {
-                    ForEach(store.books) { book in
-                        Text(book.title).tag(book.id)
+                HStack {
+                    Picker("世界书", selection: $viewingBookID) {
+                        ForEach(store.books) { book in
+                            Text(book.title).tag(book.id)
+                        }
+                    }
+                    if store.books.count > 1 {
+                        Button {
+                            store.deleteBook(viewingBookID)
+                            viewingBookID = store.globalBook.id
+                        } label: {
+                            Label("删除", systemImage: "trash")
+                                .foregroundStyle(.red)
+                        }
+                        .buttonStyle(.borderless)
                     }
                 }
                 Button {
@@ -211,7 +223,10 @@ struct WorldBookView: View {
         case .failure(let error):
             importErrorMessage = error.localizedDescription
         case .success(let urls):
-            guard !urls.isEmpty else { return }
+            guard !urls.isEmpty else {
+                importErrorMessage = "未选择任何文件"
+                return
+            }
             pendingImportContents = []
             pendingImportFileNames = []
             pendingImportIndex = 0
@@ -232,7 +247,9 @@ struct WorldBookView: View {
                     return
                 }
             }
-            showNextImportDialog()
+            DispatchQueue.main.async { [self] in
+                self.showNextImportDialog()
+            }
         }
     }
 
