@@ -14,4 +14,6 @@ final class AppSettings: ObservableObject {
     @AppStorage("compactMode") var compactMode = false
     @AppStorage("showTimestamps") var showTimestamps = true
     @AppStorage("showAvatars") var showAvatars = true
+    @AppStorage("userName") var userName = ""
+    @AppStorage("userAvatarData") var userAvatarData = Data()
 }

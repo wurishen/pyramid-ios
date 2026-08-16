@@ -206,7 +206,7 @@ struct ChatView: View {
                             compact: settings.compactMode,
                             showTimestamp: settings.showTimestamps,
                             showAvatar: settings.showAvatars,
-                            userAvatarData: nil,
+                            userAvatarData: settings.userAvatarData,
                             onCopy: { UIPasteboard.general.string = message.content },
                             onEdit: { editingMessage = message },
                             onRegenerate: { regenerateMessage = message },

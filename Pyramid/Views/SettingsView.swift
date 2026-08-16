@@ -10,12 +10,43 @@ struct SettingsView: View {
     @State private var showResetWorldBookDialog = false
     @State private var isLoadingModels = false
     @State private var showModelPicker = false
+    @State private var showUserAvatarPicker = false
     @State private var fetchedModels: [String] = []
     @State private var modelError: String?
 
     var body: some View {
         NavigationStack {
             Form {
+                Section("用户") {
+                    HStack(spacing: 16) {
+                        Button {
+                            showUserAvatarPicker = true
+                        } label: {
+                            AvatarView(
+                                imageData: userAvatarBinding.wrappedValue,
+                                name: settings.userName.isEmpty ? "我" : settings.userName,
+                                size: 72
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        VStack(alignment: .leading, spacing: 6) {
+                            TextField("昵称", text: $settings.userName)
+                                .textContentType(.nickname)
+                            Text("点按头像可更换，将显示在聊天页你的消息旁。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .sheet(isPresented: $showUserAvatarPicker) {
+                    AvatarPickerSheet(data: userAvatarBinding)
+                }
+                Section("角色卡") {
+                    NavigationLink("管理角色卡") {
+                        CharacterListView(store: characters, worldBook: worldBook)
+                    }
+                }
                 Section("API 配置") {
                     TextField("API Base URL", text: $settings.baseURL)
                         .keyboardType(.URL)
@@ -44,11 +75,6 @@ struct SettingsView: View {
                         isLoadingModels
                             || settings.baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     )
-                }
-                Section("角色卡") {
-                    NavigationLink("管理角色卡") {
-                        CharacterListView(store: characters, worldBook: worldBook)
-                    }
                 }
                 Section("系统提示词") {
                     TextField("系统提示词（可留空）", text: $settings.systemPrompt, axis: .vertical)
@@ -169,6 +195,13 @@ struct SettingsView: View {
         Binding(
             get: { modelError != nil },
             set: { if !$0 { modelError = nil } }
+        )
+    }
+
+    private var userAvatarBinding: Binding<Data?> {
+        Binding(
+            get: { settings.userAvatarData.isEmpty ? nil : settings.userAvatarData },
+            set: { settings.userAvatarData = $0 ?? Data() }
         )
     }
 
