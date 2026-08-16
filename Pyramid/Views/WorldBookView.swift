@@ -277,14 +277,9 @@ struct WorldBookView: View {
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension(ext)
-        do {
-            try FileManager.default.copyItem(at: url, to: tempURL)
-            return try Data(contentsOf: tempURL)
-        } catch {
-            throw error
-        } finally {
-            try? FileManager.default.removeItem(at: tempURL)
-        }
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        try FileManager.default.copyItem(at: url, to: tempURL)
+        return try Data(contentsOf: tempURL)
     }
 
     private func showNextImportDialog() {
