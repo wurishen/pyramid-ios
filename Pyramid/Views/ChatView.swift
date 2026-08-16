@@ -7,7 +7,8 @@ struct ChatView: View {
     @ObservedObject var worldBook: WorldBookStore
     @State private var showSessions = false
     @State private var editingMessage: ChatMessage?
-    @State private var editText = ""
+    @State private var messageToDelete: ChatMessage?
+    @State private var regenerateMessage: ChatMessage?
 
     init(settings: AppSettings, store: ChatStore, worldBook: WorldBookStore) {
         self.store = store
@@ -38,22 +39,55 @@ struct ChatView: View {
         .sheet(isPresented: $showSessions) {
             SessionListView(store: store, worldBook: worldBook)
         }
-        .alert("编辑消息", isPresented: editAlertBinding) {
-            TextField("内容", text: $editText)
-            Button("取消", role: .cancel) { editingMessage = nil }
-            Button("保存") {
-                if let message = editingMessage {
-                    viewModel.editMessage(message, newContent: editText)
-                }
-                editingMessage = nil
+        .sheet(item: $editingMessage) { message in
+            EditMessageSheet(initialText: message.content) { text in
+                viewModel.editMessage(message, newContent: text)
             }
+        }
+        .confirmationDialog(
+            "删除这条消息？",
+            isPresented: deleteDialogBinding,
+            titleVisibility: .visible
+        ) {
+            Button("删除", role: .destructive) {
+                if let message = messageToDelete {
+                    viewModel.deleteMessage(message)
+                }
+                messageToDelete = nil
+            }
+            Button("取消", role: .cancel) { messageToDelete = nil }
+        } message: {
+            Text("删除后无法恢复。")
+        }
+        .confirmationDialog(
+            "重新生成回复？",
+            isPresented: regenerateDialogBinding,
+            titleVisibility: .visible
+        ) {
+            Button("重新生成") {
+                if let message = regenerateMessage,
+                   let index = viewModel.messages.firstIndex(where: { $0.id == message.id }) {
+                    viewModel.regenerate(at: index)
+                }
+                regenerateMessage = nil
+            }
+            Button("取消", role: .cancel) { regenerateMessage = nil }
+        } message: {
+            Text("将删除该回复及其后的所有消息，并重新请求。")
         }
     }
 
-    private var editAlertBinding: Binding<Bool> {
+    private var deleteDialogBinding: Binding<Bool> {
         Binding(
-            get: { editingMessage != nil },
-            set: { if !$0 { editingMessage = nil } }
+            get: { messageToDelete != nil },
+            set: { if !$0 { messageToDelete = nil } }
+        )
+    }
+
+    private var regenerateDialogBinding: Binding<Bool> {
+        Binding(
+            get: { regenerateMessage != nil },
+            set: { if !$0 { regenerateMessage = nil } }
         )
     }
 
@@ -66,16 +100,14 @@ struct ChatView: View {
                             .foregroundStyle(.secondary)
                             .padding(.top, 40)
                     }
-                    ForEach(Array(viewModel.messages.enumerated()), id: \.element.id) { index, message in
+                    ForEach(Array(viewModel.messages.enumerated()), id: \.element.id) { _, message in
                         MessageBubble(
                             message: message,
+                            isSending: viewModel.isSending,
                             onCopy: { UIPasteboard.general.string = message.content },
-                            onEdit: {
-                                editingMessage = message
-                                editText = message.content
-                            },
-                            onRegenerate: { viewModel.regenerate(at: index) },
-                            onDelete: { viewModel.deleteMessage(message) }
+                            onEdit: { editingMessage = message },
+                            onRegenerate: { regenerateMessage = message },
+                            onDelete: { messageToDelete = message }
                         )
                     }
                     if viewModel.isSending {
@@ -130,6 +162,7 @@ struct ChatView: View {
 
 struct MessageBubble: View {
     let message: ChatMessage
+    var isSending = false
     var onCopy: () -> Void = {}
     var onEdit: () -> Void = {}
     var onRegenerate: () -> Void = {}
@@ -150,20 +183,58 @@ struct MessageBubble: View {
                     Button(action: onCopy) {
                         Label("复制", systemImage: "doc.on.doc")
                     }
-                    Button(action: onEdit) {
-                        Label("编辑", systemImage: "pencil")
-                    }
-                    if message.role == .assistant {
-                        Button(action: onRegenerate) {
-                            Label("重新生成", systemImage: "arrow.clockwise")
+                    if !isSending {
+                        Button(action: onEdit) {
+                            Label("编辑", systemImage: "pencil")
                         }
-                    }
-                    Button(role: .destructive, action: onDelete) {
-                        Label("删除", systemImage: "trash")
+                        if message.role == .assistant {
+                            Button(action: onRegenerate) {
+                                Label("重新生成", systemImage: "arrow.clockwise")
+                            }
+                        }
+                        Button(role: .destructive, action: onDelete) {
+                            Label("删除", systemImage: "trash")
+                        }
                     }
                 }
             if message.role == .assistant {
                 Spacer(minLength: 48)
+            }
+        }
+    }
+}
+
+struct EditMessageSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var text: String
+    private let onSave: (String) -> Void
+
+    init(initialText: String, onSave: @escaping (String) -> Void) {
+        _text = State(initialValue: initialText)
+        self.onSave = onSave
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                TextEditor(text: $text)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding()
+            }
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle("编辑消息")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        onSave(text)
+                        dismiss()
+                    }
+                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
             }
         }
     }
