@@ -5,6 +5,7 @@ struct SettingsView: View {
     @ObservedObject var worldBook: WorldBookStore
     @ObservedObject var store: ChatStore
     @ObservedObject var presets: PresetStore
+    @ObservedObject var characters: CharacterStore
     @State private var showClearSessionsDialog = false
     @State private var showResetWorldBookDialog = false
     @State private var isLoadingModels = false
@@ -44,6 +45,11 @@ struct SettingsView: View {
                             || settings.baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     )
                 }
+                Section("角色卡") {
+                    NavigationLink("管理角色卡") {
+                        CharacterListView(store: characters, worldBook: worldBook)
+                    }
+                }
                 Section("系统提示词") {
                     TextField("系统提示词（可留空）", text: $settings.systemPrompt, axis: .vertical)
                         .lineLimit(3...8)
@@ -76,6 +82,7 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
                 Section("界面") {
+                    Toggle("显示头像", isOn: $settings.showAvatars)
                     Toggle("紧凑模式", isOn: $settings.compactMode)
                     Toggle("显示消息时间戳", isOn: $settings.showTimestamps)
                 }
@@ -196,6 +203,7 @@ struct SettingsView: View {
         settings: AppSettings(),
         worldBook: WorldBookStore(),
         store: ChatStore(),
-        presets: PresetStore()
+        presets: PresetStore(),
+        characters: CharacterStore()
     )
 }

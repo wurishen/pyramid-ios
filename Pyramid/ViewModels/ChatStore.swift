@@ -106,6 +106,12 @@ final class ChatStore: ObservableObject {
         save()
     }
 
+    func setCharacter(_ characterId: UUID?, for sessionID: UUID) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        sessions[index].characterId = characterId
+        save()
+    }
+
     private static func defaultTitle(for content: String) -> String {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         let maxLength = 20

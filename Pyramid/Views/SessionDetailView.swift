@@ -5,6 +5,7 @@ struct SessionDetailView: View {
     @ObservedObject var worldBook: WorldBookStore
     @ObservedObject var settings: AppSettings
     @ObservedObject var presets: PresetStore
+    @ObservedObject var characters: CharacterStore
     let sessionID: UUID
 
     private var session: ChatSession? {
@@ -13,6 +14,23 @@ struct SessionDetailView: View {
 
     var body: some View {
         Form {
+            Section("角色卡") {
+                Picker("绑定角色", selection: characterBinding) {
+                    Text("无").tag(Optional<UUID>.none)
+                    ForEach(characters.characters) { char in
+                        HStack {
+                            AvatarView(imageData: char.avatarData, name: char.name, size: 24)
+                            Text(char.name)
+                        }
+                        .tag(Optional(char.id))
+                    }
+                }
+                if let char = characters.character(for: session?.characterId) {
+                    Text("角色系统提示词将合并到对话请求中。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
             Section("预设") {
                 Picker("应用预设", selection: appliedPresetBinding) {
                     Text("无").tag(Optional<UUID>.none)
@@ -25,7 +43,7 @@ struct SessionDetailView: View {
                     .foregroundStyle(.secondary)
             }
             Section("世界书绑定") {
-                Picker("绑定世界书", selection: binding) {
+                Picker("绑定世界书", selection: worldBookBinding) {
                     Text("不绑定（使用全局）").tag(Optional<UUID>.none)
                     ForEach(worldBook.books) { book in
                         Text(book.title).tag(Optional(book.id))
@@ -50,7 +68,14 @@ struct SessionDetailView: View {
         .navigationTitle(session?.title ?? "会话详情")
     }
 
-    private var binding: Binding<UUID?> {
+    private var characterBinding: Binding<UUID?> {
+        Binding(
+            get: { store.sessions.first { $0.id == sessionID }?.characterId },
+            set: { store.setCharacter($0, for: sessionID) }
+        )
+    }
+
+    private var worldBookBinding: Binding<UUID?> {
         Binding(
             get: { store.sessions.first { $0.id == sessionID }?.worldBookId },
             set: { store.setWorldBook($0, for: sessionID) }
@@ -93,6 +118,7 @@ struct SessionDetailView: View {
             worldBook: WorldBookStore(),
             settings: AppSettings(),
             presets: PresetStore(),
+            characters: CharacterStore(),
             sessionID: UUID()
         )
     }

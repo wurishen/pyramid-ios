@@ -8,6 +8,7 @@ struct ChatSession: Codable, Identifiable, Equatable {
     var worldBookId: UUID?
     var systemPrompt: String?
     var appliedPresetId: UUID?
+    var characterId: UUID?
 
     init(
         id: UUID = UUID(),
@@ -16,7 +17,8 @@ struct ChatSession: Codable, Identifiable, Equatable {
         createdAt: Date = Date(),
         worldBookId: UUID? = nil,
         systemPrompt: String? = nil,
-        appliedPresetId: UUID? = nil
+        appliedPresetId: UUID? = nil,
+        characterId: UUID? = nil
     ) {
         self.id = id
         self.title = title
@@ -25,5 +27,6 @@ struct ChatSession: Codable, Identifiable, Equatable {
         self.worldBookId = worldBookId
         self.systemPrompt = systemPrompt
         self.appliedPresetId = appliedPresetId
+        self.characterId = characterId
     }
 }

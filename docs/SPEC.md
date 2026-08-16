@@ -26,25 +26,32 @@ Pyramid 是一款**本地优先的 AI 聊天客户端**，支持任何兼容 Ope
 TabView
 ├── Tab 1: 聊天
 │   ├── ChatView（消息列表 + 输入框 + 工具栏）
+│   │   ├── 角色头像栏（聊天页顶部，绑定角色时显示）
+│   │   └── 上下文紧凑提示（Nk / ⚠️Nk）
 │   ├── SessionListView（会话列表，Sheet）
 │   │   └── SessionDetailView（单会话配置，Sheet）
+│   │       └── 角色绑定选择
+│   ├── QuickSwitcherView（长按 Tab 触发，圆形网格快速切换会话）
 │   └── EditMessageSheet（编辑消息，Sheet）
-└── Tab 2: 设置
-    ├── SettingsView（全局设置表单）
-    │   ├── ModelPicker（模型选择，Sheet）
-    │   ├── WorldBookView（世界书管理）
-    │   │   └── WorldBookEditView（编辑条目，Sheet）
-    │   └── PresetListView（预设列表）
-    │       └── PresetEditView（编辑预设，Sheet）
+├── Tab 2: 设置
+│   ├── SettingsView（全局设置表单）
+│   │   ├── ModelPicker（模型选择，Sheet）
+│   │   ├── 管理角色卡 → CharacterListView
+│   │   │   └── CharacterEditView（编辑角色，Sheet）
+│   │   ├── WorldBookView（世界书管理）
+│   │   │   └── WorldBookEditView（编辑条目，Sheet）
+│   │   └── PresetListView（预设列表）
+│   │       └── PresetEditView（编辑预设，Sheet）
 ```
 
 ### 2.2 导航逻辑
 
 - 首页为两 Tab 结构：聊天 + 设置
+- **长按「聊天」Tab**（0.5s）：弹出 QuickSwitcherView 网格，快速切换会话
 - 聊天页工具栏可打开会话列表
 - 会话列表可创建/删除会话，点击进入会话详情
-- 会话详情可配置预设、世界书绑定、系统提示词
-- 设置页内可进入世界书管理、预设管理
+- 会话详情可配置角色绑定、预设、世界书绑定、系统提示词
+- 设置页内可进入角色卡管理、世界书管理、预设管理
 
 ---
 
@@ -129,37 +136,97 @@ TabView
 
 ---
 
-## 4. 角色卡
+## 4. 角色卡（Character）
 
-### 4.1 当前状态
+### 4.1 数据模型
 
-> **TODO**: 角色卡 PNG/JSON 导入功能尚未实现。
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | UUID | 唯一标识 |
+| `name` | String | 角色名 |
+| `avatarData` | Data? | 头像图片（JPEG/PNG） |
+| `description` | String | 角色描述 |
+| `personality` | String | 性格 |
+| `scenario` | 场景 |
+| `systemPrompt` | String | 角色专属系统提示词 |
+| `worldBookId` | UUID? | 绑定的世界书（可选） |
 
-当前通过「系统提示词 + 世界书 + 预设」组合可模拟基础角色卡体验：
-1. 系统提示词定义角色人格
-2. 世界书绑定角色世界观
-3. 保存为预设以便复用
+### 4.2 导入
 
-### 4.2 计划功能
+- 支持导入 SillyTavern 角色卡 JSON（`spec: v1`）
+- 字段映射：`name`, `description`, `personality`, `scenario`, `system_prompt`, `world_book`
+- 头像支持从相册或相机选择（存储为原始 Data）
 
-> **TODO**: 支持角色卡 PNG（含元数据）和 JSON 导入，字段包括：
-> - name（角色名）
-> - description（角色描述）
-> - personality（性格）
-> - scenario（场景）
-> - first_mes（开场白）
-> - mes_example（对话示例）
-> - creator_notes（作者备注）
-> - system_prompt（系统提示词）
-> - post_history_instructions（历史后指令）
-> - tags（标签）
-> - spec（规范版本）
+### 4.3 会话绑定
+
+- 每个会话可绑定一个角色（`ChatSession.characterId`）
+- 绑定方式：会话详情页「角色」行选择，或在角色列表页直接创建会话
+- 同时只允许一个会话使用同一角色
+
+### 4.4 Prompt 优先级
+
+系统提示词合并顺序（优先级从高到低）：
+1. **角色系统提示词**（`Character.systemPrompt`）
+2. **会话系统提示词**（`ChatSession.systemPrompt`）
+3. **全局系统提示词**（`AppSettings.systemPrompt`）
+
+首个非空值胜出。
+
+### 4.5 世界书优先级
+
+世界书绑定优先级：
+1. 会话绑定的世界书（`ChatSession.worldBookId`）
+2. 角色绑定的世界书（`Character.worldBookId`）
+3. 全局世界书
 
 ---
 
-## 5. 预设（Preset）
+## 5. 头像系统
 
-### 5.1 字段
+### 5.1 显示规则
+
+| 位置 | 规则 |
+|------|------|
+| 聊天页顶部栏 | 当前会话角色头像（若已绑定），28pt 圆形 |
+| 用户消息气泡左侧 | 始终显示用户首字母头像（若 `showAvatars = true`） |
+| AI 消息气泡 | 不显示头像 |
+| 会话列表每行 | 会话角色头像或默认首字母 |
+| 会话快速切换器 | 角色头像网格 |
+
+### 5.2 AvatarView 组件
+
+- `AvatarView(imageData:initials:size:)`
+- 有图片时显示圆形裁剪图片
+- 无图片时显示纯色背景 + 白色首字母
+- 颜色根据首字母确定性生成（16 色调色板）
+
+### 5.3 设置开关
+
+- `showAvatars`（默认 true）：关闭后聊天页用户消息气泡不再显示头像
+
+---
+
+## 6. UI 装饰层
+
+> **重要**：楼层号和时间戳为纯 UI 装饰，**绝不写入消息 content 字段**，也**不发送至 API**。
+
+### 6.1 楼层号
+
+- 用户消息显示 `#N`（N 从 1 开始递增）
+- 助手消息不显示楼层号
+- 位于消息气泡左上角小字
+
+### 6.2 时间戳
+
+- 每条消息下方可选显示本地时间
+- 格式：`HH:mm`（当天）/ `MM-dd HH:mm`（非当天）
+- 由 `showTimestamps` 设置控制
+
+---
+
+## 7. 预设（Preset）
+
+### 7.1 字段
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -169,7 +236,7 @@ TabView
 | `systemPrompt` | String? | 系统提示词（nil = 使用全局） |
 | `worldBookId` | UUID? | 绑定的世界书（nil = 使用全局） |
 
-### 5.2 应用行为
+### 7.2 应用行为
 
 应用预设到会话时：
 1. 设置会话的 `systemPrompt` 为预设值
@@ -178,9 +245,9 @@ TabView
 
 ---
 
-## 6. 聊天消息
+## 8. 聊天消息
 
-### 6.1 消息模型
+### 8.1 消息模型
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -189,7 +256,7 @@ TabView
 | `content` | String | 消息内容 |
 | `createdAt` | Date? | 创建时间 |
 
-### 6.2 会话模型
+### 8.2 会话模型
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -200,8 +267,9 @@ TabView
 | `worldBookId` | UUID? | 绑定的世界书 |
 | `systemPrompt` | String? | 会话级系统提示词覆盖 |
 | `appliedPresetId` | UUID? | 最近应用的预设 |
+| `characterId` | UUID? | 绑定的角色卡 |
 
-### 6.3 消息操作
+### 8.3 消息操作
 
 | 操作 | 适用范围 | 行为 |
 |------|----------|------|
@@ -210,13 +278,13 @@ TabView
 | 重新生成 | 仅助手消息 | 删除该助手消息及后续消息，重新发送（需确认） |
 | 删除 | 所有消息（发送中不可用） | 删除单条消息（需确认） |
 
-### 6.4 流式传输
+### 8.4 流式传输
 
 - 开启流式：立即创建空助手消息，通过 SSE 逐块追加内容，实时更新 UI
 - 关闭流式：等待完整响应后一次性追加
 - 支持通过 `AsyncThrowingStream` 取消请求
 
-### 6.5 Markdown 渲染
+### 8.5 Markdown 渲染
 
 原生 `AttributedString` 渲染，支持：
 
@@ -225,7 +293,7 @@ TabView
 - **列表**：有序/无序列表
 - **行内格式**：粗体、斜体、行内代码、可点击链接
 
-### 6.6 其他
+### 8.6 其他
 
 - **上下文长度提示**：可选栏显示当前上下文字符数，超过阈值变橙色警告（默认 12000，可调 2000-50000）
 - **注入调试指示器**：可选显示世界书注入状态
@@ -235,9 +303,9 @@ TabView
 
 ---
 
-## 7. 存储与导入导出
+## 9. 存储与导入导出
 
-### 7.1 存储方式
+### 9.1 存储方式
 
 > **当前实现**: 100% 使用 UserDefaults（JSON 编码），无数据库。
 
@@ -247,16 +315,17 @@ TabView
 | 当前会话 ID | `currentSessionID` | UUID 字符串 |
 | 世界书 + 条目 | `worldBookList` | `[WorldBook]` |
 | 预设 | `presets` | `[Preset]` |
+| 角色卡 | `characters` | `[Character]` |
 
 > **TODO**: 迁移到更可靠的持久化方案（如 SwiftData / Core Data / 文件系统），以解决大数据量下 UserDefaults 的性能问题。
 
-### 7.2 世界书导出
+### 9.2 世界书导出
 
 - 导出为 JSON 文件
 - 支持导出当前书或全部书
 - 通过 iOS 分享面板发送
 
-### 7.3 世界书导入
+### 9.3 世界书导入
 
 - 支持 Pyramid 原生格式（`WorldBookExport` 包装器或裸数组）
 - 支持 SillyTavern 格式（自动检测）
@@ -265,9 +334,9 @@ TabView
 
 ---
 
-## 8. API 集成
+## 10. API 集成
 
-### 8.1 支持的后端
+### 10.1 支持的后端
 
 兼容所有实现 OpenAI `/v1/chat/completions` 接口的服务：
 
@@ -277,14 +346,14 @@ TabView
 - Groq、Together、Fireworks 等
 - 本地部署（Ollama、LM Studio、vLLM 等）
 
-### 8.2 客户端行为
+### 10.2 客户端行为
 
 - 自动补全 `/v1` 和 `/chat/completions` 路径
 - 60 秒超时
 - 支持无认证（本地服务器场景，apiKey 为空时跳过 Authorization 头）
 - 模型列表：尝试 `GET /v1/models`，兼容多种响应格式
 
-### 8.3 不支持的特性
+### 10.3 不支持的特性
 
 > **TODO 以下功能尚未实现：**
 > - Anthropic Claude 原生 Messages API
@@ -295,9 +364,9 @@ TabView
 
 ---
 
-## 9. 双端对齐原则
+## 11. 双端对齐原则
 
-### 9.1 功能对齐
+### 11.1 功能对齐
 
 iOS 和 Android 双端应实现**相同的核心功能集**，包括：
 
@@ -309,30 +378,34 @@ iOS 和 Android 双端应实现**相同的核心功能集**，包括：
 - [x] 预设系统
 - [x] Markdown 渲染
 - [x] 消息操作（复制、编辑、重新生成、删除）
-- [ ] 角色卡导入（TODO）
+- [x] 角色卡导入与管理
+- [x] 头像系统
+- [x] 会话快速切换（长按 Tab）
 
-### 9.2 行为对齐
+### 11.2 行为对齐
 
 - 关键词匹配算法：双端实现必须产生**完全相同**的匹配结果
 - 概率过滤：使用相同哈希算法保证确定性
 - Prompt 注入顺序：`beforeSystem → systemPrompt → afterSystem → history → afterHistory`
+- 系统提示词优先级：`character.systemPrompt → session.systemPrompt → global.systemPrompt`
+- 世界书绑定优先级：`session.worldBookId → character.worldBookId → global`
 - SillyTavern 字段映射：双端使用完全相同的映射规则
 - 注入格式：`[世界书]\n### Title\nContent`
 
-### 9.3 数据格式对齐
+### 11.3 数据格式对齐
 
 - 世界书导出格式统一为 `WorldBookExport`（version: 1）
 - JSON 字段命名和类型双端一致
 - UserDefaults / SharedPreferences 的存储格式应尽量兼容
 
-### 9.4 UI 差异允许
+### 11.4 UI 差异允许
 
 - 导航模式可因平台差异不同（iOS NavigationStack vs Android Navigation Compose）
 - 键盘交互可因平台差异不同
 - 分享/导出交互可因平台差异不同
 - 状态栏、安全区域处理可不同
 
-### 9.5 版本同步
+### 11.5 版本同步
 
 - 双端大版本号保持一致（如 v1.0、v2.0）
 - 功能发布节奏尽量同步
@@ -340,7 +413,7 @@ iOS 和 Android 双端应实现**相同的核心功能集**，包括：
 
 ---
 
-## 10. 附录：全局设置项
+## 12. 附录：全局设置项
 
 | 设置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
@@ -355,3 +428,4 @@ iOS 和 Android 双端应实现**相同的核心功能集**，包括：
 | `contextLimit` | Int | 12000 | 上下文长度阈值（字符） |
 | `compactMode` | Bool | false | 紧凑模式 |
 | `showTimestamps` | Bool | true | 显示时间戳 |
+| `showAvatars` | Bool | true | 聊天页显示用户消息头像 |

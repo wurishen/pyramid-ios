@@ -5,6 +5,7 @@ struct SessionListView: View {
     @ObservedObject var worldBook: WorldBookStore
     @ObservedObject var settings: AppSettings
     @ObservedObject var presets: PresetStore
+    @ObservedObject var characters: CharacterStore
     @Environment(\.dismiss) private var dismiss
     @State private var detailSession: ChatSession?
 
@@ -17,42 +18,62 @@ struct SessionListView: View {
                             store.select(session.id)
                             dismiss()
                         } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack(spacing: 6) {
-                                    Text(session.title)
-                                        .foregroundStyle(.primary)
-                                        .lineLimit(1)
-                                    if hasCustomSystemPrompt(session) {
-                                        Text("自定义提示")
-                                            .font(.caption2)
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 2)
-                                            .background(Capsule().fill(Color.accentColor.opacity(0.15)))
-                                            .foregroundStyle(Color.accentColor)
+                            HStack(spacing: 10) {
+                                let char = characters.character(for: session.characterId)
+                                AvatarView(
+                                    imageData: char?.avatarData,
+                                    name: char?.name ?? session.title,
+                                    size: 40
+                                )
+                                VStack(alignment: .leading, spacing: 3) {
+                                    HStack(spacing: 6) {
+                                        Text(session.title)
+                                            .foregroundStyle(.primary)
+                                            .lineLimit(1)
+                                        if let char {
+                                            Text(char.name)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        if hasCustomSystemPrompt(session) {
+                                            Text("自定义提示")
+                                                .font(.caption2)
+                                                .padding(.horizontal, 4)
+                                                .padding(.vertical, 1)
+                                                .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+                                                .foregroundStyle(Color.accentColor)
+                                        }
+                                        Spacer(minLength: 0)
                                     }
-                                    Spacer(minLength: 0)
+                                    HStack(spacing: 4) {
+                                        if let lastMsg = session.messages.last {
+                                            Text(lastMsg.content)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(1)
+                                        }
+                                        Text("·")
+                                            .font(.caption)
+                                            .foregroundStyle(.tertiary)
+                                        Text(session.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                            .font(.caption)
+                                            .foregroundStyle(.tertiary)
+                                    }
                                 }
-                                Text(metaText(for: session))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                Text(session.createdAt.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.caption)
-                                    .foregroundStyle(.tertiary)
                             }
                         }
                         .swipeActions(edge: .trailing) {
                             Button {
                                 detailSession = session
                             } label: {
-                                Label("绑定世界书", systemImage: "book")
+                                Label("详情", systemImage: "gearshape")
                             }
                             .tint(.blue)
                         }
                     }
                     .onDelete(perform: deleteSessions)
                 } footer: {
-                    Text("左滑可设置「绑定世界书」。")
+                    Text("左滑可设置角色卡、世界书、系统提示词。")
                 }
             }
             .navigationTitle("会话")
@@ -76,6 +97,7 @@ struct SessionListView: View {
                 worldBook: worldBook,
                 settings: settings,
                 presets: presets,
+                characters: characters,
                 sessionID: session.id
             )
         }
@@ -86,19 +108,6 @@ struct SessionListView: View {
         for id in ids {
             store.delete(id)
         }
-    }
-
-    private func metaText(for session: ChatSession) -> String {
-        var parts = ["\(session.messages.count) 条消息"]
-        if let bookTitle = boundWorldBookTitle(for: session) {
-            parts.append(bookTitle)
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    private func boundWorldBookTitle(for session: ChatSession) -> String? {
-        guard let id = session.worldBookId else { return nil }
-        return worldBook.books.first(where: { $0.id == id })?.title
     }
 
     private func hasCustomSystemPrompt(_ session: ChatSession) -> Bool {
@@ -112,6 +121,7 @@ struct SessionListView: View {
         store: ChatStore(),
         worldBook: WorldBookStore(),
         settings: AppSettings(),
-        presets: PresetStore()
+        presets: PresetStore(),
+        characters: CharacterStore()
     )
 }

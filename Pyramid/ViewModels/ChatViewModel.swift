@@ -11,11 +11,13 @@ final class ChatViewModel: ObservableObject {
     let store: ChatStore
     private let settings: AppSettings
     private let worldBook: WorldBookStore
+    private let characters: CharacterStore
 
-    init(settings: AppSettings, store: ChatStore, worldBook: WorldBookStore) {
+    init(settings: AppSettings, store: ChatStore, worldBook: WorldBookStore, characters: CharacterStore) {
         self.settings = settings
         self.store = store
         self.worldBook = worldBook
+        self.characters = characters
     }
 
     var messages: [ChatMessage] {
@@ -135,17 +137,31 @@ final class ChatViewModel: ObservableObject {
     }
 
     private var effectiveSystemPrompt: String {
+        var parts: [String] = []
+
+        if let session = store.currentSession,
+           let char = characters.character(for: session.characterId) {
+            let charPrompt = char.systemPromptText()
+            if !charPrompt.isEmpty { parts.append(charPrompt) }
+        }
+
         let sessionPrompt = store.currentSession?.systemPrompt?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !sessionPrompt.isEmpty {
-            return sessionPrompt
+            parts.append(sessionPrompt)
+        } else if parts.isEmpty {
+            parts.append(settings.systemPrompt)
         }
-        return settings.systemPrompt
+
+        return parts.joined(separator: "\n\n")
     }
 
     private func worldBookEntries(input: String, history: [ChatMessage]) -> [WorldBookEntry] {
         guard settings.worldBookEnabled else { return [] }
-        let book = worldBook.book(for: store.currentSession?.worldBookId)
+        let sessionBookId = store.currentSession?.worldBookId
+        let charBookId = characters.character(for: store.currentSession?.characterId)?.worldBookId
+        let bookId = sessionBookId ?? charBookId
+        let book = worldBook.book(for: bookId)
         return WorldBookService.selectedEntries(for: input, history: history, entries: book.entries)
     }
 

@@ -31,6 +31,10 @@
 		AB0000000000000000000102 /* PresetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000105 /* PresetStore.swift */; };
 		AB0000000000000000000103 /* PresetListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000106 /* PresetListView.swift */; };
 		AB0000000000000000000107 /* KeyboardDismiss.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000108 /* KeyboardDismiss.swift */; };
+		AB0000000000000000000201 /* Character.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000205 /* Character.swift */; };
+		AB0000000000000000000202 /* CharacterStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000206 /* CharacterStore.swift */; };
+		AB0000000000000000000203 /* CharacterListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000207 /* CharacterListView.swift */; };
+		AB0000000000000000000204 /* AvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000208 /* AvatarView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -59,6 +63,10 @@
 		AB0000000000000000000105 /* PresetStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetStore.swift; sourceTree = "<group>"; };
 		AB0000000000000000000106 /* PresetListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetListView.swift; sourceTree = "<group>"; };
 		AB0000000000000000000108 /* KeyboardDismiss.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardDismiss.swift; sourceTree = "<group>"; };
+		AB0000000000000000000205 /* Character.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Character.swift; sourceTree = "<group>"; };
+		AB0000000000000000000206 /* CharacterStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharacterStore.swift; sourceTree = "<group>"; };
+		AB0000000000000000000207 /* CharacterListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharacterListView.swift; sourceTree = "<group>"; };
+		AB0000000000000000000208 /* AvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -103,7 +111,8 @@
 				AB0000000000000000000020 /* ChatSession.swift */,
 				AB0000000000000000000023 /* WorldBookEntry.swift */,
 				AB0000000000000000000028 /* WorldBook.swift */,
-				AB0000000000000000000104 /* Preset.swift */,
+				AB00000000000000000000104 /* Preset.swift */,
+				AB0000000000000000000205 /* Character.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -124,6 +133,7 @@
 				AB0000000000000000000021 /* ChatStore.swift */,
 				AB0000000000000000000024 /* WorldBookStore.swift */,
 				AB0000000000000000000105 /* PresetStore.swift */,
+				AB0000000000000000000206 /* CharacterStore.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -139,6 +149,8 @@
 				AB0000000000000000000029 /* SessionDetailView.swift */,
 				AB0000000000000000000106 /* PresetListView.swift */,
 				AB0000000000000000000108 /* KeyboardDismiss.swift */,
+				AB0000000000000000000207 /* CharacterListView.swift */,
+				AB0000000000000000000208 /* AvatarView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -243,6 +255,10 @@
 				AB0000000000000000000102 /* PresetStore.swift in Sources */,
 				AB0000000000000000000103 /* PresetListView.swift in Sources */,
 				AB0000000000000000000107 /* KeyboardDismiss.swift in Sources */,
+				AB0000000000000000000201 /* Character.swift in Sources */,
+				AB0000000000000000000202 /* CharacterStore.swift in Sources */,
+				AB0000000000000000000203 /* CharacterListView.swift in Sources */,
+				AB0000000000000000000204 /* AvatarView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

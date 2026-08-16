@@ -13,4 +13,5 @@ final class AppSettings: ObservableObject {
     @AppStorage("contextLimit") var contextLimit = 12000
     @AppStorage("compactMode") var compactMode = false
     @AppStorage("showTimestamps") var showTimestamps = true
+    @AppStorage("showAvatars") var showAvatars = true
 }

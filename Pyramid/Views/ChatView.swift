@@ -7,6 +7,7 @@ struct ChatView: View {
     @ObservedObject var worldBook: WorldBookStore
     @ObservedObject var settings: AppSettings
     @ObservedObject var presets: PresetStore
+    @ObservedObject var characters: CharacterStore
     @State private var showSessions = false
     @State private var editingMessage: ChatMessage?
     @State private var messageToDelete: ChatMessage?
@@ -14,18 +15,26 @@ struct ChatView: View {
     @State private var showCopiedFeedback = false
     @FocusState private var inputFocused: Bool
 
-    init(settings: AppSettings, store: ChatStore, worldBook: WorldBookStore, presets: PresetStore) {
+    init(settings: AppSettings, store: ChatStore, worldBook: WorldBookStore, presets: PresetStore, characters: CharacterStore) {
         self.store = store
         self.worldBook = worldBook
         self.settings = settings
         self.presets = presets
-        _viewModel = StateObject(wrappedValue: ChatViewModel(settings: settings, store: store, worldBook: worldBook))
+        self.characters = characters
+        _viewModel = StateObject(wrappedValue: ChatViewModel(settings: settings, store: store, worldBook: worldBook, characters: characters))
+    }
+
+    private var currentCharacter: Character? {
+        characters.character(for: store.currentSession?.characterId)
     }
 
     var body: some View {
         VStack(spacing: 0) {
             if let error = viewModel.errorMessage {
                 errorBanner(error)
+            }
+            if settings.showAvatars, let char = currentCharacter {
+                characterHeader(char)
             }
             messageList
             if settings.showContextHint {
@@ -70,7 +79,7 @@ struct ChatView: View {
             }
         }
         .sheet(isPresented: $showSessions) {
-            SessionListView(store: store, worldBook: worldBook, settings: settings, presets: presets)
+            SessionListView(store: store, worldBook: worldBook, settings: settings, presets: presets, characters: characters)
         }
         .sheet(item: $editingMessage) { message in
             EditMessageSheet(initialText: message.content) { text in
@@ -108,6 +117,19 @@ struct ChatView: View {
         } message: {
             Text("将删除该回复及其后的所有消息，并重新请求。")
         }
+    }
+
+    private func characterHeader(_ char: Character) -> some View {
+        HStack(spacing: 8) {
+            AvatarView(imageData: char.avatarData, name: char.name, size: 28)
+            Text(char.name)
+                .font(.subheadline)
+                .fontWeight(.medium)
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.bar)
     }
 
     private var deleteDialogBinding: Binding<Bool> {
@@ -148,12 +170,14 @@ struct ChatView: View {
         let count = contextCharacterCount
         let over = count > settings.contextLimit
         return HStack(spacing: 4) {
-            Image(systemName: over ? "exclamationmark.triangle.fill" : "text.alignleft")
-                .font(.caption2)
-            Text("上下文约 \(count.formatted()) 字符")
-                .font(.caption2)
             if over {
-                Text("上下文较长")
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.caption2)
+            }
+            Text("\(count / 1000)k")
+                .font(.caption2.monospacedDigit())
+            if over {
+                Text("长")
                     .font(.caption2)
                     .bold()
             }
@@ -161,7 +185,7 @@ struct ChatView: View {
         }
         .foregroundStyle(over ? Color.orange : Color.secondary)
         .padding(.horizontal, 12)
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
         .background(.bar)
     }
 
@@ -174,12 +198,15 @@ struct ChatView: View {
                             .foregroundStyle(.secondary)
                             .padding(.top, 40)
                     }
-                    ForEach(Array(viewModel.messages.enumerated()), id: \.element.id) { _, message in
+                    ForEach(Array(viewModel.messages.enumerated()), id: \.element.id) { index, message in
                         MessageBubble(
                             message: message,
+                            floorNumber: index + 1,
                             isSending: viewModel.isSending,
                             compact: settings.compactMode,
                             showTimestamp: settings.showTimestamps,
+                            showAvatar: settings.showAvatars,
+                            userAvatarData: nil,
                             onCopy: { UIPasteboard.general.string = message.content },
                             onEdit: { editingMessage = message },
                             onRegenerate: { regenerateMessage = message },
@@ -250,9 +277,12 @@ struct ChatView: View {
 
 struct MessageBubble: View {
     let message: ChatMessage
+    var floorNumber: Int = 0
     var isSending = false
     var compact = false
     var showTimestamp = false
+    var showAvatar = false
+    var userAvatarData: Data? = nil
     var onCopy: () -> Void = {}
     var onEdit: () -> Void = {}
     var onRegenerate: () -> Void = {}
@@ -262,18 +292,41 @@ struct MessageBubble: View {
     @State private var expanded = false
 
     var body: some View {
-        HStack {
+        HStack(alignment: .top, spacing: 8) {
             if message.role == .user {
+                if showAvatar {
+                    AvatarView(imageData: userAvatarData, name: "我", size: 28)
+                }
                 Spacer(minLength: 48)
             }
             VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 3) {
-                bubbleContent
-                if showTimestamp, let createdAt = message.createdAt {
-                    Text(createdAt.formatted(date: .omitted, time: .shortened))
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .padding(.horizontal, 4)
+                HStack(spacing: 6) {
+                    if message.role == .assistant {
+                        Text("\(floorNumber)")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                    bubbleContent
                 }
+                HStack(spacing: 6) {
+                    if message.role == .user {
+                        if let createdAt = message.createdAt, showTimestamp {
+                            Text(createdAt.formatted(date: .omitted, time: .shortened))
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                        Text("\(floorNumber)")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    } else {
+                        if let createdAt = message.createdAt, showTimestamp {
+                            Text(createdAt.formatted(date: .omitted, time: .shortened))
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                }
+                .padding(.horizontal, 4)
             }
             if message.role == .assistant {
                 Spacer(minLength: 48)
@@ -516,7 +569,8 @@ struct EditMessageSheet: View {
             settings: AppSettings(),
             store: ChatStore(),
             worldBook: WorldBookStore(),
-            presets: PresetStore()
+            presets: PresetStore(),
+            characters: CharacterStore()
         )
     }
 }
