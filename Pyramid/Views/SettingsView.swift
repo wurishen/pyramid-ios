@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var settings: AppSettings
+    @ObservedObject var worldBook: WorldBookStore
 
     var body: some View {
         NavigationStack {
@@ -26,6 +27,12 @@ struct SettingsView: View {
                 Section("对话") {
                     Toggle("流式输出（默认开启）", isOn: $settings.useStreaming)
                 }
+                Section("世界书") {
+                    Toggle("启用世界书", isOn: $settings.worldBookEnabled)
+                    NavigationLink("管理世界书条目") {
+                        WorldBookView(store: worldBook, settings: settings)
+                    }
+                }
                 Section("说明") {
                     Text("Base URL 可带或不带 /v1，应用会自动拼接 chat/completions。所有设置只保存在本机（UserDefaults）。")
                         .font(.footnote)
@@ -38,5 +45,5 @@ struct SettingsView: View {
 }
 
 #Preview {
-    SettingsView(settings: AppSettings())
+    SettingsView(settings: AppSettings(), worldBook: WorldBookStore())
 }

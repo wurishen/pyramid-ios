@@ -20,6 +20,11 @@
 		AB000000000000000000000B /* ChatSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000001B /* ChatSession.swift */; };
 		AB000000000000000000000C /* ChatStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000001C /* ChatStore.swift */; };
 		AB000000000000000000000D /* SessionListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000001D /* SessionListView.swift */; };
+		AB000000000000000000000E /* WorldBookEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000001E /* WorldBookEntry.swift */; };
+		AB000000000000000000000F /* WorldBookStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000001F /* WorldBookStore.swift */; };
+		AB0000000000000000000010 /* WorldBookService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000020 /* WorldBookService.swift */; };
+		AB0000000000000000000011 /* WorldBookView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000021 /* WorldBookView.swift */; };
+		AB0000000000000000000012 /* WorldBookEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000022 /* WorldBookEditView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -37,6 +42,11 @@
 		AB000000000000000000001B /* ChatSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSession.swift; sourceTree = "<group>"; };
 		AB000000000000000000001C /* ChatStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatStore.swift; sourceTree = "<group>"; };
 		AB000000000000000000001D /* SessionListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionListView.swift; sourceTree = "<group>"; };
+		AB000000000000000000001E /* WorldBookEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorldBookEntry.swift; sourceTree = "<group>"; };
+		AB000000000000000000001F /* WorldBookStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorldBookStore.swift; sourceTree = "<group>"; };
+		AB0000000000000000000020 /* WorldBookService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorldBookService.swift; sourceTree = "<group>"; };
+		AB0000000000000000000021 /* WorldBookView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorldBookView.swift; sourceTree = "<group>"; };
+		AB0000000000000000000022 /* WorldBookEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorldBookEditView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -79,6 +89,7 @@
 				AB0000000000000000000015 /* ChatMessage.swift */,
 				AB0000000000000000000016 /* ChatCompletionResponse.swift */,
 				AB000000000000000000001B /* ChatSession.swift */,
+				AB000000000000000000001E /* WorldBookEntry.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -87,6 +98,7 @@
 			isa = PBXGroup;
 			children = (
 				AB0000000000000000000017 /* OpenAIClient.swift */,
+				AB0000000000000000000020 /* WorldBookService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -96,6 +108,7 @@
 			children = (
 				AB0000000000000000000018 /* ChatViewModel.swift */,
 				AB000000000000000000001C /* ChatStore.swift */,
+				AB000000000000000000001F /* WorldBookStore.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -106,6 +119,8 @@
 				AB0000000000000000000019 /* ChatView.swift */,
 				AB000000000000000000001A /* SettingsView.swift */,
 				AB000000000000000000001D /* SessionListView.swift */,
+				AB0000000000000000000021 /* WorldBookView.swift */,
+				AB0000000000000000000022 /* WorldBookEditView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -199,6 +214,11 @@
 				AB000000000000000000000B /* ChatSession.swift in Sources */,
 				AB000000000000000000000C /* ChatStore.swift in Sources */,
 				AB000000000000000000000D /* SessionListView.swift in Sources */,
+				AB000000000000000000000E /* WorldBookEntry.swift in Sources */,
+				AB000000000000000000000F /* WorldBookStore.swift in Sources */,
+				AB0000000000000000000010 /* WorldBookService.swift in Sources */,
+				AB0000000000000000000011 /* WorldBookView.swift in Sources */,
+				AB0000000000000000000012 /* WorldBookEditView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -9,10 +9,12 @@ final class ChatViewModel: ObservableObject {
 
     let store: ChatStore
     private let settings: AppSettings
+    private let worldBook: WorldBookStore
 
-    init(settings: AppSettings, store: ChatStore) {
+    init(settings: AppSettings, store: ChatStore, worldBook: WorldBookStore) {
         self.settings = settings
         self.store = store
+        self.worldBook = worldBook
     }
 
     var messages: [ChatMessage] {
@@ -41,11 +43,13 @@ final class ChatViewModel: ObservableObject {
         scrollVersion += 1
 
         let history = store.currentMessages
+        let worldBookText = buildWorldBookText(input: text, history: history)
         let client = OpenAIClient(
             baseURL: settings.baseURL,
             apiKey: settings.apiKey,
             model: settings.modelName,
-            systemPrompt: settings.systemPrompt
+            systemPrompt: settings.systemPrompt,
+            worldBookText: worldBookText
         )
 
         Task {
@@ -87,6 +91,17 @@ final class ChatViewModel: ObservableObject {
                 store.removeMessage(id: assistant.id, in: sessionID)
             }
         }
+    }
+
+    private func buildWorldBookText(input: String, history: [ChatMessage]) -> String {
+        guard settings.worldBookEnabled else { return "" }
+        let recentContext = history.suffix(4).map(\.content).joined(separator: "\n")
+        let selected = WorldBookService.selectedEntries(
+            for: input,
+            context: recentContext,
+            entries: worldBook.entries
+        )
+        return WorldBookService.injectionText(for: selected)
     }
 
     private func message(for error: Error) -> String {

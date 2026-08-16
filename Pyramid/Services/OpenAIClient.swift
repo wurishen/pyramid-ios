@@ -28,6 +28,7 @@ struct OpenAIClient {
     let apiKey: String
     let model: String
     let systemPrompt: String
+    let worldBookText: String
 
     func send(messages: [ChatMessage]) async throws -> String {
         let data: Data
@@ -115,6 +116,9 @@ struct OpenAIClient {
         var requestMessages: [ChatCompletionRequest.Message] = []
         if !systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             requestMessages.append(.init(role: "system", content: systemPrompt))
+        }
+        if !worldBookText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            requestMessages.append(.init(role: "system", content: worldBookText))
         }
         requestMessages += messages.map { .init(role: $0.role.rawValue, content: $0.content) }
 

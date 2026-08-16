@@ -5,9 +5,9 @@ struct ChatView: View {
     @ObservedObject var store: ChatStore
     @State private var showSessions = false
 
-    init(settings: AppSettings, store: ChatStore) {
+    init(settings: AppSettings, store: ChatStore, worldBook: WorldBookStore) {
         self.store = store
-        _viewModel = StateObject(wrappedValue: ChatViewModel(settings: settings, store: store))
+        _viewModel = StateObject(wrappedValue: ChatViewModel(settings: settings, store: store, worldBook: worldBook))
     }
 
     var body: some View {
@@ -120,6 +120,6 @@ struct MessageBubble: View {
 
 #Preview {
     NavigationStack {
-        ChatView(settings: AppSettings(), store: ChatStore())
+        ChatView(settings: AppSettings(), store: ChatStore(), worldBook: WorldBookStore())
     }
 }
