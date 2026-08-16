@@ -120,7 +120,7 @@ struct WorldBookView: View {
                 }
             }
         }
-        .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json], allowsMultipleSelection: false) { result in
+        .fileImporter(isPresented: $showImporter, allowedContentTypes: importContentTypes, allowsMultipleSelection: false) { result in
             handleImportResult(result)
         }
         .confirmationDialog(
@@ -223,6 +223,15 @@ struct WorldBookView: View {
                 importErrorMessage = error.localizedDescription
             }
         }
+    }
+
+    private var importContentTypes: [UTType] {
+        [
+            .json,
+            .text,
+            .data,
+            UTType(filenameExtension: "json") ?? .json,
+        ]
     }
 
     private var importTitleSuggestion: String {
