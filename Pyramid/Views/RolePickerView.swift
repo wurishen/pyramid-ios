@@ -2,18 +2,12 @@ import SwiftUI
 
 struct RolePickerView: View {
     let characters: [Character]
-    var onSelect: (Character?) -> Void
+    var onSelect: (Character) -> Void
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             List {
-                Button {
-                    dismiss()
-                    onSelect(nil)
-                } label: {
-                    Label("不绑定角色", systemImage: "person.crop.circle.badge.minus")
-                }
                 if characters.isEmpty {
                     Text("还没有角色卡，请在「设置 → 角色卡」中新建或导入。")
                         .foregroundStyle(.secondary)

@@ -18,6 +18,7 @@ struct ChatView: View {
     @State private var pendingRole: Character?
     @State private var showRoleAction = false
     @State private var showDuplicateAlert = false
+    @State private var showDeleteSessionAlert = false
     @FocusState private var inputFocused: Bool
     @State private var lastSessionID: UUID?
 
@@ -72,6 +73,14 @@ struct ChatView: View {
                 duplicateAlertButtons
             } message: {
                 Text("该角色已绑定其他对话窗，仍要新建一个吗？")
+            }
+            .alert(
+                "删除当前会话？",
+                isPresented: $showDeleteSessionAlert
+            ) {
+                deleteSessionAlertButtons
+            } message: {
+                Text("当前会话及其全部消息将被删除，此操作不可恢复。")
             }
             .confirmationDialog(
                 "删除这条消息？",
@@ -165,6 +174,17 @@ struct ChatView: View {
     }
 
     @ViewBuilder
+    private func deleteSessionAlertButtons() -> some View {
+        Button("删除", role: .destructive) {
+            if let sid = store.currentSessionID {
+                store.delete(sid)
+            }
+            showDeleteSessionAlert = false
+        }
+        Button("取消", role: .cancel) { showDeleteSessionAlert = false }
+    }
+
+    @ViewBuilder
     private func editMessageSheet(_ message: ChatMessage) -> some View {
         EditMessageSheet(initialText: message.content) { text in
             viewModel.editMessage(message, newContent: text)
@@ -248,7 +268,12 @@ struct ChatView: View {
                     .lineLimit(1)
             }
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("当前角色")
+            .accessibilityLabel("当前角色，长按删除会话")
+            .contentShape(Rectangle())
+            .onLongPressGesture {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                showDeleteSessionAlert = true
+            }
             Spacer()
             Button {
                 showRolePicker = true
@@ -275,15 +300,9 @@ struct ChatView: View {
         }
     }
 
-    private func handleRoleSelection(_ role: Character?) {
-        if let role {
-            pendingRole = role
-            showRoleAction = true
-        } else {
-            if let sid = store.currentSessionID {
-                store.setCharacter(nil, for: sid)
-            }
-        }
+    private func handleRoleSelection(_ role: Character) {
+        pendingRole = role
+        showRoleAction = true
     }
 
     private func createSession(with role: Character) {
