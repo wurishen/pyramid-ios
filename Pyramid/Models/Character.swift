@@ -94,6 +94,11 @@ struct Character: Codable, Identifiable, Equatable {
         if !personality.isEmpty { parts.append(personality) }
         if !scenario.isEmpty { parts.append(scenario) }
         if !systemPrompt.isEmpty { parts.append(systemPrompt) }
+        // mes_example 折进同一段 system prompt，酒馆风格：加个方括号小标题让 LLM 一眼看出这是示例段。
+        let trimmedExample = mesExample.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedExample.isEmpty {
+            parts.append("[对话示例]\n\(trimmedExample)")
+        }
         return parts.joined(separator: "\n\n")
     }
 

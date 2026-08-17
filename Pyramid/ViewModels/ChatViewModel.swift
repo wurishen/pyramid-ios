@@ -219,6 +219,17 @@ final class ChatViewModel: ObservableObject {
         let trimmedHistory = applyContextTrim(rawHistory, userMessageID: userMessageID)
         // 宏展开：仅作用于送入 API 的消息文本，不修改存储 / 显示。
         let apiHistory = expandMacros(in: trimmedHistory)
+        // 酒馆 post_history_instructions：作为最末 system 块拼到「历史之后」。
+        // 与同位置的 world book 条目合并，world book 在前、角色 PHI 在后。
+        var afterHistory = WorldBookService.injectionText(for: grouped[.afterHistory] ?? [])
+        if let phi = character?.postHistoryInstructions,
+           !phi.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if !afterHistory.isEmpty {
+                afterHistory += "\n\n" + phi.trimmingCharacters(in: .whitespacesAndNewlines)
+            } else {
+                afterHistory = phi.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
         let client = OpenAIClient(
             baseURL: settings.baseURL,
             apiKey: settings.apiKey,
@@ -227,7 +238,7 @@ final class ChatViewModel: ObservableObject {
             userPersonaText: userPersonaText,
             beforeSystemText: WorldBookService.injectionText(for: grouped[.beforeSystem] ?? []),
             afterSystemText: WorldBookService.injectionText(for: grouped[.afterSystem] ?? []),
-            afterHistoryText: WorldBookService.injectionText(for: grouped[.afterHistory] ?? []),
+            afterHistoryText: afterHistory,
             temperature: preset?.temperature,
             topP: preset?.topP,
             maxTokens: preset?.maxTokens
