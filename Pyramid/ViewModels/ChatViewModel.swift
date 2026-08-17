@@ -45,6 +45,8 @@ final class ChatViewModel: ObservableObject {
     func handleSessionChange(previousID: UUID?, newID: UUID?) {
         if let prev = previousID {
             store.setDraft(input, for: prev)
+            // Item 2: draft 改完不再触发 save，这里强制 flush 保证旧会话草稿落盘。
+            store.flushPendingSave()
         }
         if let new = newID, let session = store.sessions.first(where: { $0.id == new }) {
             input = session.draft

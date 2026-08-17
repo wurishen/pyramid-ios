@@ -190,7 +190,8 @@ final class ChatStore: ObservableObject {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         if sessions[index].draft != draft {
             sessions[index].draft = draft
-            save()
+            // Item 2: draft 不再每键击触发 save。下次其他 mutate / 切会话 /
+            // scenePhase → .background 时随主 save 落盘。
         }
     }
 
