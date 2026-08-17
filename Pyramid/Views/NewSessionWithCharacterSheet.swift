@@ -2,7 +2,6 @@ import SwiftUI
 
 struct NewSessionWithCharacterSheet: View {
     let characters: [Character]
-    @ObservedObject var store: ChatStore
     var onPicked: (Character) -> Void
     @Environment(\.dismiss) private var dismiss
 
