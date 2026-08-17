@@ -9,7 +9,7 @@ Pyramid 的最小原生 iOS 应用 —— 纯 SwiftUI，不依赖 WKWebView / �
 3. 选择 `Pyramid` scheme 与任意 iOS Simulator，⌘R 运行即可。
 4. 首次打开若提示 scheme，选 **Pyramid**（工程内已共享 scheme，正常应直接可用）。
 
-## 使用（v0.5）
+## 使用（v0.6）
 
 应用为两 Tab 结构：**聊天** 与 **设置**。设置项以二级页面组织（点设置里任意行进入子页，导航栏「<」返回）。
 
@@ -23,7 +23,7 @@ Pyramid 的最小原生 iOS 应用 —— 纯 SwiftUI，不依赖 WKWebView / �
 - **预设**：把「模型名 / 系统提示词 / 绑定的世界书 / 启用 Markdown / 显示用正则 ID」打包成预设，会话详情里一键应用。
 - **显示用正则**：作用域固定 `assistant.display.pre`，在助手原文渲染前执行；命中多条按顺序串行替换。空 pattern / 无效正则保存时即时报错。
 - **隐藏标签**：逗号或换行分隔的标签名（默认 `think,thinking`），匹配 `<tag>...</tag>`（含跨行）整段剥离，仅作用于气泡渲染。
-- **上下文 / 界面 / 数据管理**：上下文窗口（字符数阈值 + 超出提示）、头像 / 楼层号 / 用户消息气泡 ID 等界面开关、清空全部会话与设置。
+- **上下文 / 界面 / 数据管理**：上下文裁剪策略三选一（**不裁剪 / 最近 N 条消息 / 最近 C 字符**，当前用户消息始终保留），字符数估算 + 超出提示；头像 / 楼层号 / 用户消息气泡 ID 等界面开关；清空全部会话与设置。
 
 填写即自动保存到 UserDefaults，无需手动保存。
 
@@ -61,6 +61,7 @@ Pyramid 的最小原生 iOS 应用 —— 纯 SwiftUI，不依赖 WKWebView / �
 - 显示管线：原始 → 显示用正则（仅助手）→ 隐藏标签剥离 → Markdown 渲染（仅作用于气泡）。
 - 宏：`{{user}}` / `{{User}}` / `{{char}}` / `{{Char}}`，仅作用于发送给 API 的文本。
 - 不含：云同步、第三方渲染（WKWebView / SFSafariViewController）、正则脚本热更新。
+- **数据兼容**：所有「v0.6 新增字段」（Character 的 8 个 ST 字段 + ChatMessage.isIncluded）走 `init(from:) decodeIfPresent` 给默认值，旧 v0.5 JSON / UserDefaults 数据 load 时自动补齐，**无需主动迁移、不会丢任何旧数据**。
 
 ## 目录结构
 
@@ -70,13 +71,17 @@ Pyramid/
   PyramidApp.swift     App 入口（@main）
   ContentView.swift    Tab 容器（聊天 / 设置 + 长按聊天的悬浮气泡条）
   AppSettings.swift    API 配置（@AppStorage 本地持久化）
-  Models/              消息、请求/响应、会话、世界书/条目、角色卡、预设、显示用正则模型
-  Services/            OpenAIClient、WorldBookService（关键词匹配与注入）、Markdown 渲染
+  Models/              ChatMessage（含 isIncluded）、ChatSession、ChatCompletionRequest/Response、
+                       Character（含 SillyTavern 兼容字段）、WorldBook/Entry、Preset、
+                       DisplayRegex、ContextTrimMode
+  Services/            OpenAIClient、WorldBookService（关键词匹配与注入）、
+                       ImportSupport（原生 + SillyTavern JSON/PNG 解析）、Markdown 渲染
   Stores/              ChatStore、WorldBookStore、CharacterStore、PresetStore、DisplayRegexStore
   ViewModels/          ChatViewModel
   Views/               ChatView、SettingsView、SessionListView、SessionDetailView、
-                       CharacterListView、WorldBookView、WorldBookEditView、
-                       PresetListView、DisplayRegexListView、MarkdownTextView、…
+                       CharacterListView、CharacterGreetingSheet、NewSessionWithCharacterSheet、
+                       WorldBookView、WorldBookEditView、PresetListView、
+                       DisplayRegexListView、MarkdownTextView、MessageBubble、…
   Assets.xcassets/     图标与颜色资源
 .github/workflows/    GitHub Actions（编译检查 + archive/IPA 产物打包）
 ```
