@@ -34,6 +34,67 @@ struct ChatView: View {
     }
 
     var body: some View {
+        chatContent
+            .navigationTitle(store.currentSession?.title ?? "Pyramid")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { chatToolbar }
+            .overlay(alignment: .bottom) { copiedFeedbackOverlay }
+            .onAppear { handleAppear() }
+            .onChange(of: store.currentSessionID) { oldValue, newValue in
+                viewModel.handleSessionChange(previousID: oldValue, newValue: newValue)
+                lastSessionID = newValue
+            }
+            .onChange(of: viewModel.input) { _, _ in
+                viewModel.persistDraft()
+            }
+            .sheet(isPresented: $showSessions) {
+                SessionListView(store: store, worldBook: worldBook, settings: settings, presets: presets, characters: characters)
+            }
+            .sheet(isPresented: $showRolePicker) {
+                RolePickerView(characters: characters.characters) { role in
+                    handleRoleSelection(role)
+                }
+            }
+            .confirmationDialog(
+                "应用到当前会话？",
+                isPresented: $showRoleAction,
+                titleVisibility: .visible
+            ) {
+                roleActionButtons
+            } message: {
+                Text("选择「绑定到当前会话」会替换本对话的角色；选择「新建对话窗」会新开一个对话。")
+            }
+            .alert("该角色已有对话窗", isPresented: $showDuplicateAlert) {
+                duplicateAlertButtons
+            } message: {
+                Text("该角色已绑定其他对话窗，仍要新建一个吗？")
+            }
+            .sheet(item: $editingMessage) { message in
+                EditMessageSheet(initialText: message.content) { text in
+                    viewModel.editMessage(message, newContent: text)
+                }
+            }
+            .confirmationDialog(
+                "删除这条消息？",
+                isPresented: deleteDialogBinding,
+                titleVisibility: .visible
+            ) {
+                deleteMessageButtons
+            } message: {
+                Text("删除后无法恢复。")
+            }
+            .confirmationDialog(
+                "重新生成回复？",
+                isPresented: regenerateDialogBinding,
+                titleVisibility: .visible
+            ) {
+                regenerateMessageButtons
+            } message: {
+                Text("将删除该回复及其后的所有消息，并重新请求。")
+            }
+    }
+
+    private var chatContent: some View {
         VStack(spacing: 0) {
             if let error = viewModel.errorMessage {
                 errorBanner(error)
@@ -45,141 +106,115 @@ struct ChatView: View {
             }
             inputBar
         }
-        .onAppear {
-            if lastSessionID != store.currentSessionID {
-                viewModel.handleSessionChange(previousID: lastSessionID, newID: store.currentSessionID)
-                lastSessionID = store.currentSessionID
+    }
+
+    @ToolbarContentBuilder
+    private var chatToolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Button {
+                showSessions = true
+            } label: {
+                Image(systemName: "text.bubble")
             }
+            .accessibilityLabel("会话列表")
         }
-        .onChange(of: store.currentSessionID) { oldValue, newValue in
-            viewModel.handleSessionChange(previousID: oldValue, newValue: newValue)
-            lastSessionID = newValue
-        }
-        .onChange(of: viewModel.input) { _, _ in
-            viewModel.persistDraft()
-        }
-        .navigationTitle(store.currentSession?.title ?? "Pyramid")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
+        ToolbarItem(placement: .topBarTrailing) {
+            HStack(spacing: 12) {
                 Button {
-                    showSessions = true
+                    copyAllToPasteboard()
                 } label: {
-                    Image(systemName: "text.bubble")
+                    Image(systemName: "doc.on.doc")
                 }
-                .accessibilityLabel("会话列表")
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                HStack(spacing: 12) {
-                    Button {
-                        UIPasteboard.general.string = conversationText
-                        withAnimation { showCopiedFeedback = true }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                            withAnimation { showCopiedFeedback = false }
-                        }
-                    } label: {
-                        Image(systemName: "doc.on.doc")
-                    }
-                    .disabled(viewModel.messages.isEmpty)
-                    .accessibilityLabel("复制本会话全部对话")
-                    // 用户头像放右侧 — 酒馆（SillyTavern）风格：你本人始终在右。
-                    AvatarView(
-                        imageData: settings.userAvatarData.isEmpty ? nil : settings.userAvatarData,
-                        name: settings.userName.isEmpty ? "我" : settings.userName,
-                        size: 26
-                    )
-                    .accessibilityLabel("当前用户")
-                }
+                .disabled(viewModel.messages.isEmpty)
+                .accessibilityLabel("复制本会话全部对话")
+                AvatarView(
+                    imageData: settings.userAvatarData.isEmpty ? nil : settings.userAvatarData,
+                    name: settings.userName.isEmpty ? "我" : settings.userName,
+                    size: 26
+                )
+                .accessibilityLabel("当前用户")
             }
         }
-        .overlay(alignment: .bottom) {
-            if showCopiedFeedback {
-                Text("已复制本会话全部对话")
-                    .font(.footnote)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.regularMaterial, in: Capsule())
-                    .padding(.bottom, 8)
-                    .transition(.opacity)
+    }
+
+    @ViewBuilder
+    private var copiedFeedbackOverlay: some View {
+        if showCopiedFeedback {
+            Text("已复制本会话全部对话")
+                .font(.footnote)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.regularMaterial, in: Capsule())
+                .padding(.bottom, 8)
+                .transition(.opacity)
+        }
+    }
+
+    @ViewBuilder
+    private var roleActionButtons: some View {
+        if let role = pendingRole {
+            Button("绑定到当前会话") {
+                if let sid = store.currentSessionID { store.setCharacter(role.id, for: sid) }
+                pendingRole = nil
             }
-        }
-        .sheet(isPresented: $showSessions) {
-            SessionListView(store: store, worldBook: worldBook, settings: settings, presets: presets, characters: characters)
-        }
-        .sheet(isPresented: $showRolePicker) {
-            RolePickerView(characters: characters.characters) { role in
-                handleRoleSelection(role)
-            }
-        }
-        .confirmationDialog(
-            "应用到当前会话？",
-            isPresented: $showRoleAction,
-            titleVisibility: .visible
-        ) {
-            if let role = pendingRole {
-                Button("绑定到当前会话") {
-                    if let sid = store.currentSessionID { store.setCharacter(role.id, for: sid) }
-                    pendingRole = nil
-                }
-                Button("新建对话窗") {
-                    if store.sessions.contains(where: { $0.characterId == role.id && $0.id != store.currentSessionID }) {
-                        showDuplicateAlert = true
-                    } else {
-                        createSession(with: role)
-                        pendingRole = nil
-                    }
-                }
-                Button("取消", role: .cancel) { pendingRole = nil }
-            }
-        } message: {
-            Text("选择「绑定到当前会话」会替换本对话的角色；选择「新建对话窗」会新开一个对话。")
-        }
-        .alert("该角色已有对话窗", isPresented: $showDuplicateAlert) {
-            if let role = pendingRole {
-                Button("仍要新建") {
+            Button("新建对话窗") {
+                if store.sessions.contains(where: { $0.characterId == role.id && $0.id != store.currentSessionID }) {
+                    showDuplicateAlert = true
+                } else {
                     createSession(with: role)
                     pendingRole = nil
                 }
-                Button("取消", role: .cancel) { pendingRole = nil }
             }
-        } message: {
-            Text("该角色已绑定其他对话窗，仍要新建一个吗？")
+            Button("取消", role: .cancel) { pendingRole = nil }
         }
-        .sheet(item: $editingMessage) { message in
-            EditMessageSheet(initialText: message.content) { text in
-                viewModel.editMessage(message, newContent: text)
+    }
+
+    @ViewBuilder
+    private var duplicateAlertButtons: some View {
+        if let role = pendingRole {
+            Button("仍要新建") {
+                createSession(with: role)
+                pendingRole = nil
             }
+            Button("取消", role: .cancel) { pendingRole = nil }
         }
-        .confirmationDialog(
-            "删除这条消息？",
-            isPresented: deleteDialogBinding,
-            titleVisibility: .visible
-        ) {
-            Button("删除", role: .destructive) {
-                if let message = messageToDelete {
-                    viewModel.deleteMessage(message)
-                }
-                messageToDelete = nil
+    }
+
+    @ViewBuilder
+    private var deleteMessageButtons: some View {
+        Button("删除", role: .destructive) {
+            if let message = messageToDelete {
+                viewModel.deleteMessage(message)
             }
-            Button("取消", role: .cancel) { messageToDelete = nil }
-        } message: {
-            Text("删除后无法恢复。")
+            messageToDelete = nil
         }
-        .confirmationDialog(
-            "重新生成回复？",
-            isPresented: regenerateDialogBinding,
-            titleVisibility: .visible
-        ) {
-            Button("重新生成") {
-                if let message = regenerateMessage,
-                   let index = viewModel.messages.firstIndex(where: { $0.id == message.id }) {
-                    viewModel.regenerate(at: index)
-                }
-                regenerateMessage = nil
+        Button("取消", role: .cancel) { messageToDelete = nil }
+    }
+
+    @ViewBuilder
+    private var regenerateMessageButtons: some View {
+        Button("重新生成") {
+            if let message = regenerateMessage,
+               let index = viewModel.messages.firstIndex(where: { $0.id == message.id }) {
+                viewModel.regenerate(at: index)
             }
-            Button("取消", role: .cancel) { regenerateMessage = nil }
-        } message: {
-            Text("将删除该回复及其后的所有消息，并重新请求。")
+            regenerateMessage = nil
+        }
+        Button("取消", role: .cancel) { regenerateMessage = nil }
+    }
+
+    private func handleAppear() {
+        if lastSessionID != store.currentSessionID {
+            viewModel.handleSessionChange(previousID: lastSessionID, newID: store.currentSessionID)
+            lastSessionID = store.currentSessionID
+        }
+    }
+
+    private func copyAllToPasteboard() {
+        UIPasteboard.general.string = conversationText
+        withAnimation { showCopiedFeedback = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation { showCopiedFeedback = false }
         }
     }
 
