@@ -85,15 +85,16 @@ enum MessageRenderer {
     }
 
     private static func markdownEnabled(settings: AppSettings, preset: Preset?) -> Bool {
-        if let preset, !preset.useGlobalMarkdown {
-            return preset.enableMarkdown
+        if let preset = preset, let flag = preset.enableMarkdown {
+            return flag
         }
         return settings.enableMarkdown
     }
 
     /// Markdown 渲染：先 AttributedString(markdown:) 解析失败时降级为剥离 HTML 后的纯文本。
     private static func markdown(_ text: String) -> AttributedString {
-        if var attr = try? AttributedString(markdown: text) {
+        if let parsed = try? AttributedString(markdown: text) {
+            var attr = parsed
             // 链接走 openURL；保持与 MarkdownTextView 行为一致。
             attr.environment(\.openURL, OpenURLAction { url in
                 UIApplication.shared.open(url)
