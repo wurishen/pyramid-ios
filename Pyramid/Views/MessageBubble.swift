@@ -15,6 +15,7 @@ struct MessageBubble: View {
     var onEdit: () -> Void = {}
     var onRegenerate: () -> Void = {}
     var onDelete: () -> Void = {}
+    var onToggleInclude: () -> Void = {}
 
     private static let collapseThreshold = 800
     @State private var expanded = false
@@ -48,6 +49,18 @@ struct MessageBubble: View {
                         Text("\(floorNumber)")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
+                    }
+                    // 被排除出上下文的消息加一个小标签，让用户一眼看出 AI 看不到这条。
+                    if !message.isIncluded {
+                        Text("已排除")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color(.systemGray5), in: Capsule())
+                            .overlay(
+                                Capsule().stroke(Color(.systemGray3), lineWidth: 0.5)
+                            )
                     }
                     bubbleContent
                 }
@@ -103,6 +116,12 @@ struct MessageBubble: View {
             if !isSending {
                 Button(action: onEdit) {
                     Label("编辑", systemImage: "pencil")
+                }
+                Button(action: onToggleInclude) {
+                    Label(
+                        message.isIncluded ? "不包含在上下文" : "包含在上下文",
+                        systemImage: message.isIncluded ? "eye.slash" : "eye"
+                    )
                 }
                 if message.role == .assistant {
                     Button(action: onRegenerate) {

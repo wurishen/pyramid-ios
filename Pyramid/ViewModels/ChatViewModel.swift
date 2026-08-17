@@ -145,6 +145,14 @@ final class ChatViewModel: ObservableObject {
         scrollVersion += 1
     }
 
+    /// 切换某条消息的「包含在上��文」标记。被排除的消息仍会在 UI 显示，
+    /// 但不会被送进 API；下次发起请求时生效。
+    func toggleInclude(_ message: ChatMessage) {
+        guard let sessionID = store.currentSessionID else { return }
+        store.setMessageIncluded(!message.isIncluded, for: message.id, in: sessionID)
+        scrollVersion += 1
+    }
+
     func regenerate(at index: Int) {
         guard !isSending, let sessionID = store.currentSessionID else { return }
         let msgs = store.currentMessages
@@ -313,19 +321,28 @@ final class ChatViewModel: ObservableObject {
 
     /// 上下文裁剪：按设置保留最近 N 条消息 / 最近 C 字符；当前用户消息始终保留。
     /// 见 SPEC §14。楼层号、时间戳、「已注入世界书N条」均为 UI 装饰，不写入 content / API。
+    /// 被用户标记为「不包含在上下文」的消息也会被裁出（除非是当前用户消息本身）。
     func applyContextTrim(_ history: [ChatMessage], userMessageID: UUID?) -> [ChatMessage] {
+        // 先把被排除的消息滤掉，再走裁剪策略。
+        let eligible: [ChatMessage]
+        if let uid = userMessageID {
+            // 当前用户消息无论如何都保留（保证 AI 看到本轮提问）。
+            eligible = history.filter { $0.isIncluded || $0.id == uid }
+        } else {
+            eligible = history.filter(\.isIncluded)
+        }
         let trimmed: [ChatMessage]
         switch settings.contextTrimMode {
         case .off:
-            trimmed = history
+            trimmed = eligible
         case .byMessages:
             let n = max(2, settings.contextTrimMessages)
-            if history.count <= n { trimmed = history } else { trimmed = Array(history.suffix(n)) }
+            if eligible.count <= n { trimmed = eligible } else { trimmed = Array(eligible.suffix(n)) }
         case .byCharacters:
             let budget = max(200, settings.contextTrimCharacters)
             var acc: [ChatMessage] = []
             var used = 0
-            for msg in history.reversed() {
+            for msg in eligible.reversed() {
                 let cost = msg.content.count
                 if !acc.isEmpty, used + cost > budget { break }
                 acc.append(msg)
@@ -334,6 +351,7 @@ final class ChatViewModel: ObservableObject {
             }
             trimmed = acc.reversed()
         }
+        // 兜底：万一当前用户消息被排除且裁剪规则也丢了它，仍然强制带上。
         // 保证当前用户消息一定在历史中（防止裁剪掉导致 AI 看不到本轮提问）。
         if let id = userMessageID,
            let userMsg = history.first(where: { $0.id == id }),

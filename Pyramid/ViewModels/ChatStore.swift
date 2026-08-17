@@ -126,6 +126,17 @@ final class ChatStore: ObservableObject {
         save()
     }
 
+    /// 切换某条消息的「包含在上下文」标记。被排除的消息仍会在 UI 显示，但不会送进 API。
+    /// 当前正在请求的用户消息始终会被强制送入（见 ChatViewModel.applyContextTrim）。
+    func setMessageIncluded(_ included: Bool, for id: UUID, in sessionID: UUID) {
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }),
+              let messageIndex = sessions[sessionIndex].messages.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        sessions[sessionIndex].messages[messageIndex].isIncluded = included
+        save()
+    }
+
     func setWorldBook(_ worldBookId: UUID?, for sessionID: UUID) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         sessions[index].worldBookId = worldBookId

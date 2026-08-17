@@ -301,7 +301,8 @@ struct ChatView: View {
                             onCopy: { UIPasteboard.general.string = message.content },
                             onEdit: { editingMessage = message },
                             onRegenerate: { regenerateMessage = message },
-                            onDelete: { messageToDelete = message }
+                            onDelete: { messageToDelete = message },
+                            onToggleInclude: { viewModel.toggleInclude(message) }
                         )
                     }
                     if viewModel.isSending {
