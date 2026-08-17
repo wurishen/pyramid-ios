@@ -18,6 +18,7 @@ struct ChatView: View {
     @State private var showRoleAction = false
     @State private var showDuplicateAlert = false
     @FocusState private var inputFocused: Bool
+    @State private var lastSessionID: UUID?
 
     init(settings: AppSettings, store: ChatStore, worldBook: WorldBookStore, presets: PresetStore, characters: CharacterStore) {
         self.store = store
@@ -43,6 +44,19 @@ struct ChatView: View {
                 contextHintBar
             }
             inputBar
+        }
+        .onAppear {
+            if lastSessionID != store.currentSessionID {
+                viewModel.handleSessionChange(previousID: lastSessionID, newID: store.currentSessionID)
+                lastSessionID = store.currentSessionID
+            }
+        }
+        .onChange(of: store.currentSessionID) { oldValue, newValue in
+            viewModel.handleSessionChange(previousID: oldValue, newValue: newValue)
+            lastSessionID = newValue
+        }
+        .onChange(of: viewModel.input) { _, _ in
+            viewModel.persistDraft()
         }
         .navigationTitle(store.currentSession?.title ?? "Pyramid")
         .navigationBarTitleDisplayMode(.inline)
@@ -251,16 +265,7 @@ struct ChatView: View {
     }
 
     private var contextCharacterCount: Int {
-        let messageChars = viewModel.messages.reduce(0) { $0 + $1.content.count }
-        return messageChars + injectedCharacterEstimate
-    }
-
-    private var injectedCharacterEstimate: Int {
-        guard settings.worldBookEnabled else { return 0 }
-        let book = worldBook.book(for: store.currentSession?.worldBookId)
-        let input = viewModel.input.trimmingCharacters(in: .whitespacesAndNewlines)
-        let entries = WorldBookService.selectedEntries(for: input, history: viewModel.messages, entries: book.entries)
-        return entries.reduce(0) { $0 + $1.title.count + $1.content.count }
+        viewModel.trimmedContextCharacterCount
     }
 
     private var contextHintBar: some View {
@@ -344,31 +349,63 @@ struct ChatView: View {
                 .lineLimit(1...4)
                 .textFieldStyle(.roundedBorder)
                 .focused($inputFocused)
-            Button {
-                viewModel.send()
-                inputFocused = false
-            } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.title2)
+            if viewModel.isSending {
+                Button {
+                    viewModel.cancelCurrent()
+                } label: {
+                    Image(systemName: "stop.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.red)
+                }
+                .accessibilityLabel("停止生成")
+            } else {
+                Button {
+                    viewModel.send()
+                    inputFocused = false
+                } label: {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.title2)
+                }
+                .disabled(viewModel.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
-            .disabled(
-                viewModel.isSending
-                    || viewModel.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            )
         }
         .padding()
         .background(.bar)
     }
 
     private func errorBanner(_ text: String) -> some View {
-        Text(text)
-            .font(.footnote)
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(10)
-            .background(.red)
-            .padding(.horizontal)
-            .padding(.top, 4)
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.white)
+            Text(text)
+                .font(.footnote)
+                .foregroundStyle(.white)
+                .lineLimit(3)
+            Spacer(minLength: 0)
+            if viewModel.lastFailedUserMessageID != nil {
+                Button("重试") {
+                    viewModel.retryLastFailed()
+                }
+                .font(.footnote.bold())
+                .foregroundStyle(.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.white.opacity(0.2), in: Capsule())
+            }
+            Button {
+                viewModel.errorMessage = nil
+                viewModel.lastFailedUserMessageID = nil
+                viewModel.lastFailedReason = nil
+            } label: {
+                Image(systemName: "xmark")
+                    .foregroundStyle(.white)
+            }
+            .accessibilityLabel("关闭错误提示")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.red)
     }
 }
 

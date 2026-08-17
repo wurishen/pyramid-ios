@@ -1,7 +1,7 @@
 # Pyramid 产品规格文档
 
 > 本文档为 iOS / Android 双端共用的产品规格，描述当前已实现功能与计划功能（TODO）。
-> 最后更新：2026-08-16
+> 最后更新：2026-08-17
 
 ---
 
@@ -324,28 +324,74 @@ TabView
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `id` | UUID | 唯一标识 |
-| `title` | String | 会话标题（首条用户消息自动截取，最多 20 字符） |
+| `title` | String | 会话标题（首条用户消息自动截取，最多 20 字符；可手动重命名） |
 | `messages` | [ChatMessage] | 消息列表 |
 | `createdAt` | Date | 创建时间 |
 | `worldBookId` | UUID? | 绑定的世界书 |
 | `systemPrompt` | String? | 会话级系统提示词覆盖 |
 | `appliedPresetId` | UUID? | 最近应用的预设 |
 | `characterId` | UUID? | 绑定的角色卡 |
+| `userDisplayNameOverride` | String | 本会话对 AI 显示的用户名覆盖 |
+| `extraWorldBookIds` | [UUID] | 本会话「额外启用」的世界书 ID 集合 |
+| `isPinned` | Bool | 置顶；列表与网格置顶段靠前显示 |
+| `draft` | String | 输入框未发送草稿；切换会话时保留，发送或取消时清空 |
+
+### 8.2.1 会话列表与排序
+
+- 排序：置顶在前 → 按 `createdAt` 倒序；置顶段使用「置顶」Section，剩余为「其它」Section。
+- 行内容（`SessionListView.sessionRow`）：
+  - 左侧：绑定角色头像（无角色则用标题首字母）。
+  - 中上：会话标题（首条用户消息自动截取，或手动命名；为空且有角色时回退为角色名）。
+  - 中右：置顶图钉 + 角色名角标。
+  - 中下：最后一条消息单行预览（无则显示「尚无消息」）+ 时间戳（最后一条消息时间或创建时间）。
+  - 右侧：当前会话的选中对勾。
+- 行高亮：当前会话行 `listRowBackground` 用主色 12% 透明。
+- 操作（左滑 / 右滑 / 长按菜单 / 删除 confirm）：
+  - 左滑：置顶 / 取消置顶
+  - 右滑：重命名 / 删除（确认）/ 详情（进入 SessionDetailView）
+  - 长按菜单：重命名 / 置顶 / 详情 / 删除
+  - 删除须 `confirmationDialog` 二次确认
+
+### 8.2.2 新建会话
+
+- 「新建」按钮为 Menu：
+  - **新建空白会话**：直接创建。
+  - **新建并绑定角色**：先弹出角色选择 Sheet，点选后用 `ChatStore.createSession(character:)` 创建并绑定。
+- 新建会话标题默认「角色名」或「「新会话」占位」；首条用户消息发出后自动改写标题（前 20 字符）。
+
+### 8.2.3 草稿（输入框未发送文本）
+
+- `ChatSession.draft` 按会话保存输入框内容。
+- `ChatView.onAppear` / `onChange(of: store.currentSessionID)` 触发 `handleSessionChange`：先把当前 `input` 写入旧会话的 `draft`，再把新会话的 `draft` 装载进 `input`。
+- `onChange(of: viewModel.input)` 实时把 `input` 持久化到当前会话 `draft`。
+- 用户主动「发送」后 `input` 与 `draft` 都被清空；「停止生成」恢复 `input` 与 `draft`。
 
 ### 8.3 消息操作
 
 | 操作 | 适用范围 | 行为 |
 |------|----------|------|
 | 复制 | 所有消息 | 复制内容到剪贴板 |
-| 编辑 | 所有消息（发送中不可用） | 全屏编辑器修改内容 |
+| 编辑 | 所有消息（发送中不可用） | 全屏编辑器修改内容，**保存后不自动重发** |
 | 重新生成 | 仅助手消息 | 删除该助手消息及后续消息，重新发送（需确认） |
 | 删除 | 所有消息（发送中不可用） | 删除单条消息（需确认） |
+
+- 长按消息气泡弹出 `.contextMenu` 菜单，操作按钮根据消息角色与状态动态展示。
+- 楼层号（用户消息 `#N`）在删除中间消息后 **保持稳定**：剩余消息的楼层号不重排，仅被删的楼层消失。这与 SPEC §6.1「用户消息显示 `#N`」一致。
+- 「重新生成」是「删除后续 → 重新请求」，不是「替换当前回复」；删除前需 `confirmationDialog` 确认。
 
 ### 8.4 流式传输
 
 - 开启流式：立即创建空助手消息，通过 SSE 逐块追加内容，实时更新 UI
 - 关闭流式：等待完整响应后一次性追加
-- 支持通过 `AsyncThrowingStream` 取消请求
+- 取消：`ChatViewModel.cancelCurrent()` `Task.cancel()` 取消当前流；已生成的内容保留，未生成时占位空消息被删除；同时把输入文本恢复到输入框与会话草稿。
+
+### 8.4.1 停止生成 / 重试 / 错误提示
+
+- 输入栏：发送中显示「停止」按钮（红圆 stop），点击调用 `viewModel.cancelCurrent()`。
+- 错误提示（`errorBanner`）：网络 / 超时 / 解析 / 空响应均显示在顶部红色横幅。
+  - 含「重试」按钮：复用最近失败的用户消息（`lastFailedUserMessageID`）重新发起一次请求。
+  - 含「关闭」按钮：清空 `errorMessage` / `lastFailedUserMessageID` / `lastFailedReason`。
+- API 正文（向 `OpenAIClient` 发送的 `messages`）**永远不包含**楼层号、时间戳、「已注入世界书 N 条」、草稿、未发送输入；这些都是纯 UI 装饰。
 
 ### 8.5 Markdown 渲染
 
@@ -525,6 +571,27 @@ iOS 和 Android 双端应实现**相同的核心功能集**，包括：
 | `showAvatars` | Bool | true | 聊天页显示头像（角色栏 + 用户消息） |
 | `userName` | String | `""` | 用户昵称（用户头像占位首字母） |
 | `userAvatarData` | Data | 空 | 用户头像数据（圆形显示，空 = 显示首字母） |
+| `contextTrimMode` | enum | `.byMessages` | 上下文裁剪策略：`.off` / `.byMessages` / `.byCharacters` |
+| `contextTrimMessages` | Int | 50 | 按消息条数裁剪：保留最近 N 条（2-500） |
+| `contextTrimCharacters` | Int | 8000 | 按字符数裁剪：保留最近 C 字符（500-80000） |
+
+---
+
+## 14. 上下文裁剪
+
+发送请求前可按设置裁剪历史，节省 token 与避免超出上下文窗口：
+
+| 模式 | 行为 |
+|------|------|
+| `.off` | 全量历史；不做裁剪 |
+| `.byMessages`（默认） | 仅保留最近 N 条消息（默认 50，范围 2-500） |
+| `.byCharacters` | 仅保留最近 C 字符（默认 8000，范围 500-80000） |
+
+**保留保证**：发起当前请求的那条用户消息（`userMessageID`）若被裁剪掉，仍会附加回历史末尾——AI 永远看得到本轮提问。
+
+**上下文长度提示**：`ChatView.contextHintBar` 显示的字符数 = 「裁剪后历史字符数 + 世界书注入估算字符数」，与实际请求体一致。
+
+**裁剪对象**：仅 `messages` 历史；系统提示词（角色 / 会话 / 全局 / 用户人设 / 世界书注入段）**不被裁剪**，且不被计入裁剪预算。
 
 ---
 

@@ -35,6 +35,7 @@
 		AB0000000000000000000202 /* CharacterStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000206 /* CharacterStore.swift */; };
 		AB0000000000000000000203 /* CharacterListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000207 /* CharacterListView.swift */; };
 		AB0000000000000000000204 /* AvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000208 /* AvatarView.swift */; };
+		AB0000000000000000000209 /* ContextTrimMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000209 /* ContextTrimMode.swift */; };
 		AB00000000000000000000A2 /* ImportSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000000A1 /* ImportSupport.swift */; };
 		AB00000000000000000000A4 /* DocumentPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000000A3 /* DocumentPicker.swift */; };
 		AB00000000000000000000A6 /* BackupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000000A5 /* BackupService.swift */; };
@@ -70,6 +71,7 @@
 		AB0000000000000000000206 /* CharacterStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharacterStore.swift; sourceTree = "<group>"; };
 		AB0000000000000000000207 /* CharacterListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharacterListView.swift; sourceTree = "<group>"; };
 		AB0000000000000000000208 /* AvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarView.swift; sourceTree = "<group>"; };
+		AB0000000000000000000209 /* ContextTrimMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextTrimMode.swift; sourceTree = "<group>"; };
 		AB00000000000000000000A1 /* ImportSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportSupport.swift; sourceTree = "<group>"; };
 		AB00000000000000000000A3 /* DocumentPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentPicker.swift; sourceTree = "<group>"; };
 		AB00000000000000000000A5 /* BackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupService.swift; sourceTree = "<group>"; };
@@ -119,6 +121,7 @@
 				AB0000000000000000000028 /* WorldBook.swift */,
 				AB0000000000000000000104 /* Preset.swift */,
 				AB0000000000000000000205 /* Character.swift */,
+				AB0000000000000000000206 /* ContextTrimMode.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -268,6 +271,7 @@
 				AB0000000000000000000202 /* CharacterStore.swift in Sources */,
 				AB0000000000000000000203 /* CharacterListView.swift in Sources */,
 				AB0000000000000000000204 /* AvatarView.swift in Sources */,
+				AB0000000000000000000209 /* ContextTrimMode.swift in Sources */,
 				AB00000000000000000000A2 /* ImportSupport.swift in Sources */,
 				AB00000000000000000000A4 /* DocumentPicker.swift in Sources */,
 				AB00000000000000000000A6 /* BackupService.swift in Sources */,

@@ -256,20 +256,35 @@ struct QuickSwitcherView: View {
     private func bubbleCell(for session: ChatSession) -> some View {
         let char = characters.character(for: session.characterId)
         let label = displayTitle(for: session, character: char)
+        let isCurrent = session.id == store.currentSessionID
         return VStack(spacing: 6) {
             ZStack {
+                if isCurrent {
+                    Circle()
+                        .stroke(Color.accentColor, lineWidth: 2.5)
+                        .frame(width: 70, height: 70)
+                }
                 Circle()
-                    .fill(Color.accentColor.opacity(0.15))
+                    .fill(Color.accentColor.opacity(isCurrent ? 0.22 : 0.15))
                     .frame(width: 66, height: 66)
                 AvatarView(
                     imageData: char?.avatarData,
                     name: char?.name ?? label,
                     size: 56
                 )
+                if session.isPinned {
+                    Image(systemName: "pin.fill")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(5)
+                        .background(Color.accentColor, in: Circle())
+                        .offset(x: 24, y: -24)
+                }
             }
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.primary)
+                .foregroundStyle(isCurrent ? Color.accentColor : Color.primary)
+                .fontWeight(isCurrent ? .semibold : .regular)
                 .lineLimit(1)
                 .frame(maxWidth: 88)
         }

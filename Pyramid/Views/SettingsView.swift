@@ -123,6 +123,29 @@ struct SettingsView: View {
                     Text("按字符数粗略估算会话长度与即将注入的世界书内容，超过阈值时提示。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                    Picker("裁剪策略", selection: contextTrimModeBinding) {
+                        ForEach(ContextTrimMode.allCases) { mode in
+                            Text(mode.label).tag(mode)
+                        }
+                    }
+                    if settings.contextTrimMode == .byMessages {
+                        Stepper(
+                            "保留最近 \(settings.contextTrimMessages) 条消息",
+                            value: $settings.contextTrimMessages,
+                            in: 2...500,
+                            step: 5
+                        )
+                    } else if settings.contextTrimMode == .byCharacters {
+                        Stepper(
+                            "保留最近 \(settings.contextTrimCharacters.formatted()) 字符",
+                            value: $settings.contextTrimCharacters,
+                            in: 500...80000,
+                            step: 500
+                        )
+                    }
+                    Text("「不裁剪」发送全量历史；「按消息 / 字符」仅发送最近 N 条 / C 字符。当前用户消息始终保留。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
                 Section("界面") {
                     Toggle("显示头像", isOn: $settings.showAvatars)
@@ -308,6 +331,13 @@ struct SettingsView: View {
         Binding(
             get: { settings.userAvatarData.isEmpty ? nil : settings.userAvatarData },
             set: { settings.userAvatarData = $0 ?? Data() }
+        )
+    }
+
+    private var contextTrimModeBinding: Binding<ContextTrimMode> {
+        Binding(
+            get: { settings.contextTrimMode },
+            set: { settings.contextTrimMode = $0 }
         )
     }
 

@@ -15,6 +15,12 @@ final class AppSettings: ObservableObject {
     @AppStorage("showTimestamps") var showTimestamps = true
     @AppStorage("showAvatars") var showAvatars = true
 
+    // 上下文裁剪
+    /// `.off` / `.byMessages` / `.byCharacters`。默认按消息条数（最近 50 条）。
+    @AppStorage("contextTrimMode") var contextTrimModeRaw = "byMessages"
+    @AppStorage("contextTrimMessages") var contextTrimMessages = 50
+    @AppStorage("contextTrimCharacters") var contextTrimCharacters = 8000
+
     // 用户人设
     @AppStorage("userName") var userName = ""
     @AppStorage("userAvatarData") var userAvatarData = Data()

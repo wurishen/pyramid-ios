@@ -143,6 +143,35 @@ final class ChatStore: ObservableObject {
         save()
     }
 
+    func rename(_ sessionID: UUID, to newTitle: String) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        sessions[index].title = trimmed.isEmpty ? "新会话" : trimmed
+        save()
+    }
+
+    func togglePinned(_ sessionID: UUID) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        sessions[index].isPinned.toggle()
+        save()
+    }
+
+    func setDraft(_ draft: String, for sessionID: UUID) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        if sessions[index].draft != draft {
+            sessions[index].draft = draft
+            save()
+        }
+    }
+
+    /// 列表展示顺序：置顶在前，其余保持插入顺序。
+    func orderedSessions() -> [ChatSession] {
+        sessions.sorted { lhs, rhs in
+            if lhs.isPinned != rhs.isPinned { return lhs.isPinned && !rhs.isPinned }
+            return lhs.createdAt > rhs.createdAt
+        }
+    }
+
     private static func defaultTitle(for content: String) -> String {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         let maxLength = 20
