@@ -92,15 +92,11 @@ enum MessageRenderer {
     }
 
     /// Markdown 渲染：先 AttributedString(markdown:) 解析失败时降级为剥离 HTML 后的纯文本。
+    /// 链接点击走 SwiftUI Text 自身的 OpenURLAction（与 MarkdownTextView 行为一致），
+    /// 不在 AttributedString 上挂 environment（AttributedString 不支持 OpenURLAction）。
     private static func markdown(_ text: String) -> AttributedString {
         if let parsed = try? AttributedString(markdown: text) {
-            var attr = parsed
-            // 链接走 openURL；保持与 MarkdownTextView 行为一致。
-            attr.environment(\.openURL, OpenURLAction { url in
-                UIApplication.shared.open(url)
-                return .handled
-            })
-            return attr
+            return parsed
         }
         return plain(stripHTMLTags(text))
     }
