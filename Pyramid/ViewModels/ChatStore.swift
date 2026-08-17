@@ -131,6 +131,18 @@ final class ChatStore: ObservableObject {
         save()
     }
 
+    func setUserDisplayNameOverride(_ name: String, for sessionID: UUID) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        sessions[index].userDisplayNameOverride = name
+        save()
+    }
+
+    func setExtraWorldBookIds(_ ids: [UUID], for sessionID: UUID) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        sessions[index].extraWorldBookIds = ids
+        save()
+    }
+
     private static func defaultTitle(for content: String) -> String {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         let maxLength = 20

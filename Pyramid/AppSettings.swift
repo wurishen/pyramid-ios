@@ -14,6 +14,12 @@ final class AppSettings: ObservableObject {
     @AppStorage("compactMode") var compactMode = false
     @AppStorage("showTimestamps") var showTimestamps = true
     @AppStorage("showAvatars") var showAvatars = true
+
+    // 用户人设
     @AppStorage("userName") var userName = ""
     @AppStorage("userAvatarData") var userAvatarData = Data()
+    @AppStorage("userPersona") var userPersona = ""
+    @AppStorage("userPersonaInjected") var userPersonaInjected = true
+    /// 若与 userName 不同，可显式指定对 AI 看到的用户名；为空则用 userName。
+    @AppStorage("userDisplayName") var userDisplayName = ""
 }

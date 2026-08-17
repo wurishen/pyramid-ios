@@ -31,6 +31,12 @@ struct SessionDetailView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            Section("用户") {
+                TextField("本会话对 AI 显示的用户名（留空 = 用全局）", text: userDisplayNameBinding)
+                Text("不修改你的实际昵称，只影响与 AI 的对话显示。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
             Section("预设") {
                 Picker("应用预设", selection: appliedPresetBinding) {
                     Text("无").tag(Optional<UUID>.none)
@@ -52,6 +58,14 @@ struct SessionDetailView: View {
                 Text("绑定的会话只使用该书做关键词匹配注入；未绑定时回退到全局世界书。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                DisclosureGroup("会话额外启用 (\(extraWorldBookIdsBinding.wrappedValue.count))") {
+                    ForEach(worldBook.books) { book in
+                        Toggle(book.title, isOn: extraWorldBookBinding(for: book.id))
+                    }
+                    Text("会话额外启用的世界书与「全局启用 + 角色绑定」并集，共同决定本会话的注入源。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
             Section("系统提示词") {
                 TextEditor(text: systemPromptBinding)
@@ -98,6 +112,35 @@ struct SessionDetailView: View {
                    let preset = presets.presets.first(where: { $0.id == presetID }) {
                     apply(preset)
                 }
+            }
+        )
+    }
+
+    private var userDisplayNameBinding: Binding<String> {
+        Binding(
+            get: { store.sessions.first { $0.id == sessionID }?.userDisplayNameOverride ?? "" },
+            set: { store.setUserDisplayNameOverride($0, for: sessionID) }
+        )
+    }
+
+    private var extraWorldBookIdsBinding: Binding<[UUID]> {
+        Binding(
+            get: { store.sessions.first { $0.id == sessionID }?.extraWorldBookIds ?? [] },
+            set: { store.setExtraWorldBookIds($0, for: sessionID) }
+        )
+    }
+
+    private func extraWorldBookBinding(for bookID: UUID) -> Binding<Bool> {
+        Binding(
+            get: { extraWorldBookIdsBinding.wrappedValue.contains(bookID) },
+            set: { isOn in
+                var current = extraWorldBookIdsBinding.wrappedValue
+                if isOn {
+                    if !current.contains(bookID) { current.append(bookID) }
+                } else {
+                    current.removeAll { $0 == bookID }
+                }
+                extraWorldBookIdsBinding.wrappedValue = current
             }
         )
     }

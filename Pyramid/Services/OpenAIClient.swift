@@ -28,6 +28,8 @@ struct OpenAIClient {
     let apiKey: String
     let model: String
     let systemPrompt: String
+    /// 用户人设正文的独立段（前置 system 消息）。空字符串 = 不注入。
+    let userPersonaText: String
     let beforeSystemText: String
     let afterSystemText: String
     let afterHistoryText: String
@@ -120,6 +122,10 @@ struct OpenAIClient {
         }
 
         var requestMessages: [ChatCompletionRequest.Message] = []
+        // 顺序：用户人设 → 角色 → 会话/预设系统词 → 世界书 → 历史 → 用户消息
+        if !userPersonaText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            requestMessages.append(.init(role: "system", content: userPersonaText))
+        }
         if !beforeSystemText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             requestMessages.append(.init(role: "system", content: beforeSystemText))
         }

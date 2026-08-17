@@ -90,7 +90,9 @@ final class ChatViewModel: ObservableObject {
         scrollVersion += 1
 
         let history = store.currentMessages
-        let entries = worldBookEntries(input: text, history: history)
+        let session = store.currentSession
+        let character = characters.character(for: session?.characterId)
+        let entries = worldBookEntries(input: text, history: history, session: session, character: character)
         lastInjectedCount = entries.count
         let grouped = WorldBookService.groupByPosition(entries)
         let preset = currentPreset
@@ -99,6 +101,7 @@ final class ChatViewModel: ObservableObject {
             apiKey: settings.apiKey,
             model: settings.modelName,
             systemPrompt: effectiveSystemPrompt,
+            userPersonaText: userPersonaText,
             beforeSystemText: WorldBookService.injectionText(for: grouped[.beforeSystem] ?? []),
             afterSystemText: WorldBookService.injectionText(for: grouped[.afterSystem] ?? []),
             afterHistoryText: WorldBookService.injectionText(for: grouped[.afterHistory] ?? []),
@@ -168,13 +171,47 @@ final class ChatViewModel: ObservableObject {
         return parts.joined(separator: "\n\n")
     }
 
-    private func worldBookEntries(input: String, history: [ChatMessage]) -> [WorldBookEntry] {
+    private func worldBookEntries(input: String, history: [ChatMessage], session: ChatSession?, character: Character?) -> [WorldBookEntry] {
         guard settings.worldBookEnabled else { return [] }
-        let sessionBookId = store.currentSession?.worldBookId
-        let charBookId = characters.character(for: store.currentSession?.characterId)?.worldBookId
-        let bookId = sessionBookId ?? charBookId
-        let book = worldBook.book(for: bookId)
-        return WorldBookService.selectedEntries(for: input, history: history, entries: book.entries)
+        let activeBooks = worldBook.activeBooks(for: session, character: character)
+        if activeBooks.isEmpty { return [] }
+        // 多本书依次匹配，命中条目按 priority 升序合并。
+        // SPEC 上限（20 条 / 2000 字符）由 WorldBookService.selectedEntries 截断保证。
+        var collected: [WorldBookEntry] = []
+        for book in activeBooks {
+            let matched = WorldBookService.selectedEntries(for: input, history: history, entries: book.entries)
+            collected.append(contentsOf: matched)
+        }
+        return collected
+    }
+
+    /// 用户人设正文。开关关闭或人设为空时返回空串。
+    /// 顺序：用户人设 → 角色 → 会话/预设 → 世界书 → 历史 → 用户消息（与 SPEC 一致）。
+    private var userPersonaText: String {
+        guard settings.userPersonaInjected else { return "" }
+        let persona = settings.userPersona.trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayName = effectiveUserDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !persona.isEmpty || !displayName.isEmpty else { return "" }
+        var lines: [String] = []
+        if !displayName.isEmpty {
+            lines.append("用户在对话中自称：\(displayName)")
+        }
+        if !persona.isEmpty {
+            lines.append(persona)
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// 对 AI 显示的用户名。会话覆盖 > 全局 userDisplayName > 全局 userName。
+    private var effectiveUserDisplayName: String {
+        if let session = store.currentSession,
+           !session.userDisplayNameOverride.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return session.userDisplayNameOverride
+        }
+        if !settings.userDisplayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return settings.userDisplayName
+        }
+        return settings.userName
     }
 
     private func message(for error: Error) -> String {

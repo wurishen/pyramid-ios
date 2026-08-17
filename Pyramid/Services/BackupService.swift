@@ -1,6 +1,6 @@
 import Foundation
 
-/// 全量备份的结构：会话 / 角色 / 世界书 / 预设 / 当前会话指针。
+/// 全量备份的结构：会话 / 角色 / 世界书 / 预设 / 用户人设 / 当前会话指针。
 /// 单 JSON 文件，方便真机通过「文件」App 读取或迁移。
 struct PyramidBackup: Codable {
     var version: Int
@@ -10,6 +10,11 @@ struct PyramidBackup: Codable {
     var characters: [Character]
     var worldBooks: [WorldBook]
     var presets: [Preset]
+    var userName: String
+    var userDisplayName: String
+    var userAvatarData: Data
+    var userPersona: String
+    var userPersonaInjected: Bool
 
     init(version: Int = 1,
          exportedAt: Date = Date(),
@@ -17,7 +22,12 @@ struct PyramidBackup: Codable {
          currentSessionID: UUID?,
          characters: [Character],
          worldBooks: [WorldBook],
-         presets: [Preset]) {
+         presets: [Preset],
+         userName: String = "",
+         userDisplayName: String = "",
+         userAvatarData: Data = Data(),
+         userPersona: String = "",
+         userPersonaInjected: Bool = true) {
         self.version = version
         self.exportedAt = exportedAt
         self.sessions = sessions
@@ -25,6 +35,11 @@ struct PyramidBackup: Codable {
         self.characters = characters
         self.worldBooks = worldBooks
         self.presets = presets
+        self.userName = userName
+        self.userDisplayName = userDisplayName
+        self.userAvatarData = userAvatarData
+        self.userPersona = userPersona
+        self.userPersonaInjected = userPersonaInjected
     }
 }
 
@@ -47,14 +62,20 @@ enum BackupService {
         store: ChatStore,
         characters: CharacterStore,
         worldBook: WorldBookStore,
-        presets: PresetStore
+        presets: PresetStore,
+        settings: AppSettings
     ) throws -> URL {
         let backup = PyramidBackup(
             sessions: store.sessions,
             currentSessionID: store.currentSessionID,
             characters: characters.characters,
             worldBooks: worldBook.books,
-            presets: presets.presets
+            presets: presets.presets,
+            userName: settings.userName,
+            userDisplayName: settings.userDisplayName,
+            userAvatarData: settings.userAvatarData,
+            userPersona: settings.userPersona,
+            userPersonaInjected: settings.userPersonaInjected
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -87,7 +108,8 @@ enum BackupService {
                       store: ChatStore,
                       characters: CharacterStore,
                       worldBook: WorldBookStore,
-                      presets: PresetStore) {
+                      presets: PresetStore,
+                      settings: AppSettings) {
         mergeByID(into: &store.sessions, items: backup.sessions)
         mergeByID(into: &characters.characters, items: backup.characters)
         mergeByID(into: &worldBook.books, items: backup.worldBooks)
@@ -96,6 +118,7 @@ enum BackupService {
            store.sessions.contains(where: { $0.id == id }) {
             store.currentSessionID = id
         }
+        applyUserPersona(backup: backup, settings: settings)
         store.save()
         characters.save()
         worldBook.save()
@@ -106,16 +129,26 @@ enum BackupService {
                           store: ChatStore,
                           characters: CharacterStore,
                           worldBook: WorldBookStore,
-                          presets: PresetStore) {
+                          presets: PresetStore,
+                          settings: AppSettings) {
         store.sessions = backup.sessions
         store.currentSessionID = backup.sessions.first?.id
         characters.characters = backup.characters
         worldBook.books = backup.worldBooks
         presets.presets = backup.presets
+        applyUserPersona(backup: backup, settings: settings)
         store.save()
         characters.save()
         worldBook.save()
         presets.save()
+    }
+
+    private static func applyUserPersona(backup: PyramidBackup, settings: AppSettings) {
+        settings.userName = backup.userName
+        settings.userDisplayName = backup.userDisplayName
+        settings.userAvatarData = backup.userAvatarData
+        settings.userPersona = backup.userPersona
+        settings.userPersonaInjected = backup.userPersonaInjected
     }
 
     private static func mergeByID<T: Identifiable>(into target: inout [T], items: [T]) {

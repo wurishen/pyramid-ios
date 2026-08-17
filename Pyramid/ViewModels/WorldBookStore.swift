@@ -26,6 +26,33 @@ final class WorldBookStore: ObservableObject {
         return globalBook
     }
 
+    /// 当前会话参与注入的世界书集合（三级作用域并集）。
+    /// - 全局启用: `isGloballyEnabled == true`
+    /// - 角色绑定: `character.worldBookId` 对应书
+    /// - 会话临时启用: `session.extraWorldBookIds`
+    /// 顺序: 全局 → 角色 → 会话额外；同 ID 重复出现只保留首个。
+    func activeBooks(for session: ChatSession?, character: Character?) -> [WorldBook] {
+        var seen = Set<UUID>()
+        var result: [WorldBook] = []
+        for book in books where book.isGloballyEnabled {
+            if seen.insert(book.id).inserted { result.append(book) }
+        }
+        if let char = character, let id = char.worldBookId,
+           let book = books.first(where: { $0.id == id }),
+           seen.insert(book.id).inserted {
+            result.append(book)
+        }
+        if let session {
+            for id in session.extraWorldBookIds {
+                if let book = books.first(where: { $0.id == id }),
+                   seen.insert(book.id).inserted {
+                    result.append(book)
+                }
+            }
+        }
+        return result
+    }
+
     @discardableResult
     func createBook() -> WorldBook {
         let book = WorldBook(title: "世界书 \(books.count + 1)")
@@ -125,9 +152,10 @@ final class WorldBookStore: ObservableObject {
             save()
             let entries = decoded.reduce(0) { $0 + $1.entries.count }
             worldBookLog.info("overwrite import: \(decoded.count) book(s), \(entries) entries")
-            return WorldBookImportResult(books: decoded.count, entries: entries)
+            return WorldBookImportResult(books: decoded.count, entries: entries, firstBookID: decoded.first?.id)
         case .merge:
             var addedEntries = 0
+            var firstBookID: UUID?
             for book in decoded {
                 if let bookIndex = books.firstIndex(where: { $0.id == book.id }) {
                     var merged = books[bookIndex]
@@ -136,23 +164,31 @@ final class WorldBookStore: ObservableObject {
                         addedEntries += 1
                     }
                     books[bookIndex] = merged
+                    if firstBookID == nil { firstBookID = merged.id }
                 } else {
                     books.append(book)
                     addedEntries += book.entries.count
+                    if firstBookID == nil { firstBookID = book.id }
                 }
             }
             save()
             worldBookLog.info("merge import: \(decoded.count) book(s) processed, \(addedEntries) entries added")
-            return WorldBookImportResult(books: decoded.count, entries: addedEntries)
+            return WorldBookImportResult(books: decoded.count, entries: addedEntries, firstBookID: firstBookID)
         }
     }
 
     @discardableResult
-    func createBook(title: String, entries: [WorldBookEntry]) -> WorldBook {
-        let book = WorldBook(title: title, entries: entries)
+    func createBook(title: String, entries: [WorldBookEntry], isGloballyEnabled: Bool = true) -> WorldBook {
+        let book = WorldBook(title: title, entries: entries, isGloballyEnabled: isGloballyEnabled)
         books.append(book)
         save()
         return book
+    }
+
+    func setGloballyEnabled(_ enabled: Bool, for bookID: UUID) {
+        guard let index = books.firstIndex(where: { $0.id == bookID }) else { return }
+        books[index].isGloballyEnabled = enabled
+        save()
     }
 
     @discardableResult
@@ -344,6 +380,8 @@ enum WorldBookImportMode {
 struct WorldBookImportResult {
     var books: Int
     var entries: Int
+    /// 当次导入新增/合并后的第一本书的 ID（用于「导入后绑定到角色」流）。
+    var firstBookID: UUID?
 }
 
 struct WorldBookImportContent {

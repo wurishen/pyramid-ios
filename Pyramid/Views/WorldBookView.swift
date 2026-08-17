@@ -7,6 +7,7 @@ private let importLog = Logger(subsystem: "pyramid.import", category: "WorldBook
 struct WorldBookView: View {
     @ObservedObject var store: WorldBookStore
     @ObservedObject var settings: AppSettings
+    @ObservedObject var characters: CharacterStore
     @State private var viewingBookID: UUID
     @State private var editingEntry: WorldBookEntry?
     @State private var searchText = ""
@@ -26,6 +27,29 @@ struct WorldBookView: View {
     @State private var renameTargetID: UUID?
     @State private var showRenameDialog = false
     @State private var showDeleteBookConfirm = false
+    @State private var pendingImportMode: ImportScope = .globalEnabled
+    @State private var pendingBindCharacter: Character?
+
+    private enum ImportScope: String, CaseIterable, Identifiable {
+        case globalEnabled = "global"
+        case bindCurrentCharacter = "character"
+        case inactive = "inactive"
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .globalEnabled: return "全局启用（默认）"
+            case .bindCurrentCharacter: return "绑定到当前角色"
+            case .inactive: return "仅入库，不注入"
+            }
+        }
+    }
+
+    init(store: WorldBookStore, settings: AppSettings, characters: CharacterStore) {
+        self.store = store
+        self.settings = settings
+        self.characters = characters
+        _viewingBookID = State(initialValue: store.globalBook.id)
+    }
 
     init(store: WorldBookStore, settings: AppSettings) {
         self.store = store
@@ -83,12 +107,27 @@ struct WorldBookView: View {
                         .accessibilityLabel("删除当前世界书")
                     }
                 }
+                Toggle("全局启用", isOn: globalEnabledBinding)
+                Text(scopeDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Button {
                     newBookName = ""
                     showCreateBookDialog = true
                 } label: {
                     Label("新建世界书", systemImage: "plus.circle")
                 }
+            }
+            Section("角色绑定") {
+                Picker("绑定到角色", selection: boundCharacterBinding) {
+                    Text("不绑定").tag(Optional<UUID>.none)
+                    ForEach(characters.characters) { char in
+                        Text(char.name.isEmpty ? "未命名" : char.name).tag(Optional(char.id))
+                    }
+                }
+                Text("角色绑定：当前选中的世界书会与该角色一同注入；同一角色的世界书可被多个角色独立绑定。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
             Section("条目（\(filteredEntries.count)）") {
                 if filteredEntries.isEmpty {
@@ -142,8 +181,21 @@ struct WorldBookView: View {
                         Label("导出全部世界书", systemImage: "books.vertical")
                     }
                     Divider()
-                    Button {
-                        showDocumentPicker = true
+                    Menu {
+                        Button {
+                            pendingBindCharacter = nil
+                            showDocumentPicker = true
+                        } label: {
+                            Label("不指定角色（按导入对话框选择）", systemImage: "person.crop.circle.dashed")
+                        }
+                        ForEach(characters.characters) { char in
+                            Button {
+                                pendingBindCharacter = char
+                                showDocumentPicker = true
+                            } label: {
+                                Text("导入后绑到「\(char.name.isEmpty ? "未命名" : char.name)」")
+                            }
+                        }
                     } label: {
                         Label("导入…", systemImage: "square.and.arrow.down")
                     }
@@ -173,12 +225,31 @@ struct WorldBookView: View {
         ) {
             if let content = pendingImportContent {
                 if content.isSillyTavern {
-                    Button("新建世界书（\(importTitleSuggestion)）") {
+                    Button("新建世界书（\(importTitleSuggestion)）— 全局启用") {
                         let count = content.entries.count
-                        let book = store.createBook(title: importTitleSuggestion, entries: content.entries)
+                        let book = store.createBook(title: importTitleSuggestion, entries: content.entries, isGloballyEnabled: true)
                         viewingBookID = book.id
                         advanceImportQueue()
                         showImportSuccess("已导入 \(count) 条")
+                    }
+                    if let char = pendingBindCharacter {
+                        Button("新建世界书（\(importTitleSuggestion)）— 绑定到「\(char.name.isEmpty ? "未命名" : char.name)」") {
+                            let count = content.entries.count
+                            let book = store.createBook(title: importTitleSuggestion, entries: content.entries, isGloballyEnabled: false)
+                            characters.upsert(Character(
+                                id: char.id,
+                                name: char.name,
+                                avatarData: char.avatarData,
+                                description: char.description,
+                                personality: char.personality,
+                                scenario: char.scenario,
+                                systemPrompt: char.systemPrompt,
+                                worldBookId: book.id
+                            ))
+                            viewingBookID = book.id
+                            advanceImportQueue()
+                            showImportSuccess("已导入 \(count) 条并绑到「\(char.name.isEmpty ? "未命名" : char.name)」")
+                        }
                     }
                     Button("合并到当前世界书") {
                         let count = store.mergeEntries(content.entries, into: currentBook.id)
@@ -192,12 +263,32 @@ struct WorldBookView: View {
                     }
                     Button("取消", role: .cancel) { cancelImportQueue() }
                 } else {
-                    Button("合并（按 id 去重）") {
+                    Button("合并（按 id 去重，默认全局启用）") {
                         let result = store.importBooks(content.books, mode: .merge)
                         advanceImportQueue()
                         showImportSuccess("已导入 \(result.books) 本 / \(result.entries) 条")
                     }
-                    Button("覆盖", role: .destructive) {
+                    if let char = pendingBindCharacter {
+                        Button("合并入库并绑到「\(char.name.isEmpty ? "未命名" : char.name)」") {
+                            let result = store.importBooks(content.books, mode: .merge)
+                            if let first = result.firstBookID {
+                                characters.upsert(Character(
+                                    id: char.id,
+                                    name: char.name,
+                                    avatarData: char.avatarData,
+                                    description: char.description,
+                                    personality: char.personality,
+                                    scenario: char.scenario,
+                                    systemPrompt: char.systemPrompt,
+                                    worldBookId: first
+                                ))
+                                viewingBookID = first
+                            }
+                            advanceImportQueue()
+                            showImportSuccess("已导入 \(result.books) 本 / \(result.entries) 条（绑到「\(char.name.isEmpty ? "未命名" : char.name)」）")
+                        }
+                    }
+                    Button("覆盖（替换全部世界书）", role: .destructive) {
                         let result = store.importBooks(content.books, mode: .overwrite)
                         viewingBookID = store.globalBook.id
                         advanceImportQueue()
@@ -211,9 +302,9 @@ struct WorldBookView: View {
                 let remaining = pendingImportContents.count - pendingImportIndex - 1
                 let suffix = remaining > 0 ? "（还有 \(remaining) 个文件待处理）" : ""
                 if content.isSillyTavern {
-                    Text("识别为酒馆（SillyTavern）世界书，共 \(content.entries.count) 条条目。合并会追加到当前世界书并按内容去重；覆盖会替换当前世界书的全部条目。\(suffix)")
+                    Text("识别为酒馆（SillyTavern）世界书，共 \(content.entries.count) 条条目。\(suffix)")
                 } else {
-                    Text("覆盖将替换当前全部世界书。\(suffix)")
+                    Text("合并按 id 去重；覆盖替换当前全部世界书。\(suffix)")
                 }
             }
         }
@@ -280,6 +371,45 @@ struct WorldBookView: View {
             get: { exportFileURL != nil },
             set: { if !$0 { exportFileURL = nil } }
         )
+    }
+
+    private var globalEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { currentBook.isGloballyEnabled },
+            set: { store.setGloballyEnabled($0, for: viewingBookID) }
+        )
+    }
+
+    private var boundCharacterBinding: Binding<UUID?> {
+        Binding(
+            get: {
+                characters.characters.first { $0.worldBookId == viewingBookID }?.id
+            },
+            set: { newID in
+                if let char = characters.characters.first(where: { $0.id == newID }) {
+                    characters.upsert(Character(
+                        id: char.id,
+                        name: char.name,
+                        avatarData: char.avatarData,
+                        description: char.description,
+                        personality: char.personality,
+                        scenario: char.scenario,
+                        systemPrompt: char.systemPrompt,
+                        worldBookId: viewingBookID
+                    ))
+                }
+            }
+        )
+    }
+
+    private var scopeDescription: String {
+        if currentBook.isGloballyEnabled {
+            return "当前作用域：全局启用，进入会话时自动随匹配注入。"
+        }
+        if let char = characters.characters.first(where: { $0.worldBookId == viewingBookID }) {
+            return "当前作用域：仅与「\(char.name.isEmpty ? "未命名" : char.name)」绑定。仅在选用该角色时注入。"
+        }
+        return "当前作用域：未启用。需要在 Picker 之外的会话中手动选择或上方设开关启用。"
     }
 
     private var importErrorBinding: Binding<Bool> {
@@ -418,6 +548,6 @@ struct ExportShareSheet: View {
 
 #Preview {
     NavigationStack {
-        WorldBookView(store: WorldBookStore(), settings: AppSettings())
+        WorldBookView(store: WorldBookStore(), settings: AppSettings(), characters: CharacterStore())
     }
 }

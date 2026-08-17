@@ -47,6 +47,14 @@ struct SettingsView: View {
                         }
                     }
                     .padding(.vertical, 4)
+                    TextField("对 AI 看到的用户名（留空 = 用昵称）", text: $settings.userDisplayName)
+                        .textContentType(.nickname)
+                    TextField("用户人设（多行正文，可描述背景、性格、说话风格）", text: $settings.userPersona, axis: .vertical)
+                        .lineLimit(3...10)
+                    Toggle("将用户人设注入对话", isOn: $settings.userPersonaInjected)
+                    Text("作为默认用户，对新会话生效。会话详情可覆盖本会话的用户名。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
                 .sheet(isPresented: $showUserAvatarPicker) {
                     AvatarPickerSheet(data: userAvatarBinding)
@@ -96,7 +104,7 @@ struct SettingsView: View {
                     Toggle("启用世界书", isOn: $settings.worldBookEnabled)
                     Toggle("显示注入提示（调试）", isOn: $settings.showInjectionIndicator)
                     NavigationLink("管理世界书条目") {
-                        WorldBookView(store: worldBook, settings: settings)
+                        WorldBookView(store: worldBook, settings: settings, characters: characters)
                     }
                 }
                 Section("预设") {
@@ -219,7 +227,8 @@ struct SettingsView: View {
                             store: store,
                             characters: characters,
                             worldBook: worldBook,
-                            presets: presets
+                            presets: presets,
+                            settings: settings
                         )
                         backupSuccess = "已合并 \(backup.sessions.count) 个会话 / \(backup.characters.count) 个角色 / \(backup.worldBooks.count) 本世界书 / \(backup.presets.count) 个预设"
                         pendingBackup = nil
@@ -244,7 +253,8 @@ struct SettingsView: View {
                             store: store,
                             characters: characters,
                             worldBook: worldBook,
-                            presets: presets
+                            presets: presets,
+                            settings: settings
                         )
                         backupSuccess = "已覆盖：\(backup.sessions.count) 个会话 / \(backup.characters.count) 个角色 / \(backup.worldBooks.count) 本世界书 / \(backup.presets.count) 个预设"
                     }
@@ -334,7 +344,8 @@ struct SettingsView: View {
                 store: store,
                 characters: characters,
                 worldBook: worldBook,
-                presets: presets
+                presets: presets,
+                settings: settings
             )
             backupURL = url
             backupSuccess = "已导出：\(url.lastPathComponent)"

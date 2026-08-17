@@ -111,7 +111,23 @@ TabView
 条目内容 2
 ```
 
-### 3.4 多世界书系统
+### 3.4 作用域（三级）
+
+世界书参与注入必须命中下面三种作用域之一，否则**不参与**匹配：
+
+| 作用域 | 字段 | 行为 |
+|--------|------|------|
+| **全局启用** | `WorldBook.isGloballyEnabled: Bool` | 开关为 true 的书进入「全局启用集合」，进入任何会话都参与匹配 |
+| **角色绑定** | `Character.worldBookId: UUID?` | 角色卡自带的世界书，仅在该角色被选中时参与匹配 |
+| **会话临时启用** | `ChatSession.extraWorldBookIds: [UUID]` | 会话详情「会话额外启用」中勾选的书，仅当前会话参与匹配 |
+
+注入源 = `全局启用 ∪ 角色绑定(若已选) ∪ 会话额外启用`（按 ID 去重，顺序：全局 → 角色 → 会话）。**所有书一锅炖已禁止**。
+
+导入默认入库为「全局启用」。在导入对话框可选择「绑定到当前角色」将书绑给已选角色，或「覆盖当前世界书条目」覆盖条目但保留作用域。
+
+> 旧数据兼容：旧 `WorldBook` 默认 `isGloballyEnabled = true`，即「所有书默认全局启用」的旧行为；新导入的书严格按入库时的作用域。
+
+### 3.5 多世界书系统
 
 - 支持多个世界书，列表首项为"全局世界书"（始终存在，不能删除）
 - 会话可绑定特定世界书（`worldBookId`）
@@ -215,12 +231,33 @@ TabView
 - 无图片时显示主题色浅底 + 主题色首字母（取 `name` 首字符大写）
 - 角色与用户共用该组件
 
-### 5.3 用户头像设置
+### 5.3 用户人设（Persona）
 
-- 在「设置 → 用户」中可设置**昵称**与**用户头像**
-- 头像更换方式与角色一致（相册 / 相机 / 移除），圆形预览
-- 设置后聊天页用户消息气泡旁即显示该头像
-- 关闭 `showAvatars` 后聊天页用户消息气泡不再显示头像
+| 字段 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `userName` | String | `""` | 用户昵称（气泡昵称、占位首字母） |
+| `userAvatarData` | Data | 空 | 用户头像（圆形） |
+| `userDisplayName` | String | `""` | 对 AI 看到的用户名（空 = 用 `userName`） |
+| `userPersona` | String | `""` | 用户人设正文（多行） |
+| `userPersonaInjected` | Bool | `true` | 是否将人设注入对话（默认开） |
+
+- `userDisplayName`：若与昵称分开可在此填写；为空则向 AI 报告你在聊天里自称的昵称。
+- `userPersona`：描述背景、性格、说话风格等，可与角色卡独立。
+- 「将用户人设注入对话」开关关闭后，**不写入请求**，仅在本机保留。
+- 会话级覆盖：在「会话详情」可填「本会话对 AI 显示的用户名」，覆盖全局 `userDisplayName`（仍改动全局 `userName`）。
+
+### 5.4 API 注入顺序（与 SPEC 10.2 同步）
+
+| 顺位 | 内容 | 来源 |
+|------|------|------|
+| 1 | user-persona 系统段 | `AppSettings.userPersona` + `userDisplayName`（开关开时） |
+| 2 | beforeSystem 世界书 | 命中条目 (.beforeSystem) |
+| 3 | systemPrompt | 角色 systemPrompt → 会话 systemPrompt → 全局 systemPrompt |
+| 4 | afterSystem 世界书 | 命中条目 (.afterSystem) |
+| 5 | history | 用户/助手消息原文 |
+| 6 | afterHistory 世界书 | 命中条目 (.afterHistory) |
+
+> 楼层号 / 时间戳 / 「已注入世界书 N 条」均为纯 UI 装饰，**不写入 message.content**也不再随请求发送。
 
 ---
 
