@@ -145,12 +145,12 @@ struct DisplayRegexEditView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
-                        switch DisplayRegex.validate(pattern: editing.pattern) {
-                        case .success:
+                        do {
+                            try DisplayRegex.validate(pattern: editing.pattern)
                             onSave(editing.toRegex())
                             dismiss()
-                        case .failure(let msg):
-                            validationError = msg
+                        } catch {
+                            validationError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                         }
                     }
                     .disabled(editing.pattern.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

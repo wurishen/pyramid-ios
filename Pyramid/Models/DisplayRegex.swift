@@ -32,14 +32,13 @@ struct DisplayRegex: Codable, Identifiable, Equatable {
     }
 
     /// 用 NSRegularExpression 校验 pattern 是否能编译。UI 保存前调用以避免崩溃。
-    static func validate(pattern: String) -> Result<Void, String> {
+    static func validate(pattern: String) throws {
         let trimmed = pattern.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return .failure("正则不能为空") }
+        if trimmed.isEmpty { throw DisplayRegexError.empty }
         do {
             _ = try NSRegularExpression(pattern: trimmed, options: [.dotMatchesLineSeparators])
-            return .success(())
         } catch {
-            return .failure("正则不合法：\(error.localizedDescription)")
+            throw DisplayRegexError.invalid(error.localizedDescription)
         }
     }
 
@@ -50,8 +49,22 @@ struct DisplayRegex: Codable, Identifiable, Equatable {
         pattern = try c.decode(String.self, forKey: .pattern)
         replacement = try c.decode(String.self, forKey: .replacement)
         enabled = (try? c.decodeIfPresent(Bool.self, forKey: .enabled)) ?? true
-        let raw = (try? c.decodeIfPresent(String.self, forKey: .scope")) ?? Scope.assistantDisplayPre.rawValue
+        let raw = (try? c.decodeIfPresent(String.self, forKey: .scope)) ?? Scope.assistantDisplayPre.rawValue
         scope = Scope(rawValue: raw) ?? .assistantDisplayPre
+    }
+}
+
+enum DisplayRegexError: LocalizedError {
+    case empty
+    case invalid(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .empty:
+            return "正则不能为空"
+        case .invalid(let message):
+            return "正则不合法：\(message)"
+        }
     }
 }
 
