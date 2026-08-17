@@ -37,8 +37,6 @@ struct ChatView: View {
         chatScreen
     }
 
-    /// 全部 modifier 链分两段拼接：第一段基础修饰，第二段对话框/Sheet。
-    /// 拆分后类型检查器可在每个子作用域内完成推断，避免「reasonable time」超时。
     private var chatScreen: some View {
         chatScreenDialogs
             .sheet(isPresented: $showSessions, content: sessionsSheet)
@@ -77,7 +75,7 @@ struct ChatView: View {
             ) {
                 regenerateMessageButtons
             } message: {
-                Text("将删除该回复及其后的所有消息，并重新请求��")
+                Text("将删除该回复及其后的所有消息，并重新请求。")
             }
     }
 
@@ -95,25 +93,6 @@ struct ChatView: View {
             .onChange(of: viewModel.input) { _, _ in
                 viewModel.persistDraft()
             }
-    }
-
-    @ViewBuilder
-    private func sessionsSheet() -> some View {
-        SessionListView(store: store, worldBook: worldBook, settings: settings, presets: presets, characters: characters)
-    }
-
-    @ViewBuilder
-    private func rolePickerSheet() -> some View {
-        RolePickerView(characters: characters.characters) { role in
-            handleRoleSelection(role)
-        }
-    }
-
-    @ViewBuilder
-    private func editMessageSheet(_ message: ChatMessage) -> some View {
-        EditMessageSheet(initialText: message.content) { text in
-            viewModel.editMessage(message, newContent: text)
-        }
     }
 
     private var chatContent: some View {
@@ -156,6 +135,25 @@ struct ChatView: View {
                 )
                 .accessibilityLabel("当前用户")
             }
+        }
+    }
+
+    @ViewBuilder
+    private func sessionsSheet() -> some View {
+        SessionListView(store: store, worldBook: worldBook, settings: settings, presets: presets, characters: characters)
+    }
+
+    @ViewBuilder
+    private func rolePickerSheet() -> some View {
+        RolePickerView(characters: characters.characters) { role in
+            handleRoleSelection(role)
+        }
+    }
+
+    @ViewBuilder
+    private func editMessageSheet(_ message: ChatMessage) -> some View {
+        EditMessageSheet(initialText: message.content) { text in
+            viewModel.editMessage(message, newContent: text)
         }
     }
 
@@ -225,24 +223,8 @@ struct ChatView: View {
         Button("取消", role: .cancel) { regenerateMessage = nil }
     }
 
-    private func handleAppear() {
-        if lastSessionID != store.currentSessionID {
-            viewModel.handleSessionChange(previousID: lastSessionID, newID: store.currentSessionID)
-            lastSessionID = store.currentSessionID
-        }
-    }
-
-    private func copyAllToPasteboard() {
-        UIPasteboard.general.string = conversationText
-        withAnimation { showCopiedFeedback = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            withAnimation { showCopiedFeedback = false }
-        }
-    }
-
     private func sessionBar() -> some View {
         HStack(spacing: 12) {
-            // 左侧：当前角色卡头像 + 名称（不可点，仅展示）。
             HStack(spacing: 8) {
                 AvatarView(
                     imageData: currentCharacter?.avatarData,
@@ -258,7 +240,6 @@ struct ChatView: View {
             .accessibilityElement(children: .combine)
             .accessibilityLabel("当前角色")
             Spacer()
-            // 右侧：切换绑定角色按钮（点开 RolePickerView）。
             Button {
                 showRolePicker = true
             } label: {
@@ -464,336 +445,19 @@ struct ChatView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.red)
     }
-}
 
-struct RolePickerView: View {
-    let characters: [Character]
-    var onSelect: (Character?) -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Button {
-                    dismiss()
-                    onSelect(nil)
-                } label: {
-                    Label("不绑定角色", systemImage: "person.crop.circle.badge.minus")
-                }
-                if characters.isEmpty {
-                    Text("还没有角色卡，请在「设置 → 角色卡」中新建或导入。")
-                        .foregroundStyle(.secondary)
-                }
-                ForEach(characters) { character in
-                    Button {
-                        dismiss()
-                        onSelect(character)
-                    } label: {
-                        HStack(spacing: 12) {
-                            AvatarView(imageData: character.avatarData, name: character.name, size: 32)
-                            Text(character.name.isEmpty ? "未命名" : character.name)
-                                .foregroundStyle(.primary)
-                        }
-                    }
-                }
-            }
-            .navigationTitle("选择角色卡")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
-    }
-}
-
-struct MessageBubble: View {
-    let message: ChatMessage
-    var floorNumber: Int = 0
-    var isSending = false
-    var compact = false
-    var showTimestamp = false
-    var showAvatar = false
-    var userAvatarData: Data? = nil
-    var onCopy: () -> Void = {}
-    var onEdit: () -> Void = {}
-    var onRegenerate: () -> Void = {}
-    var onDelete: () -> Void = {}
-
-    private static let collapseThreshold = 800
-    @State private var expanded = false
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            if message.role == .user {
-                Spacer(minLength: 48)
-            }
-            VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    if message.role == .assistant {
-                        Text("\(floorNumber)")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                    bubbleContent
-                }
-                HStack(spacing: 6) {
-                    if message.role == .user {
-                        if let createdAt = message.createdAt, showTimestamp {
-                            Text(createdAt.formatted(date: .omitted, time: .shortened))
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-                        }
-                        Text("\(floorNumber)")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    } else {
-                        if let createdAt = message.createdAt, showTimestamp {
-                            Text(createdAt.formatted(date: .omitted, time: .shortened))
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
-                }
-                .padding(.horizontal, 4)
-            }
-            if message.role == .user {
-                if showAvatar {
-                    AvatarView(imageData: userAvatarData, name: "我", size: 28)
-                }
-            } else {
-                Spacer(minLength: 48)
-            }
+    private func handleAppear() {
+        if lastSessionID != store.currentSessionID {
+            viewModel.handleSessionChange(previousID: lastSessionID, newID: store.currentSessionID)
+            lastSessionID = store.currentSessionID
         }
     }
 
-    private var bubbleContent: some View {
-        Group {
-            if message.role == .assistant {
-                assistantContent
-            } else {
-                Text(message.content)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, compact ? 4 : 8)
-        .background(message.role == .user ? Color.accentColor : Color(.systemGray5))
-        .foregroundStyle(message.role == .user ? .white : .primary)
-        .clipShape(RoundedRectangle(cornerRadius: compact ? 10 : 14))
-        .contextMenu {
-            Button(action: onCopy) {
-                Label("复制", systemImage: "doc.on.doc")
-            }
-            if !isSending {
-                Button(action: onEdit) {
-                    Label("编辑", systemImage: "pencil")
-                }
-                if message.role == .assistant {
-                    Button(action: onRegenerate) {
-                        Label("重新生成", systemImage: "arrow.clockwise")
-                    }
-                }
-                Button(role: .destructive, action: onDelete) {
-                    Label("删除", systemImage: "trash")
-                }
-            }
-        }
-    }
-
-    private var assistantContent: some View {
-        let isLong = message.content.count > Self.collapseThreshold
-        return VStack(alignment: .leading, spacing: 6) {
-            MarkdownTextView(text: expanded ? message.content : collapsedContent)
-            if isLong {
-                Button(expanded ? "收起" : "展开") {
-                    withAnimation { expanded.toggle() }
-                }
-                .font(.caption)
-                .foregroundStyle(Color.accentColor)
-            }
-        }
-    }
-
-    private var collapsedContent: String {
-        guard message.content.count > Self.collapseThreshold else { return message.content }
-        let end = message.content.index(message.content.startIndex, offsetBy: Self.collapseThreshold)
-        return String(message.content[..<end]) + "…"
-    }
-}
-
-struct MarkdownTextView: View {
-    let text: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(MarkdownParser.blocks(from: text).enumerated()), id: \.offset) { _, block in
-                blockView(block)
-            }
-        }
-        .environment(\.openURL, OpenURLAction { url in
-            UIApplication.shared.open(url)
-            return .handled
-        })
-    }
-
-    @ViewBuilder
-    private func blockView(_ block: MarkdownBlock) -> some View {
-        switch block {
-        case .paragraph(let string):
-            Text(attributed(string))
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-        case .codeBlock(let code):
-            ScrollView(.horizontal, showsIndicators: false) {
-                Text(code)
-                    .font(.system(.footnote, design: .monospaced))
-                    .textSelection(.enabled)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(8)
-            .background(Color.black.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-        case .list(let items):
-            VStack(alignment: .leading, spacing: 3) {
-                ForEach(items.indices, id: \.self) { index in
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(items[index].prefix)
-                            .foregroundStyle(.secondary)
-                        Text(attributed(items[index].content))
-                            .fixedSize(horizontal: false, vertical: true)
-                            .textSelection(.enabled)
-                    }
-                }
-            }
-        }
-    }
-
-    private func attributed(_ string: String) -> AttributedString {
-        (try? AttributedString(markdown: string)) ?? AttributedString(string)
-    }
-}
-
-private enum MarkdownBlock: Hashable {
-    case paragraph(String)
-    case codeBlock(String)
-    case list([MarkdownListItem])
-}
-
-private struct MarkdownListItem: Hashable {
-    let prefix: String
-    let content: String
-}
-
-private enum MarkdownParser {
-    static func blocks(from text: String) -> [MarkdownBlock] {
-        let lines = text.components(separatedBy: "\n")
-        var blocks: [MarkdownBlock] = []
-        var index = 0
-
-        while index < lines.count {
-            let line = lines[index]
-
-            if line.trimmingCharacters(in: .whitespaces).isEmpty {
-                index += 1
-                continue
-            }
-
-            if line.hasPrefix("```") {
-                var codeLines: [String] = []
-                index += 1
-                while index < lines.count && !lines[index].hasPrefix("```") {
-                    codeLines.append(lines[index])
-                    index += 1
-                }
-                if index < lines.count { index += 1 }
-                blocks.append(.codeBlock(codeLines.joined(separator: "\n")))
-                continue
-            }
-
-            if let item = listItem(from: line) {
-                var items = [item]
-                index += 1
-                while index < lines.count, let next = listItem(from: lines[index]) {
-                    items.append(next)
-                    index += 1
-                }
-                blocks.append(.list(items))
-                continue
-            }
-
-            var paragraphLines = [line]
-            index += 1
-            while index < lines.count {
-                let next = lines[index]
-                if next.trimmingCharacters(in: .whitespaces).isEmpty { break }
-                if next.hasPrefix("```") { break }
-                if listItem(from: next) != nil { break }
-                paragraphLines.append(next)
-                index += 1
-            }
-            blocks.append(.paragraph(paragraphLines.joined(separator: "\n")))
-        }
-
-        return blocks
-    }
-
-    private static func listItem(from line: String) -> MarkdownListItem? {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
-
-        if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") || trimmed.hasPrefix("+ ") {
-            return MarkdownListItem(
-                prefix: "•",
-                content: String(trimmed.dropFirst(2))
-            )
-        }
-
-        guard let dotIndex = trimmed.firstIndex(of: ".") else { return nil }
-        let numberPart = trimmed[trimmed.startIndex..<dotIndex]
-        guard !numberPart.isEmpty, numberPart.allSatisfy({ $0.isNumber }) else { return nil }
-        let afterDotIndex = trimmed.index(after: dotIndex)
-        let afterDot = trimmed[afterDotIndex...]
-        guard afterDot.first == " " else { return nil }
-        return MarkdownListItem(
-            prefix: String(trimmed[trimmed.startIndex...dotIndex]) + " ",
-            content: String(afterDot)
-        )
-    }
-}
-
-struct EditMessageSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var text: String
-    private let onSave: (String) -> Void
-
-    init(initialText: String, onSave: @escaping (String) -> Void) {
-        _text = State(initialValue: initialText)
-        self.onSave = onSave
-    }
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                TextEditor(text: $text)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding()
-            }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle("编辑消息")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
-                        onSave(text)
-                        dismiss()
-                    }
-                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
+    private func copyAllToPasteboard() {
+        UIPasteboard.general.string = conversationText
+        withAnimation { showCopiedFeedback = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation { showCopiedFeedback = false }
         }
     }
 }
