@@ -37,8 +37,40 @@ struct ChatView: View {
         chatScreen
     }
 
-    /// 全部 modifier 链放这里，让类型检查器在一个封闭视图内求值。
+    /// 全部 modifier 链分两段拼接：第一段基础修饰，第二段对话框/Sheet。
+    /// 拆分后类型检查器可在每个子作用域内完成推断，避免「reasonable time」超时。
     private var chatScreen: some View {
+        chatScreenDialogs
+            .sheet(isPresented: $showSessions, content: sessionsSheet)
+            .sheet(isPresented: $showRolePicker, content: rolePickerSheet)
+            .sheet(item: $editingMessage, content: editMessageSheet)
+            .confirmationDialog(
+                "应用到当前会话？",
+                isPresented: $showRoleAction,
+                titleVisibility: .visible,
+                actions: roleActionButtons,
+                message: { Text("选择「绑定到当前会话」会替换本对话的角色；选择「新建对话窗」会新开一个对话。") }
+            )
+            .alert("该角色已有对话窗", isPresented: $showDuplicateAlert, actions: duplicateAlertButtons) {
+                Text("该角色已绑定其他对话窗，仍要新建一个吗？")
+            }
+            .confirmationDialog(
+                "删除这条消息？",
+                isPresented: deleteDialogBinding,
+                titleVisibility: .visible,
+                actions: deleteMessageButtons,
+                message: { Text("删除后无法恢复。") }
+            )
+            .confirmationDialog(
+                "重新生成回复？",
+                isPresented: regenerateDialogBinding,
+                titleVisibility: .visible,
+                actions: regenerateMessageButtons,
+                message: { Text("将删除该回复及其后的所有消息，并重新请求��") }
+            )
+    }
+
+    private var chatScreenDialogs: some View {
         chatContent
             .navigationTitle(store.currentSession?.title ?? "Pyramid")
             .navigationBarTitleDisplayMode(.inline)
@@ -52,33 +84,6 @@ struct ChatView: View {
             .onChange(of: viewModel.input) { _, _ in
                 viewModel.persistDraft()
             }
-            .sheet(isPresented: $showSessions, content: sessionsSheet)
-            .sheet(isPresented: $showRolePicker, content: rolePickerSheet)
-            .confirmationDialog(
-                "应用到当前会话？",
-                isPresented: $showRoleAction,
-                titleVisibility: .visible,
-                actions: roleActionButtons,
-                message: { Text("选择「绑定到当前会话」会替换本对话的角色；选择「新建对话窗」会新开一个对话。") }
-            )
-            .alert("该角色已有对话窗", isPresented: $showDuplicateAlert, actions: duplicateAlertButtons) {
-                Text("该角色已绑定其他对话窗，仍要新建一个吗？")
-            }
-            .sheet(item: $editingMessage, content: editMessageSheet)
-            .confirmationDialog(
-                "删除这条消息？",
-                isPresented: deleteDialogBinding,
-                titleVisibility: .visible,
-                actions: deleteMessageButtons,
-                message: { Text("删除后无法恢复。") }
-            )
-            .confirmationDialog(
-                "重新生成回复？",
-                isPresented: regenerateDialogBinding,
-                titleVisibility: .visible,
-                actions: regenerateMessageButtons,
-                message: { Text("将删除该回复及其后的所有消息，并重新请求。") }
-            )
     }
 
     @ViewBuilder
