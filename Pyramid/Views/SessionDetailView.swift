@@ -9,7 +9,8 @@ struct SessionDetailView: View {
     let sessionID: UUID
 
     private var session: ChatSession? {
-        store.sessions.first { $0.id == sessionID }
+        // Item 8 M6：走 ChatStore.session(for:) 的 O(1) 查找，避免每次 binding getter 都线性扫。
+        store.session(for: sessionID)
     }
 
     var body: some View {
@@ -84,28 +85,28 @@ struct SessionDetailView: View {
 
     private var characterBinding: Binding<UUID?> {
         Binding(
-            get: { store.sessions.first { $0.id == sessionID }?.characterId },
+            get: { store.session(for: sessionID)?.characterId },
             set: { store.setCharacter($0, for: sessionID) }
         )
     }
 
     private var worldBookBinding: Binding<UUID?> {
         Binding(
-            get: { store.sessions.first { $0.id == sessionID }?.worldBookId },
+            get: { store.session(for: sessionID)?.worldBookId },
             set: { store.setWorldBook($0, for: sessionID) }
         )
     }
 
     private var systemPromptBinding: Binding<String> {
         Binding(
-            get: { store.sessions.first { $0.id == sessionID }?.systemPrompt ?? "" },
+            get: { store.session(for: sessionID)?.systemPrompt ?? "" },
             set: { store.setSystemPrompt($0, for: sessionID) }
         )
     }
 
     private var appliedPresetBinding: Binding<UUID?> {
         Binding(
-            get: { store.sessions.first { $0.id == sessionID }?.appliedPresetId },
+            get: { store.session(for: sessionID)?.appliedPresetId },
             set: { newValue in
                 store.setAppliedPreset(newValue, for: sessionID)
                 if let presetID = newValue,
@@ -118,14 +119,14 @@ struct SessionDetailView: View {
 
     private var userDisplayNameBinding: Binding<String> {
         Binding(
-            get: { store.sessions.first { $0.id == sessionID }?.userDisplayNameOverride ?? "" },
+            get: { store.session(for: sessionID)?.userDisplayNameOverride ?? "" },
             set: { store.setUserDisplayNameOverride($0, for: sessionID) }
         )
     }
 
     private var extraWorldBookIdsBinding: Binding<[UUID]> {
         Binding(
-            get: { store.sessions.first { $0.id == sessionID }?.extraWorldBookIds ?? [] },
+            get: { store.session(for: sessionID)?.extraWorldBookIds ?? [] },
             set: { store.setExtraWorldBookIds($0, for: sessionID) }
         )
     }

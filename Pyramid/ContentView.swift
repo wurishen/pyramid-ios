@@ -10,6 +10,11 @@ struct ContentView: View {
     @ObservedObject var displayRegexes: DisplayRegexStore
     @State private var showQuickSwitcher = false
     @State private var selectedTab = 0
+    // Item 8 M2：ChatView 默认就挂载（首屏就是聊天），SettingsView 在用户首次切到
+    // 设置 Tab 时再挂载；之后两边都不卸载。
+    // 这样启动期只跑 ChatView 的初始化路径，避免一打开就同时初始化
+    // NavigationStack + CharacterListView/WorldBookView 等子页 Stub。
+    @State private var settingsMounted = false
 
     var body: some View {
         ZStack {
@@ -23,16 +28,18 @@ struct ContentView: View {
             )
             .opacity(selectedTab == 0 ? 1 : 0)
             .allowsHitTesting(selectedTab == 0)
-            SettingsView(
-                settings: settings,
-                worldBook: worldBook,
-                store: store,
-                presets: presets,
-                characters: characters,
-                displayRegexes: displayRegexes
-            )
-            .opacity(selectedTab == 1 ? 1 : 0)
-            .allowsHitTesting(selectedTab == 1)
+            if settingsMounted {
+                SettingsView(
+                    settings: settings,
+                    worldBook: worldBook,
+                    store: store,
+                    presets: presets,
+                    characters: characters,
+                    displayRegexes: displayRegexes
+                )
+                .opacity(selectedTab == 1 ? 1 : 0)
+                .allowsHitTesting(selectedTab == 1)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .safeAreaInset(edge: .bottom) {
@@ -52,6 +59,11 @@ struct ContentView: View {
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.78), value: showQuickSwitcher)
+        .onChange(of: selectedTab) { _, new in
+            // 用户首次切到设置 Tab 时再挂载。挂上去后再不卸载 ——
+            // 子导航（角色卡、世界书等）保留滚动位置与展开状态。
+            if new == 1 { settingsMounted = true }
+        }
     }
 }
 

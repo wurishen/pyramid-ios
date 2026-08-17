@@ -6,11 +6,41 @@ final class ChatStore: ObservableObject {
     @Published var currentSessionID: UUID?
 
     var currentSession: ChatSession? {
-        sessions.first { $0.id == currentSessionID }
+        session(for: currentSessionID)
     }
 
     var currentMessages: [ChatMessage] {
         currentSession?.messages ?? []
+    }
+
+    // MARK: - Item 8 M6：SessionDetailView 去重扫描
+    //
+    // 旧实现每个 binding getter 都 `sessions.first { $0.id == sessionID }`：
+    // N 个会话 × 6 个 binding = 6N 次线性扫描。ChatSession.id 在本进程内全局唯一，
+    // 用一个 session 计数 + 缓存字典做 O(1) 查询；sessions 任何 mutation
+    // 都让缓存作废，下次取时一次性重建。
+    private var _sessionByIDCache: [UUID: ChatSession]?
+    private var _sessionByIDCacheVersion: Int = -1
+    /// 自增 ID；任何对 `sessions` 的 mutate 都必须调用一次。
+    /// 提供给 ChatStore 自己的 mutator 内部使用；外部读取走 `session(for:)`。
+    private var sessionsVersion: Int = 0
+
+    func session(for id: UUID?) -> ChatSession? {
+        guard let id else { return nil }
+        if _sessionByIDCacheVersion != sessionsVersion || _sessionByIDCache == nil {
+            // 用普通循环而非 Dictionary(uniqueKeysWithValues:)，避免重复 UUID 触发 trap。
+            // 正常路径下会话 id 都是 UUID() 唯一值，但旧数据 / 损坏 JSON 可能出现重复：
+            // 取首次出现的会话作为兜底，避免单条重复就把整个查询路径炸掉。
+            var built: [UUID: ChatSession] = [:]
+            for session in sessions {
+                if built[session.id] == nil {
+                    built[session.id] = session
+                }
+            }
+            _sessionByIDCache = built
+            _sessionByIDCacheVersion = sessionsVersion
+        }
+        return _sessionByIDCache?[id]
     }
 
     init() {
@@ -27,6 +57,7 @@ final class ChatStore: ObservableObject {
         let session = ChatSession()
         sessions.insert(session, at: 0)
         currentSessionID = session.id
+        sessionsVersion &+= 1
         save()
         return session
     }
@@ -48,6 +79,7 @@ final class ChatStore: ObservableObject {
         }
         sessions.insert(session, at: 0)
         currentSessionID = session.id
+        sessionsVersion &+= 1
         save()
         return session
     }
@@ -78,6 +110,7 @@ final class ChatStore: ObservableObject {
     func clearAllSessions() {
         sessions.removeAll()
         currentSessionID = nil
+        sessionsVersion &+= 1
         _ = createSession()
     }
 
@@ -90,6 +123,7 @@ final class ChatStore: ObservableObject {
                 return
             }
         }
+        sessionsVersion &+= 1
         save()
     }
 
@@ -99,6 +133,7 @@ final class ChatStore: ObservableObject {
         if sessions[index].title == "新会话" {
             sessions[index].title = Self.defaultTitle(for: message.content)
         }
+        sessionsVersion &+= 1
         save()
     }
 
@@ -108,12 +143,14 @@ final class ChatStore: ObservableObject {
             return
         }
         sessions[sessionIndex].messages[messageIndex].content = content
+        sessionsVersion &+= 1
         save()
     }
 
     func removeMessage(id: UUID, in sessionID: UUID) {
         guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         sessions[sessionIndex].messages.removeAll { $0.id == id }
+        sessionsVersion &+= 1
         save()
     }
 
@@ -123,6 +160,7 @@ final class ChatStore: ObservableObject {
             return
         }
         sessions[sessionIndex].messages.removeSubrange(start...)
+        sessionsVersion &+= 1
         save()
     }
 
@@ -134,42 +172,49 @@ final class ChatStore: ObservableObject {
             return
         }
         sessions[sessionIndex].messages[messageIndex].isIncluded = included
+        sessionsVersion &+= 1
         save()
     }
 
     func setWorldBook(_ worldBookId: UUID?, for sessionID: UUID) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         sessions[index].worldBookId = worldBookId
+        sessionsVersion &+= 1
         save()
     }
 
     func setSystemPrompt(_ systemPrompt: String?, for sessionID: UUID) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         sessions[index].systemPrompt = systemPrompt
+        sessionsVersion &+= 1
         save()
     }
 
     func setAppliedPreset(_ presetId: UUID?, for sessionID: UUID) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         sessions[index].appliedPresetId = presetId
+        sessionsVersion &+= 1
         save()
     }
 
     func setCharacter(_ characterId: UUID?, for sessionID: UUID) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         sessions[index].characterId = characterId
+        sessionsVersion &+= 1
         save()
     }
 
     func setUserDisplayNameOverride(_ name: String, for sessionID: UUID) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         sessions[index].userDisplayNameOverride = name
+        sessionsVersion &+= 1
         save()
     }
 
     func setExtraWorldBookIds(_ ids: [UUID], for sessionID: UUID) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         sessions[index].extraWorldBookIds = ids
+        sessionsVersion &+= 1
         save()
     }
 
@@ -177,12 +222,14 @@ final class ChatStore: ObservableObject {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         sessions[index].title = trimmed.isEmpty ? "新会话" : trimmed
+        sessionsVersion &+= 1
         save()
     }
 
     func togglePinned(_ sessionID: UUID) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         sessions[index].isPinned.toggle()
+        sessionsVersion &+= 1
         save()
     }
 
@@ -190,6 +237,7 @@ final class ChatStore: ObservableObject {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         if sessions[index].draft != draft {
             sessions[index].draft = draft
+            sessionsVersion &+= 1
             // Item 2: draft 不再每键击触发 save。下次其他 mutate / 切会话 /
             // scenePhase → .background 时随主 save 落盘。
         }
@@ -222,17 +270,32 @@ final class ChatStore: ObservableObject {
            let uuid = UUID(uuidString: raw) {
             currentSessionID = uuid
         }
+        // 加载后让下次 session(for:) 重建一次缓存。
+        sessionsVersion &+= 1
     }
 
-    // MARK: - 持久化（节流写盘）
+    // MARK: - 持久化（节流写盘 + 后台 encode）
     //
     // 旧实现是每次 mutate 立即 `JSONEncoder().encode(sessions)` + UserDefaults 写：
     // streaming 一个 1000-token 回复 = 主线程 1000 次全量编码 + 写盘，开销巨大。
-    // 现在改为：mutate → `save()` 排一个 250ms 的去抖任务，期间重复 mutate 只重置定时器；
-    // scenePhase 切到 .background/.inactive 时 `flushPendingSave()` 强制立即落盘，
-    // 保证 OS kill 前数据安全。
+    // Item 2 已加 250ms 去抖。Item 8 M4 再做两件事：
+    //   1. 复用同一份 JSONEncoder（线程安全，节省分配）。
+    //   2. 把 debounce 触发的常规保存丢到后台并发队列执行，避免主线程被大文档编码阻塞；
+    //      flushPendingSave() 仍保持同步（app 进后台时数据必须立刻落盘）。
     private var pendingSaveTask: Task<Void, Never>?
     private static let saveDebounceNanoseconds: UInt64 = 250_000_000
+
+    static let saveEncoder: JSONEncoder = {
+        let e = JSONEncoder()
+        e.outputFormatting = []
+        return e
+    }()
+
+    private static let saveQueue = DispatchQueue(
+        label: "pyramid.chatstore.save",
+        qos: .utility,
+        attributes: .concurrent
+    )
 
     func save() {
         scheduleSave(after: Self.saveDebounceNanoseconds)
@@ -243,7 +306,7 @@ final class ChatStore: ObservableObject {
     func flushPendingSave() {
         pendingSaveTask?.cancel()
         pendingSaveTask = nil
-        performSaveNow()
+        performSaveSync()
     }
 
     private func scheduleSave(after nanoseconds: UInt64) {
@@ -251,13 +314,29 @@ final class ChatStore: ObservableObject {
         pendingSaveTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: nanoseconds)
             if Task.isCancelled { return }
-            self?.pendingSaveTask = nil
-            self?.performSaveNow()
+            guard let self else { return }
+            self.pendingSaveTask = nil
+            self.performSaveAsync()
         }
     }
 
-    private func performSaveNow() {
-        if let data = try? JSONEncoder().encode(sessions) {
+    /// 后台编码 + 写盘。在 main actor 之外执行 JSONEncoder.encode 与 UserDefaults 写。
+    /// 走这个路径会晚于主线程几毫秒~几十毫秒——是可接受的代价，
+    /// flushPendingSave() 走 `performSaveSync` 兜底关键时机。
+    private func performSaveAsync() {
+        // 主线程拷一份值类型快照再上传到后台，避开跨线程 mutable 访问。
+        let snapshot = sessions
+        let currentID = currentSessionID?.uuidString
+        Self.saveQueue.async {
+            guard let data = try? Self.saveEncoder.encode(snapshot) else { return }
+            UserDefaults.standard.set(data, forKey: StorageKeys.sessions)
+            UserDefaults.standard.set(currentID, forKey: StorageKeys.currentSessionID)
+        }
+    }
+
+    /// 同步落盘：app 即将进 inactive/background 时必须跑这一步。
+    private func performSaveSync() {
+        if let data = try? Self.saveEncoder.encode(sessions) {
             UserDefaults.standard.set(data, forKey: StorageKeys.sessions)
         }
         UserDefaults.standard.set(currentSessionID?.uuidString, forKey: StorageKeys.currentSessionID)

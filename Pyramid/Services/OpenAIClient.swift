@@ -38,6 +38,18 @@ struct OpenAIClient {
     var topP: Double?
     var maxTokens: Int?
 
+    // MARK: - Item 8 M4：JSONEncoder / JSONDecoder 复用
+    //
+    // 旧实现每次请求都 `JSONEncoder()` / `JSONDecoder()`：实例化耗时 + 容器分配，
+    // 在 streaming 高频路径（每行 SSE 都新建解码器）尤其浪费。
+    // JSONEncoder / JSONDecoder 官方线程安全，整个进程共用一份即可。
+    static let sharedEncoder: JSONEncoder = {
+        let e = JSONEncoder()
+        e.outputFormatting = [] // 紧凑输出，节省字节、也少一次格式化遍历
+        return e
+    }()
+    static let sharedDecoder = JSONDecoder()
+
     func send(messages: [ChatMessage]) async throws -> String {
         let data: Data
         let response: URLResponse
@@ -56,7 +68,7 @@ struct OpenAIClient {
         }
 
         do {
-            let decoded = try JSONDecoder().decode(ChatCompletionResponse.self, from: data)
+            let decoded = try Self.sharedDecoder.decode(ChatCompletionResponse.self, from: data)
             guard let content = decoded.choices.first?.message.content, !content.isEmpty else {
                 throw ChatError.emptyResponse
             }
@@ -90,7 +102,7 @@ struct OpenAIClient {
                         let payload = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !payload.isEmpty else { continue }
                         if payload == "[DONE]" { break }
-                        if let chunk = try? JSONDecoder().decode(ChatCompletionStreamChunk.self, from: Data(payload.utf8)),
+                        if let chunk = try? Self.sharedDecoder.decode(ChatCompletionStreamChunk.self, from: Data(payload.utf8)),
                            let delta = chunk.choices.first?.delta.content {
                             continuation.yield(delta)
                         }
@@ -148,7 +160,7 @@ struct OpenAIClient {
             topP: topP,
             maxTokens: maxTokens
         )
-        request.httpBody = try JSONEncoder().encode(body)
+        request.httpBody = try Self.sharedEncoder.encode(body)
         return request
     }
 
@@ -200,7 +212,7 @@ struct OpenAIClient {
             throw ChatError.badStatus(http.statusCode, bodyText)
         }
 
-        let decoder = JSONDecoder()
+        let decoder = Self.sharedDecoder
         if let list = try? decoder.decode(ModelListResponse.self, from: data) {
             return list.data.map(\.id)
         }
