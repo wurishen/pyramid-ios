@@ -52,7 +52,7 @@ struct WorldBookView: View {
                 Toggle("启用世界书", isOn: $settings.worldBookEnabled)
             }
             Section("当前世界书") {
-                HStack {
+                HStack(spacing: 8) {
                     Picker("世界书", selection: $viewingBookID) {
                         ForEach(store.books) { book in
                             Text(book.title).tag(book.id)
@@ -64,17 +64,23 @@ struct WorldBookView: View {
                             newBookName = store.book(for: viewingBookID).title
                             showRenameDialog = true
                         } label: {
-                            Label("重命名", systemImage: "pencil")
+                            Image(systemName: "pencil")
                                 .foregroundStyle(Color.accentColor)
+                                .frame(width: 32, height: 32)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.borderless)
-                        Button(role: .destructive) {
+                        .accessibilityLabel("重命名当前世界书")
+                        Button {
                             showDeleteBookConfirm = true
                         } label: {
-                            Label("删除", systemImage: "trash")
+                            Image(systemName: "trash")
                                 .foregroundStyle(.red)
+                                .frame(width: 32, height: 32)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.borderless)
+                        .accessibilityLabel("删除当前世界书")
                     }
                 }
                 Button {

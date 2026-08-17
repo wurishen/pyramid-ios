@@ -59,11 +59,25 @@ struct CustomTabBar: View {
         }
         .frame(maxWidth: .infinity)
         .buttonStyle(TabBarButtonStyle())
-        .scaleEffect(chatPressing ? 0.82 : 1.0)
-        .animation(.spring(response: 0.2, dampingFraction: 0.55), value: chatPressing)
+        // iOS 系统长按桌面 App 的反馈：缩放到 ~0.92 + 蒙白 + 触觉 + 中心放大动画。
+        // 比单纯 scaleEffect 更接近系统的"按下"手感。
+        .scaleEffect(chatPressing ? 0.92 : 1.0)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color.white.opacity(chatPressing ? 0.18 : 0))
+                .padding(.horizontal, 24)
+                .padding(.vertical, 2)
+        )
+        .animation(.spring(response: 0.28, dampingFraction: 0.6), value: chatPressing)
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.4)
-                .updating($chatPressing) { value, state, _ in state = value }
+                .updating($chatPressing) { value, state, _ in
+                    if value && !state {
+                        // 长按刚触发时立即给一个 strong 触觉，模拟 iOS 主屏 App 弹起的触感
+                        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+                    }
+                    state = value
+                }
                 .onEnded { _ in
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                     onChatLongPress()
@@ -108,46 +122,26 @@ struct TabBarButtonStyle: ButtonStyle {
     }
 }
 
+/// 长按聊天按钮弹出的会话网格。
+/// 顶部长条栏放当前角色卡头像（居中）+ 右侧「选择角色卡」按钮。
+/// 下方是带角色头像的圆形气泡网格，气泡下方显示会话名。
 struct QuickSwitcherView: View {
     @ObservedObject var store: ChatStore
     @ObservedObject var characters: CharacterStore
     var dismissTab: () -> Void
     @Environment(\.dismiss) private var dismiss
 
-    private let columns = [GridItem(.adaptive(minimum: 68), spacing: 12)]
+    @State private var showCharacterPicker = false
+    @State private var pendingCharacter: Character?
+    @State private var showDuplicateAlert = false
+
+    private let columns = [GridItem(.adaptive(minimum: 84), spacing: 14)]
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                LazyVGrid(columns: columns, spacing: 16) {
-                    ForEach(store.sessions) { session in
-                        Button {
-                            store.select(session.id)
-                            dismiss()
-                            dismissTab()
-                        } label: {
-                            VStack(spacing: 6) {
-                                let char = characters.character(for: session.characterId)
-                                AvatarView(
-                                    imageData: char?.avatarData,
-                                    name: char?.name ?? session.title,
-                                    size: 48
-                                )
-                                Text(session.title)
-                                    .font(.caption)
-                                    .foregroundStyle(.primary)
-                                    .lineLimit(1)
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .padding(.vertical, 8)
-                            .padding(.horizontal, 4)
-                            .frame(maxWidth: .infinity)
-                            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding()
+            VStack(spacing: 0) {
+                topBar
+                grid
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("切换会话")
@@ -156,17 +150,181 @@ struct QuickSwitcherView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { dismiss() }
                 }
-                ToolbarItem(placement: .confirmationAction) {
+            }
+        }
+        .sheet(isPresented: $showCharacterPicker) {
+            CharacterPickerSheet(characters: characters.characters) { character in
+                handleCharacterPick(character)
+            }
+        }
+        .alert("已有同角色对话", isPresented: $showDuplicateAlert) {
+            if let char = pendingCharacter {
+                Button("仍要新建") {
+                    store.createSession(character: char)
+                    pendingCharacter = nil
+                    dismiss()
+                    dismissTab()
+                }
+                Button("取消", role: .cancel) { pendingCharacter = nil }
+            }
+        } message: {
+            if let char = pendingCharacter {
+                Text("「\(char.name)」已绑定到其他对话，仍要新建一个吗？")
+            } else {
+                Text("该角色已绑定到其他对话，仍要新建一个吗？")
+            }
+        }
+    }
+
+    /// 顶部长条栏：当前角色卡头像居中 + 右侧「+ 选择角色卡」按钮。
+    private var topBar: some View {
+        HStack(spacing: 12) {
+            Spacer()
+            ZStack {
+                Circle()
+                    .fill(Color.accentColor.opacity(0.12))
+                    .frame(width: 56, height: 56)
+                AvatarView(
+                    imageData: currentCharacter?.avatarData,
+                    name: currentCharacter?.name ?? "未绑定",
+                    size: 48
+                )
+            }
+            .opacity(currentCharacter == nil ? 0.55 : 1.0)
+            Spacer()
+            Button {
+                showCharacterPicker = true
+            } label: {
+                VStack(spacing: 2) {
+                    Image(systemName: "person.crop.circle.badge.plus")
+                        .font(.system(size: 22, weight: .medium))
+                    Text("选择角色卡")
+                        .font(.caption2)
+                }
+                .foregroundStyle(Color.accentColor)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.accentColor.opacity(0.1), in: Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.bar)
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
+    }
+
+    private var currentCharacter: Character? {
+        characters.character(for: store.currentSession?.characterId)
+    }
+
+    private var grid: some View {
+        ScrollView {
+            if store.sessions.isEmpty {
+                Text("暂无对话，点右上角「选择角色卡」开始。")
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 40)
+                    .frame(maxWidth: .infinity)
+            } else {
+                LazyVGrid(columns: columns, spacing: 18) {
+                    ForEach(store.sessions) { session in
+                        Button {
+                            store.select(session.id)
+                            dismiss()
+                            dismissTab()
+                        } label: {
+                            bubbleCell(for: session)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding()
+            }
+        }
+    }
+
+    private func bubbleCell(for session: ChatSession) -> some View {
+        let char = characters.character(for: session.characterId)
+        return VStack(spacing: 6) {
+            ZStack {
+                Circle()
+                    .fill(Color.accentColor.opacity(0.15))
+                    .frame(width: 66, height: 66)
+                AvatarView(
+                    imageData: char?.avatarData,
+                    name: char?.name ?? session.title,
+                    size: 56
+                )
+            }
+            Text(session.title)
+                .font(.caption)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .frame(maxWidth: 88)
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 4)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func handleCharacterPick(_ character: Character) {
+        if store.hasOtherSession(for: character.id, excluding: UUID()) {
+            pendingCharacter = character
+            showDuplicateAlert = true
+        } else {
+            store.createSession(character: character)
+            dismiss()
+            dismissTab()
+        }
+    }
+}
+
+/// 角色卡选择器（只列已存在角色卡，不提供新建/编辑入口）。
+struct CharacterPickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let characters: [Character]
+    var onPick: (Character) -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if characters.isEmpty {
+                    Text("还没有角色卡，先到「设置 → 角色卡」新建。")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(characters) { character in
                     Button {
-                        store.createSession()
+                        onPick(character)
                         dismiss()
-                        dismissTab()
                     } label: {
-                        Label("新建", systemImage: "plus")
+                        HStack(spacing: 12) {
+                            AvatarView(imageData: character.avatarData, name: character.name, size: 40)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(character.name.isEmpty ? "未命名" : character.name)
+                                    .foregroundStyle(.primary)
+                                if !character.description.isEmpty {
+                                    Text(character.description)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                            }
+                            Spacer()
+                            Image(systemName: "plus.circle.fill")
+                                .foregroundStyle(Color.accentColor)
+                        }
                     }
                 }
             }
+            .navigationTitle("选择角色卡")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+            }
         }
-        .presentationDetents([.medium, .large])
     }
 }

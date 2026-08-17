@@ -56,17 +56,26 @@ struct ChatView: View {
                 .accessibilityLabel("会话列表")
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    UIPasteboard.general.string = conversationText
-                    withAnimation { showCopiedFeedback = true }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                        withAnimation { showCopiedFeedback = false }
+                HStack(spacing: 12) {
+                    Button {
+                        UIPasteboard.general.string = conversationText
+                        withAnimation { showCopiedFeedback = true }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                            withAnimation { showCopiedFeedback = false }
+                        }
+                    } label: {
+                        Image(systemName: "doc.on.doc")
                     }
-                } label: {
-                    Image(systemName: "doc.on.doc")
+                    .disabled(viewModel.messages.isEmpty)
+                    .accessibilityLabel("复制本会话全部对话")
+                    // 用户头像放右侧 — 酒馆（SillyTavern）风格：你本人始终在右。
+                    AvatarView(
+                        imageData: settings.userAvatarData.isEmpty ? nil : settings.userAvatarData,
+                        name: settings.userName.isEmpty ? "我" : settings.userName,
+                        size: 26
+                    )
+                    .accessibilityLabel("当前用户")
                 }
-                .disabled(viewModel.messages.isEmpty)
-                .accessibilityLabel("复制本会话全部对话")
             }
         }
         .overlay(alignment: .bottom) {

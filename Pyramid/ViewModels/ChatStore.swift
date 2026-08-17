@@ -31,6 +31,25 @@ final class ChatStore: ObservableObject {
         return session
     }
 
+    /// 创建并直接绑定角色卡到新会话。用于「角色卡 → 新建对话」入口。
+    @discardableResult
+    func createSession(character: Character) -> ChatSession {
+        var session = ChatSession()
+        session.characterId = character.id
+        if !character.name.isEmpty {
+            session.title = character.name
+        }
+        sessions.insert(session, at: 0)
+        currentSessionID = session.id
+        save()
+        return session
+    }
+
+    /// 同一角色是否已绑定到其他会话（用于去重提醒）。
+    func hasOtherSession(for characterID: UUID, excluding currentID: UUID) -> Bool {
+        sessions.contains { $0.characterId == characterID && $0.id != currentID }
+    }
+
     func select(_ id: UUID) {
         guard sessions.contains(where: { $0.id == id }) else { return }
         currentSessionID = id
