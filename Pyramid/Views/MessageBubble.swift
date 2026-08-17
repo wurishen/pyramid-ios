@@ -20,10 +20,10 @@ struct MessageBubble: View {
     private static let collapseThreshold = 800
     @State private var expanded = false
 
-    /// 渲染后的文本：原始 content → 显示用正则 → 隐藏标签剥离 → Markdown / 纯文本。
-    /// 只用于显示；onCopy/onEdit/onRegenerate 始终传 `message.content` 原文。
-    private var renderedAttributed: AttributedString {
-        MessageRenderer.render(
+    var body: some View {
+        // Item 3: 计算一次，下游 assistantContent / user bubble 都用这份，
+        // 避免每次 body 评估跑 3~4 遍 AttributedString(markdown:) 解析。
+        let rendered = MessageRenderer.render(
             MessageRenderer.Inputs(
                 raw: message.content,
                 role: message.role,
@@ -32,13 +32,6 @@ struct MessageBubble: View {
                 displayRegexes: displayRegexes
             )
         )
-    }
-
-    private var renderedPlain: String {
-        String(renderedAttributed.characters[...])
-    }
-
-    var body: some View {
         HStack(alignment: .top, spacing: 8) {
             if message.role == .user {
                 Spacer(minLength: 48)
@@ -62,7 +55,7 @@ struct MessageBubble: View {
                                 Capsule().stroke(Color(.systemGray3), lineWidth: 0.5)
                             )
                     }
-                    bubbleContent
+                    bubbleContent(rendered: rendered)
                 }
                 HStack(spacing: 6) {
                     if message.role == .user {
@@ -95,12 +88,12 @@ struct MessageBubble: View {
     }
 
     @ViewBuilder
-    private var bubbleContent: some View {
+    private func bubbleContent(rendered: AttributedString) -> some View {
         Group {
             if message.role == .assistant {
-                assistantContent
+                assistantContent(rendered: rendered)
             } else {
-                Text(renderedAttributed)
+                Text(rendered)
                     .textSelection(.enabled)
             }
         }
@@ -136,15 +129,15 @@ struct MessageBubble: View {
     }
 
     @ViewBuilder
-    private var assistantContent: some View {
-        let content = renderedPlain
+    private func assistantContent(rendered: AttributedString) -> some View {
+        let content = String(rendered.characters[...])
         let isLong = content.count > Self.collapseThreshold
         VStack(alignment: .leading, spacing: 6) {
             if isLong && !expanded {
                 Text(AttributedString(String(content.prefix(Self.collapseThreshold)) + "…"))
                     .textSelection(.enabled)
             } else {
-                Text(renderedAttributed)
+                Text(rendered)
                     .textSelection(.enabled)
             }
             if isLong {
