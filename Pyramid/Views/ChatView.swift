@@ -174,7 +174,7 @@ struct ChatView: View {
     }
 
     @ViewBuilder
-    private func deleteSessionAlertButtons() -> some View {
+    private var deleteSessionAlertButtons: some View {
         Button("删除", role: .destructive) {
             if let sid = store.currentSessionID {
                 store.delete(sid)
