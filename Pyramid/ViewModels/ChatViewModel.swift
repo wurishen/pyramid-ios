@@ -12,6 +12,19 @@ final class ChatViewModel: ObservableObject {
     /// 最近一次失败原因（供重试提示）。
     @Published var lastFailedReason: String?
 
+    // MARK: - Item 4：流式细粒度信号
+    //
+    // 旧实现每个 token 都 `store.updateMessage` → `@Published var sessions` 全量重发
+    // → ChatView body 失效 → 全列表 bubble 重新评估；叠加 `scrollVersion += 1`
+    // → 每个 token 都触发动画 scrollTo。
+    //
+    // 现在流式期间只更新这两个独立的 @Published（信号范围小，仅流式那条 bubble 关心），
+    // sessions 在流式结束 / 取�� / 失败时才一次性写回；scrollVersion 也只在结束时 +1。
+    /// 正在流式生成的那条助手消息 ID（流式未启动 = nil）。
+    @Published var streamingMessageID: UUID?
+    /// 正在流式生成的那条消息的当前完整内容。
+    @Published var streamingContent: String = ""
+
     let store: ChatStore
     private let settings: AppSettings
     private let worldBook: WorldBookStore
@@ -92,6 +105,9 @@ final class ChatViewModel: ObservableObject {
     func cancelCurrent() {
         currentTask?.cancel()
         currentTask = nil
+        // Item 4：取消时清掉细粒度流式信号，避免 UI 仍把 streamingContent 当成 live 内容渲染。
+        streamingMessageID = nil
+        streamingContent = ""
         guard let sessionID = store.currentSessionID else { return }
         let msgs = store.currentMessages
         // 流式生成的占位空 assistant 消息（紧跟在用户消息之后）直接删除。
@@ -216,6 +232,9 @@ final class ChatViewModel: ObservableObject {
 
         isSending = true
         errorMessage = nil
+        // Item 4：新请求开始前清掉旧流式信号，避免上一条被 kill 的流把残留内容显示给用户。
+        streamingMessageID = nil
+        streamingContent = ""
         scrollVersion += 1
 
         let rawHistory = store.currentMessages
@@ -284,17 +303,21 @@ final class ChatViewModel: ObservableObject {
     private func streamReply(with client: OpenAIClient, history: [ChatMessage], sessionID: UUID, userMessageID: UUID?) async {
         let assistant = ChatMessage(role: .assistant, content: "")
         store.appendMessage(assistant, to: sessionID)
+        // Item 4：流式期间改用细粒度 @Published，sessions 仅在结束时写一次。
+        streamingMessageID = assistant.id
+        streamingContent = ""
         var full = ""
         do {
             for try await delta in client.stream(messages: history) {
                 if Task.isCancelled { break }
                 full += delta
-                store.updateMessage(content: full, id: assistant.id, in: sessionID)
-                scrollVersion += 1
+                streamingContent = full
             }
             if Task.isCancelled {
-                // 取消：若没有内容则删掉占位，否则保留用户能看到已生成部分。
-                if full.isEmpty {
+                // 取消：把已生成部分落盘，保留给用户查看。
+                if !full.isEmpty {
+                    store.updateMessage(content: full, id: assistant.id, in: sessionID)
+                } else {
                     store.removeMessage(id: assistant.id, in: sessionID)
                 }
                 return
@@ -305,9 +328,15 @@ final class ChatViewModel: ObservableObject {
                 store.removeMessage(id: assistant.id, in: sessionID)
                 lastFailedUserMessageID = userMessageID
                 lastFailedReason = msg
+            } else {
+                // 流式结束：一次性把最终内容写回 sessions（触发一次 debounced save）。
+                store.updateMessage(content: full, id: assistant.id, in: sessionID)
+                scrollVersion += 1
             }
         } catch is CancellationError {
-            if full.isEmpty {
+            if !full.isEmpty {
+                store.updateMessage(content: full, id: assistant.id, in: sessionID)
+            } else {
                 store.removeMessage(id: assistant.id, in: sessionID)
             }
         } catch {
@@ -315,10 +344,15 @@ final class ChatViewModel: ObservableObject {
             errorMessage = msg
             lastFailedUserMessageID = userMessageID
             lastFailedReason = msg
-            if full.isEmpty {
+            if !full.isEmpty {
+                store.updateMessage(content: full, id: assistant.id, in: sessionID)
+            } else {
                 store.removeMessage(id: assistant.id, in: sessionID)
             }
         }
+        // 清掉细粒度流式信号。
+        streamingMessageID = nil
+        streamingContent = ""
     }
 
     /// 上下文裁剪：按设置保留最近 N 条消息 / 最近 C 字符；当前用户消息始终保留。

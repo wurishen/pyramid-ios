@@ -287,8 +287,12 @@ struct ChatView: View {
                             .padding(.top, 40)
                     }
                     ForEach(Array(viewModel.messages.enumerated()), id: \.element.id) { index, message in
+                        // Item 4：只有 id 匹配 streamingMessageID 的 bubble 才接收 liveContent，
+                        // 其他 bubble 不参与流式重绘，session 重发不再每次波及全列表。
+                        let live: String? = (message.id == viewModel.streamingMessageID) ? viewModel.streamingContent : nil
                         MessageBubble(
                             message: message,
+                            liveContent: live,
                             floorNumber: index + 1,
                             isSending: viewModel.isSending,
                             compact: settings.compactMode,

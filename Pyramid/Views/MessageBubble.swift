@@ -2,6 +2,9 @@ import SwiftUI
 
 struct MessageBubble: View {
     let message: ChatMessage
+    /// Item 4：流式期间外部传入的实时内容；非 nil 时用它渲染（覆盖 message.content）。
+    /// 只有 id == viewModel.streamingMessageID 的那条 bubble 会拿到非 nil。
+    var liveContent: String? = nil
     var floorNumber: Int = 0
     var isSending = false
     var compact = false
@@ -23,9 +26,10 @@ struct MessageBubble: View {
     var body: some View {
         // Item 3: 计算一次，下游 assistantContent / user bubble 都用这份，
         // 避免每次 body 评估跑 3~4 遍 AttributedString(markdown:) 解析。
+        let raw = liveContent ?? message.content
         let rendered = MessageRenderer.render(
             MessageRenderer.Inputs(
-                raw: message.content,
+                raw: raw,
                 role: message.role,
                 settings: settings,
                 preset: preset,
