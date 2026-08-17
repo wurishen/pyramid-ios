@@ -37,7 +37,7 @@ struct ChatView: View {
             if let error = viewModel.errorMessage {
                 errorBanner(error)
             }
-            sessionBar
+            sessionBar()
             messageList
             if settings.showContextHint {
                 contextHintBar
