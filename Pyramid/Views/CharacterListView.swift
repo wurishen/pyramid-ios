@@ -340,6 +340,10 @@ private extension UIImage {
 
 #Preview {
     NavigationStack {
-        CharacterListView(store: CharacterStore(), worldBook: WorldBookStore())
+        CharacterListView(
+            store: CharacterStore(),
+            worldBook: WorldBookStore(),
+            chatStore: ChatStore()
+        )
     }
 }
