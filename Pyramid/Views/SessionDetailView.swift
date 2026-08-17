@@ -14,19 +14,19 @@ struct SessionDetailView: View {
 
     var body: some View {
         Form {
-            Section("角色卡") {
-                Picker("绑定角色", selection: characterBinding) {
-                    Text("无").tag(Optional<UUID>.none)
-                    ForEach(characters.characters) { char in
-                        HStack {
-                            AvatarView(imageData: char.avatarData, name: char.name, size: 24)
-                            Text(char.name)
+            if let char = characters.character(for: session?.characterId) {
+                Section("角色卡") {
+                    HStack(spacing: 12) {
+                        AvatarView(imageData: char.avatarData, name: char.name, size: 36)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(char.name.isEmpty ? "未命名" : char.name)
+                                .foregroundStyle(.primary)
+                            Text("角色系统提示词将合并到对话请求中。")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
                         }
-                        .tag(Optional(char.id))
                     }
-                }
-                if characters.character(for: session?.characterId) != nil {
-                    Text("角色系统提示词将合并到对话请求中。")
+                    Text("角色绑定在新建聊天窗时确定，本会话不可更换。如需换角色，请到「设置 → 角色卡」另开新窗。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -80,13 +80,6 @@ struct SessionDetailView: View {
             }
         }
         .navigationTitle(session?.title ?? "会话详情")
-    }
-
-    private var characterBinding: Binding<UUID?> {
-        Binding(
-            get: { store.sessions.first { $0.id == sessionID }?.characterId },
-            set: { store.setCharacter($0, for: sessionID) }
-        )
     }
 
     private var worldBookBinding: Binding<UUID?> {

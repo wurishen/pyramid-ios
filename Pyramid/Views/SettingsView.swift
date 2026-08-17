@@ -10,6 +10,8 @@ struct SettingsView: View {
     @ObservedObject var presets: PresetStore
     @ObservedObject var characters: CharacterStore
     @ObservedObject var displayRegexes: DisplayRegexStore
+    /// 点选角色卡新建聊天窗后回调，父层用于切到聊天 Tab。
+    var onStartChat: () -> Void = {}
 
     var body: some View {
         NavigationStack {
@@ -21,7 +23,12 @@ struct SettingsView: View {
                         Label("用户", systemImage: "person.crop.circle")
                     }
                     NavigationLink {
-                        CharacterListView(store: characters, worldBook: worldBook)
+                        CharacterListView(
+                            store: characters,
+                            worldBook: worldBook,
+                            chatStore: store,
+                            onStartChat: onStartChat
+                        )
                     } label: {
                         Label("角色卡", systemImage: "person.crop.rectangle.stack")
                     }

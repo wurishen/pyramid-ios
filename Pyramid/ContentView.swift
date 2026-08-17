@@ -29,7 +29,8 @@ struct ContentView: View {
                 store: store,
                 presets: presets,
                 characters: characters,
-                displayRegexes: displayRegexes
+                displayRegexes: displayRegexes,
+                onStartChat: { selectedTab = 0 }
             )
             .opacity(selectedTab == 1 ? 1 : 0)
             .allowsHitTesting(selectedTab == 1)

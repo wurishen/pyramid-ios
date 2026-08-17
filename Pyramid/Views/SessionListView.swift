@@ -11,7 +11,6 @@ struct SessionListView: View {
     @State private var renameTarget: ChatSession?
     @State private var renameText = ""
     @State private var deleteTarget: ChatSession?
-    @State private var showNewSessionWithCharacter = false
 
     private var orderedSessions: [ChatSession] { store.orderedSessions() }
     private var pinned: [ChatSession] { orderedSessions.filter(\.isPinned) }
@@ -39,15 +38,6 @@ struct SessionListView: View {
                     Button("取消", role: .cancel) { deleteTarget = nil }
                 } message: {
                     deleteDialogMessage
-                }
-                .sheet(isPresented: $showNewSessionWithCharacter) {
-                    NewSessionWithCharacterSheet(
-                        characters: characters.characters,
-                        onPicked: { character in
-                            store.createSession(character: character)
-                            dismiss()
-                        }
-                    )
                 }
         }
     }
@@ -93,22 +83,11 @@ struct SessionListView: View {
     @ToolbarContentBuilder
     private var sessionListToolbar: some ToolbarContent {
         ToolbarItem(placement: .confirmationAction) {
-            Menu {
-                Button {
-                    store.createSession()
-                    dismiss()
-                } label: {
-                    Label("新建空白会话", systemImage: "plus.bubble")
-                }
-                if !characters.characters.isEmpty {
-                    Button {
-                        showNewSessionWithCharacter = true
-                    } label: {
-                        Label("新建并绑定角色", systemImage: "person.crop.circle.badge.plus")
-                    }
-                }
+            Button {
+                store.createSession()
+                dismiss()
             } label: {
-                Label("新建", systemImage: "plus")
+                Label("新建空白", systemImage: "plus.bubble")
             }
         }
         ToolbarItem(placement: .topBarLeading) {

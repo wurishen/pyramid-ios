@@ -4,6 +4,9 @@ import UniformTypeIdentifiers
 struct CharacterListView: View {
     @ObservedObject var store: CharacterStore
     @ObservedObject var worldBook: WorldBookStore
+    @ObservedObject var chatStore: ChatStore
+    /// 点选角色卡后由父层回调：通常用于切到聊天 Tab 并关闭当前 sheet。
+    var onStartChat: () -> Void = {}
     @State private var editingCharacter: Character?
     @State private var showDocumentPicker = false
     @State private var importError: String?
@@ -12,12 +15,12 @@ struct CharacterListView: View {
     var body: some View {
         List {
             if store.characters.isEmpty {
-                Text("还没有角色卡，点右上角 + 新建或导入。")
+                Text("还没有角色卡，点右上角 + 新建或导入。点角色卡即可开聊。")
                     .foregroundStyle(.secondary)
             }
             ForEach(store.characters) { character in
                 Button {
-                    editingCharacter = character
+                    startChat(with: character)
                 } label: {
                     HStack(spacing: 12) {
                         AvatarView(imageData: character.avatarData, name: character.name, size: 44)
@@ -32,6 +35,20 @@ struct CharacterListView: View {
                             }
                         }
                         Spacer()
+                        Image(systemName: "play.circle.fill")
+                            .foregroundStyle(Color.accentColor)
+                    }
+                }
+                .contextMenu {
+                    Button {
+                        startChat(with: character)
+                    } label: {
+                        Label("开新聊天窗", systemImage: "bubble.left.and.bubble.right")
+                    }
+                    Button {
+                        editingCharacter = character
+                    } label: {
+                        Label("编辑", systemImage: "pencil")
                     }
                 }
             }
@@ -110,6 +127,13 @@ struct CharacterListView: View {
             }
             importSuccess = "已导入 \(total) 张角色卡"
         }
+    }
+
+    /// 点选角色卡：以该角色建一个新聊天窗并切到聊天 Tab。
+    /// 同一角色可建多窗；窗建好后不可在聊天内切换角色。
+    private func startChat(with character: Character) {
+        chatStore.createSession(character: character)
+        onStartChat()
     }
 
     private var importErrorBinding: Binding<Bool> {
