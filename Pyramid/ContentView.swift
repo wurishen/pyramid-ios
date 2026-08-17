@@ -41,14 +41,22 @@ struct ContentView: View {
             }
         }
         .dismissKeyboardOnOutsideTap()
-        .sheet(isPresented: $showQuickSwitcher) {
-            QuickSwitcherView(store: store, characters: characters, dismissTab: { showQuickSwitcher = false })
+        .overlay(alignment: .bottom) {
+            if showQuickSwitcher {
+                QuickSwitcherBubbles(
+                    store: store,
+                    characters: characters,
+                    onDismiss: { showQuickSwitcher = false }
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
+        .animation(.spring(response: 0.35, dampingFraction: 0.78), value: showQuickSwitcher)
     }
 }
 
 /// 自定义底部 Tab 栏。原生 tabItem 不支持长按手势与触觉反馈，
-/// 因此改为自定义实现：聊天按钮点按切页、长按触发切换会话网格。
+/// 因此改为自定义实现：聊天按钮点按切页、长按触发悬浮气泡条。
 struct CustomTabBar: View {
     @Binding var selectedTab: Int
     var onChatLongPress: () -> Void
@@ -137,35 +145,29 @@ struct TabBarButtonStyle: ButtonStyle {
     }
 }
 
-/// 长按聊天按钮弹出的会话网格。
-/// 顶部长条栏放当前角色卡头像（居中）+ 右侧「选择角色卡」按钮。
-/// 下方是带角色头像的圆形气泡网格，气泡下方显示会话名。
-struct QuickSwitcherView: View {
+/// 长按聊天 Tab 弹出的悬浮气泡条。
+/// 半透明背景之上，一行圆形气泡贴在底部 Tab 上方；
+/// 每个气泡 = 某会话的角色卡头像，气泡下方显示会话名。
+/// 末尾是「+」气泡，用于以新角色卡建一个聊天窗。
+struct QuickSwitcherBubbles: View {
     @ObservedObject var store: ChatStore
     @ObservedObject var characters: CharacterStore
-    var dismissTab: () -> Void
-    @Environment(\.dismiss) private var dismiss
+    var onDismiss: () -> Void
 
     @State private var showCharacterPicker = false
     @State private var pendingCharacter: Character?
     @State private var showDuplicateAlert = false
 
-    private let columns = [GridItem(.adaptive(minimum: 84), spacing: 14)]
-
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                topBar
-                grid
-            }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle("切换会话")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                }
-            }
+        ZStack(alignment: .bottom) {
+            // 背景蒙层：点击空白处关掉气泡条。
+            Color.black.opacity(0.35)
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture { onDismiss() }
+
+            bubbleBar
+                .padding(.bottom, 12) // 贴底部 Tab 上方
         }
         .sheet(isPresented: $showCharacterPicker) {
             CharacterPickerSheet(characters: characters.characters) { character in
@@ -178,15 +180,13 @@ struct QuickSwitcherView: View {
                     Button("打开已有") {
                         store.select(existing.id)
                         pendingCharacter = nil
-                        dismiss()
-                        dismissTab()
+                        onDismiss()
                     }
                 }
                 Button("仍要新建") {
                     store.createSession(character: char)
                     pendingCharacter = nil
-                    dismiss()
-                    dismissTab()
+                    onDismiss()
                 }
                 Button("取消", role: .cancel) { pendingCharacter = nil }
             }
@@ -199,127 +199,40 @@ struct QuickSwitcherView: View {
         }
     }
 
-    /// 顶部长条栏：当前角色卡头像居中 + 右侧「+ 选择角色卡」按钮。
-    private var topBar: some View {
-        HStack(spacing: 12) {
-            Spacer()
-            ZStack {
-                Circle()
-                    .fill(Color.accentColor.opacity(0.12))
-                    .frame(width: 56, height: 56)
-                AvatarView(
-                    imageData: currentCharacter?.avatarData,
-                    name: currentCharacter?.name ?? "未绑定",
-                    size: 48
-                )
-            }
-            .opacity(currentCharacter == nil ? 0.55 : 1.0)
-            Spacer()
-            Button {
-                showCharacterPicker = true
-            } label: {
-                VStack(spacing: 2) {
-                    Image(systemName: "person.crop.circle.badge.plus")
-                        .font(.system(size: 22, weight: .medium))
-                    Text("选择角色卡")
-                        .font(.caption2)
-                }
-                .foregroundStyle(Color.accentColor)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Color.accentColor.opacity(0.1), in: Capsule())
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(.bar)
-        .overlay(alignment: .bottom) {
-            Divider()
-        }
-    }
-
-    private var currentCharacter: Character? {
-        characters.character(for: store.currentSession?.characterId)
-    }
-
-    private var grid: some View {
-        ScrollView {
-            if store.sessions.isEmpty {
-                Text("暂无对话，点右上角「选择角色卡」开始。")
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 40)
-                    .frame(maxWidth: .infinity)
-            } else {
-                LazyVGrid(columns: columns, spacing: 18) {
-                    ForEach(store.sessions) { session in
-                        Button {
-                            store.select(session.id)
-                            dismiss()
-                            dismissTab()
-                        } label: {
-                            bubbleCell(for: session)
-                        }
-                        .buttonStyle(.plain)
+    private var bubbleBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .bottom, spacing: 14) {
+                if store.sessions.isEmpty {
+                    Text("还没有对话，点 + 开聊")
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(0.9))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(.ultraThinMaterial, in: Capsule())
+                } else {
+                    ForEach(store.orderedSessions()) { session in
+                        BubbleCell(
+                            session: session,
+                            character: characters.character(for: session.characterId),
+                            isCurrent: session.id == store.currentSessionID,
+                            onTap: {
+                                store.select(session.id)
+                                onDismiss()
+                            }
+                        )
                     }
                 }
-                .padding()
-            }
-        }
-    }
-
-    private func bubbleCell(for session: ChatSession) -> some View {
-        let char = characters.character(for: session.characterId)
-        let label = displayTitle(for: session, character: char)
-        let isCurrent = session.id == store.currentSessionID
-        return VStack(spacing: 6) {
-            ZStack {
-                if isCurrent {
-                    Circle()
-                        .stroke(Color.accentColor, lineWidth: 2.5)
-                        .frame(width: 70, height: 70)
-                }
-                Circle()
-                    .fill(Color.accentColor.opacity(isCurrent ? 0.22 : 0.15))
-                    .frame(width: 66, height: 66)
-                AvatarView(
-                    imageData: char?.avatarData,
-                    name: char?.name ?? label,
-                    size: 56
-                )
-                if session.isPinned {
-                    Image(systemName: "pin.fill")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(5)
-                        .background(Color.accentColor, in: Circle())
-                        .offset(x: 24, y: -24)
+                // 末尾的「+」气泡：建新窗。
+                AddBubble {
+                    showCharacterPicker = true
                 }
             }
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(isCurrent ? Color.accentColor : Color.primary)
-                .fontWeight(isCurrent ? .semibold : .regular)
-                .lineLimit(1)
-                .frame(maxWidth: 88)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 4)
-        .frame(maxWidth: .infinity)
-    }
-
-    /// 气泡下方的会话标签。
-    /// 优先级: 显式标题（非「新会话」占位）→ 角色名 → 「新会话」。
-    /// 旧版本只读 `session.title`，遇到首条消息还没写入的会话就会显示空 / 截断后的「…」。
-    private func displayTitle(for session: ChatSession, character: Character?) -> String {
-        let trimmed = session.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty && trimmed != "新会话" {
-            return trimmed
-        }
-        if let name = character?.name, !name.isEmpty {
-            return name
-        }
-        return "新会话"
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .padding(.horizontal, 8)
+        .padding(.bottom, 60) // 抬起于 Tab 栏之上
     }
 
     private func handleCharacterPick(_ character: Character) {
@@ -328,13 +241,89 @@ struct QuickSwitcherView: View {
             showDuplicateAlert = true
         } else {
             store.createSession(character: character)
-            dismiss()
-            dismissTab()
+            onDismiss()
         }
     }
 
     private func existingSession(for character: Character) -> ChatSession? {
         store.sessions.first { $0.characterId == character.id }
+    }
+}
+
+/// 单个圆形气泡：头像 + 会话名（去重后的）。
+private struct BubbleCell: View {
+    let session: ChatSession
+    let character: Character?
+    let isCurrent: Bool
+    var onTap: () -> Void
+
+    private var label: String {
+        let trimmed = session.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty && trimmed != "新会话" { return trimmed }
+        if let name = character?.name, !name.isEmpty { return name }
+        return "新会话"
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(spacing: 6) {
+                ZStack {
+                    if isCurrent {
+                        Circle()
+                            .stroke(Color.accentColor, lineWidth: 2.5)
+                            .frame(width: 62, height: 62)
+                    }
+                    Circle()
+                        .fill(Color.accentColor.opacity(isCurrent ? 0.22 : 0.15))
+                        .frame(width: 58, height: 58)
+                    AvatarView(
+                        imageData: character?.avatarData,
+                        name: character?.name ?? label,
+                        size: 48
+                    )
+                    if session.isPinned {
+                        Image(systemName: "pin.fill")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(4)
+                            .background(Color.accentColor, in: Circle())
+                            .offset(x: 22, y: -22)
+                    }
+                }
+                Text(label)
+                    .font(.caption2)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .frame(maxWidth: 80)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// 末尾的「+」气泡：点击唤起角色卡选择 Sheet。
+private struct AddBubble: View {
+    var onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(spacing: 6) {
+                ZStack {
+                    Circle()
+                        .fill(Color.accentColor.opacity(0.18))
+                        .frame(width: 58, height: 58)
+                    Image(systemName: "plus")
+                        .font(.system(size: 26, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+                Text("新建")
+                    .font(.caption2)
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: 80)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("新建对话窗")
     }
 }
 

@@ -37,12 +37,24 @@ final class ChatStore: ObservableObject {
         var session = ChatSession()
         session.characterId = character.id
         if !character.name.isEmpty {
-            session.title = character.name
+            session.title = Self.uniqueTitle(base: character.name, excluding: nil, in: sessions)
         }
         sessions.insert(session, at: 0)
         currentSessionID = session.id
         save()
         return session
+    }
+
+    /// 同名角色卡再建新窗时，自动在名字后追加 1 / 2 / 3…，
+    /// 避免「会话列表里两条同名 → 用户分不清」的问题。
+    static func uniqueTitle(base: String, excluding currentID: UUID?, in sessions: [ChatSession]) -> String {
+        let taken = Set(sessions.filter { $0.id != currentID }.map { $0.title })
+        if !taken.contains(base) { return base }
+        var index = 1
+        while taken.contains("\(base)\(index)") {
+            index += 1
+        }
+        return "\(base)\(index)"
     }
 
     /// 同一角色是否已绑定到其他会话（用于去重提醒）。
