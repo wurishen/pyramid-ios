@@ -35,3 +35,11 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# Agent / local AI tool state (per-developer, not project-wide)
+.claude/
+.codex/
+.agents/
+AGENTS.md
+CLAUDE.md
+.beads/hooks/
