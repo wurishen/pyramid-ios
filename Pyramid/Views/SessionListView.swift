@@ -73,12 +73,15 @@ struct SessionListView: View {
     }
 
     private var othersSection: some View {
-        Section(pinned.isEmpty ? "全部会话" : "其它") {
+        let title = pinned.isEmpty ? "全部会话" : "其它"
+        return Section {
             ForEach(others) { session in
                 sessionRow(session)
                     .listRowBackground(rowBackground(for: session))
             }
             .onDelete { indexSet in delete(at: indexSet, from: others) }
+        } header: {
+            Text(title)
         } footer: {
             Text("左滑可重命名 / 置顶 / 删除；点行进入会话，点「详情」编辑绑定。")
         }
