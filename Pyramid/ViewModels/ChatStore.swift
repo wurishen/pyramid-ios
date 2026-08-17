@@ -190,6 +190,18 @@ final class ChatStore: ObservableObject {
         save()
     }
 
+    /// Item 9 H7：一次会话级批量 mutate。
+    /// `SessionDetailView.apply(preset:)` 这类一次性改三四个字段的场景走这个入口，
+    /// 比连续 set 多个 setter 少触发 N 次 @Published 变更 + 多次 save 排程。
+    /// `block` 在主 actor 上跑：所有字段写完后才递增 sessionsVersion + save()，
+    /// 调用方对 ChatSession 内部结构无侵入。
+    func mutateSession(_ id: UUID, _ block: (inout ChatSession) -> Void) {
+        guard let index = sessions.firstIndex(where: { $0.id == id }) else { return }
+        block(&sessions[index])
+        sessionsVersion &+= 1
+        save()
+    }
+
     func setAppliedPreset(_ presetId: UUID?, for sessionID: UUID) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         sessions[index].appliedPresetId = presetId

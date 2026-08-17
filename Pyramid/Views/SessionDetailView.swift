@@ -147,8 +147,13 @@ struct SessionDetailView: View {
     }
 
     private func apply(_ preset: Preset) {
-        store.setSystemPrompt(preset.systemPrompt, for: sessionID)
-        store.setWorldBook(preset.worldBookId, for: sessionID)
+        // Item 9 H7：把预设里的多个会话级改动（system prompt / 绑定的世界书）
+        // 合并到一次 mutate + 一次 save，不再每个 setter 各排一次 250ms 去抖。
+        // settings.modelName 是 AppStorage，独立于本类 save，自己合并。
+        store.mutateSession(sessionID) { session in
+            session.systemPrompt = preset.systemPrompt
+            session.worldBookId = preset.worldBookId
+        }
         if let model = preset.modelName, !model.isEmpty {
             settings.modelName = model
         }
