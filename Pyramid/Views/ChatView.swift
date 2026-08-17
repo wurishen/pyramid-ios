@@ -34,6 +34,11 @@ struct ChatView: View {
     }
 
     var body: some View {
+        chatScreen
+    }
+
+    /// 全部 modifier 链放这里，让类型检查器在一个封闭视图内求值。
+    private var chatScreen: some View {
         chatContent
             .navigationTitle(store.currentSession?.title ?? "Pyramid")
             .navigationBarTitleDisplayMode(.inline)
@@ -47,51 +52,52 @@ struct ChatView: View {
             .onChange(of: viewModel.input) { _, _ in
                 viewModel.persistDraft()
             }
-            .sheet(isPresented: $showSessions) {
-                SessionListView(store: store, worldBook: worldBook, settings: settings, presets: presets, characters: characters)
-            }
-            .sheet(isPresented: $showRolePicker) {
-                RolePickerView(characters: characters.characters) { role in
-                    handleRoleSelection(role)
-                }
-            }
+            .sheet(isPresented: $showSessions, content: sessionsSheet)
+            .sheet(isPresented: $showRolePicker, content: rolePickerSheet)
             .confirmationDialog(
                 "应用到当前会话？",
                 isPresented: $showRoleAction,
-                titleVisibility: .visible
-            ) {
-                roleActionButtons
-            } message: {
-                Text("选择「绑定到当前会话」会替换本对话的角色；选择「新建对话窗」会新开一个对话。")
-            }
-            .alert("该角色已有对话窗", isPresented: $showDuplicateAlert) {
-                duplicateAlertButtons
-            } message: {
+                titleVisibility: .visible,
+                actions: roleActionButtons,
+                message: { Text("选择「绑定到当前会话」会替换本对话的角色；选择「新建对话窗」会新开一个对话。") }
+            )
+            .alert("该角色已有对话窗", isPresented: $showDuplicateAlert, actions: duplicateAlertButtons) {
                 Text("该角色已绑定其他对话窗，仍要新建一个吗？")
             }
-            .sheet(item: $editingMessage) { message in
-                EditMessageSheet(initialText: message.content) { text in
-                    viewModel.editMessage(message, newContent: text)
-                }
-            }
+            .sheet(item: $editingMessage, content: editMessageSheet)
             .confirmationDialog(
                 "删除这条消息？",
                 isPresented: deleteDialogBinding,
-                titleVisibility: .visible
-            ) {
-                deleteMessageButtons
-            } message: {
-                Text("删除后无法恢复。")
-            }
+                titleVisibility: .visible,
+                actions: deleteMessageButtons,
+                message: { Text("删除后无法恢复。") }
+            )
             .confirmationDialog(
                 "重新生成回复？",
                 isPresented: regenerateDialogBinding,
-                titleVisibility: .visible
-            ) {
-                regenerateMessageButtons
-            } message: {
-                Text("将删除该回复及其后的所有消息，并重新请求。")
-            }
+                titleVisibility: .visible,
+                actions: regenerateMessageButtons,
+                message: { Text("将删除该回复及其后的所有消息，并重新请求。") }
+            )
+    }
+
+    @ViewBuilder
+    private func sessionsSheet() -> some View {
+        SessionListView(store: store, worldBook: worldBook, settings: settings, presets: presets, characters: characters)
+    }
+
+    @ViewBuilder
+    private func rolePickerSheet() -> some View {
+        RolePickerView(characters: characters.characters) { role in
+            handleRoleSelection(role)
+        }
+    }
+
+    @ViewBuilder
+    private func editMessageSheet(_ message: ChatMessage) -> some View {
+        EditMessageSheet(initialText: message.content) { text in
+            viewModel.editMessage(message, newContent: text)
+        }
     }
 
     private var chatContent: some View {
