@@ -142,6 +142,17 @@ struct CharacterEditView: View {
     @State private var avatarData: Data?
     @State private var showAvatarPicker = false
 
+    // SillyTavern 兼容字段（默认折叠，避免普通用户看到一屏技术字段）。
+    @State private var firstMes: String
+    @State private var alternateGreetingsText: String
+    @State private var mesExample: String
+    @State private var creatorNotes: String
+    @State private var postHistoryInstructions: String
+    @State private var tagsText: String
+    @State private var creator: String
+    @State private var characterVersion: String
+    @State private var showSillyTavernFields = false
+
     init(character: Character, worldBook: WorldBookStore, onSave: @escaping (Character) -> Void) {
         self.character = character
         self.worldBook = worldBook
@@ -153,6 +164,15 @@ struct CharacterEditView: View {
         _systemPrompt = State(initialValue: character.systemPrompt)
         _worldBookId = State(initialValue: character.worldBookId)
         _avatarData = State(initialValue: character.avatarData)
+        _firstMes = State(initialValue: character.firstMes)
+        // 把数组转成「按行一条」的纯文本，方便用户直接编辑（也兼容酒馆 v1 字符串情况）。
+        _alternateGreetingsText = State(initialValue: character.alternateGreetings.joined(separator: "\n"))
+        _mesExample = State(initialValue: character.mesExample)
+        _creatorNotes = State(initialValue: character.creatorNotes)
+        _postHistoryInstructions = State(initialValue: character.postHistoryInstructions)
+        _tagsText = State(initialValue: character.tags.joined(separator: ", "))
+        _creator = State(initialValue: character.creator)
+        _characterVersion = State(initialValue: character.characterVersion)
     }
 
     var body: some View {
@@ -188,6 +208,56 @@ struct CharacterEditView: View {
                         }
                     }
                 }
+                Section {
+                    DisclosureGroup("SillyTavern 字段（高级）", isExpanded: $showSillyTavernFields) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("默认开场白（first_mes）")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            TextField("默认开场白", text: $firstMes, axis: .vertical)
+                                .lineLimit(2...8)
+                        }
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("备用开场白（alternate_greetings）")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text("每行一条。新建对话时如果存在任意开场白，会先让你选一条作为首条助手消息。")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                            TextField("备用开场白（每行一条）", text: $alternateGreetingsText, axis: .vertical)
+                                .lineLimit(2...8)
+                        }
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("对话示例（mes_example）")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            TextEditor(text: $mesExample)
+                                .frame(minHeight: 90)
+                        }
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("创作者备注（creator_notes）")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            TextField("创作者备注", text: $creatorNotes, axis: .vertical)
+                                .lineLimit(2...6)
+                        }
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("历史后指令（post_history_instructions）")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            TextField("历史后指令", text: $postHistoryInstructions, axis: .vertical)
+                                .lineLimit(2...6)
+                        }
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("标签（tags）")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            TextField("标签（用逗号分隔）", text: $tagsText)
+                        }
+                        TextField("创作者（creator）", text: $creator)
+                        TextField("版本号（character_version）", text: $characterVersion)
+                    }
+                }
             }
             .navigationTitle(character.name.isEmpty ? "新建角色" : "编辑角色")
             .navigationBarTitleDisplayMode(.inline)
@@ -205,6 +275,21 @@ struct CharacterEditView: View {
                         updated.systemPrompt = systemPrompt
                         updated.worldBookId = worldBookId
                         updated.avatarData = avatarData
+                        updated.firstMes = firstMes
+                        // 备用开场白按行切分，丢掉空行
+                        updated.alternateGreetings = alternateGreetingsText
+                            .split(whereSeparator: { $0 == "\n" || $0 == "\r" })
+                            .map { $0.trimmingCharacters(in: .whitespaces) }
+                            .filter { !$0.isEmpty }
+                        updated.mesExample = mesExample
+                        updated.creatorNotes = creatorNotes
+                        updated.postHistoryInstructions = postHistoryInstructions
+                        updated.tags = tagsText
+                            .split(whereSeparator: { $0 == "," || $0 == "，" })
+                            .map { $0.trimmingCharacters(in: .whitespaces) }
+                            .filter { !$0.isEmpty }
+                        updated.creator = creator
+                        updated.characterVersion = characterVersion
                         onSave(updated)
                         dismiss()
                     }

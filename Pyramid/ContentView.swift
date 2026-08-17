@@ -157,6 +157,7 @@ struct QuickSwitcherBubbles: View {
     @State private var showCharacterPicker = false
     @State private var pendingCharacter: Character?
     @State private var showDuplicateAlert = false
+    @State private var greetingCharacter: Character?
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -174,6 +175,12 @@ struct QuickSwitcherBubbles: View {
                 handleCharacterPick(character)
             }
         }
+        .sheet(item: $greetingCharacter) { character in
+            CharacterGreetingSheet(character: character) { picked, greeting in
+                store.createSession(character: picked, greeting: greeting)
+                onDismiss()
+            }
+        }
         .alert("已有同角色对话", isPresented: $showDuplicateAlert) {
             if let char = pendingCharacter {
                 if let existing = existingSession(for: char) {
@@ -184,9 +191,8 @@ struct QuickSwitcherBubbles: View {
                     }
                 }
                 Button("仍要新建") {
-                    store.createSession(character: char)
                     pendingCharacter = nil
-                    onDismiss()
+                    proceedWithGreeting(char)
                 }
                 Button("取消", role: .cancel) { pendingCharacter = nil }
             }
@@ -240,8 +246,17 @@ struct QuickSwitcherBubbles: View {
             pendingCharacter = character
             showDuplicateAlert = true
         } else {
+            proceedWithGreeting(character)
+        }
+    }
+
+    /// 决定是否弹开场白选择：有开场白 → 弹 CharacterGreetingSheet；没有 → 直接建空白会话。
+    private func proceedWithGreeting(_ character: Character) {
+        if character.availableGreetings.isEmpty {
             store.createSession(character: character)
             onDismiss()
+        } else {
+            greetingCharacter = character
         }
     }
 

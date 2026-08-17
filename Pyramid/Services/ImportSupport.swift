@@ -43,7 +43,8 @@ enum ImportSupport {
     }
 
     /// ST v1 字段在根层；ST v2 (chara_card_v2) 字段在 `data` 子对象。
-    /// 映射：name/description/personality/scenario/system_prompt。
+    /// 映射：name/description/personality/scenario/system_prompt/first_mes/alternate_greetings/
+    ///      mes_example/creator_notes/post_history_instructions/tags/creator/character_version。
     private static func parseSillyTavernCard(_ json: [String: Any]) -> Character {
         let root = (json["data"] as? [String: Any]) ?? json
         var character = Character()
@@ -52,6 +53,14 @@ enum ImportSupport {
         character.personality = (root["personality"] as? String) ?? ""
         character.scenario = (root["scenario"] as? String) ?? ""
         character.systemPrompt = (root["system_prompt"] as? String) ?? ""
+        character.firstMes = (root["first_mes"] as? String) ?? ""
+        character.alternateGreetings = (root["alternate_greetings"] as? [String]) ?? []
+        character.mesExample = (root["mes_example"] as? String) ?? ""
+        character.creatorNotes = (root["creator_notes"] as? String) ?? ""
+        character.postHistoryInstructions = (root["post_history_instructions"] as? String) ?? ""
+        character.tags = (root["tags"] as? [String]) ?? []
+        character.creator = (root["creator"] as? String) ?? ""
+        character.characterVersion = (root["character_version"] as? String) ?? ""
         if let avatar = root["avatar"] as? String,
            let imageData = Data(base64Encoded: avatar) {
             character.avatarData = imageData

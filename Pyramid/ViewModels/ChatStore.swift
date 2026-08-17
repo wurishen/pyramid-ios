@@ -32,12 +32,19 @@ final class ChatStore: ObservableObject {
     }
 
     /// 创建并直接绑定角色卡到新会话。用于「角色卡 → 新建对话」入口。
+    /// - Parameter greeting: 非空时，会作为会话的第一条助手消息（角色卡的开场白）。
     @discardableResult
-    func createSession(character: Character) -> ChatSession {
+    func createSession(character: Character, greeting: String? = nil) -> ChatSession {
         var session = ChatSession()
         session.characterId = character.id
         if !character.name.isEmpty {
             session.title = Self.uniqueTitle(base: character.name, excluding: nil, in: sessions)
+        }
+        let trimmedGreeting = greeting?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedGreeting.isEmpty {
+            session.messages.append(
+                ChatMessage(role: .assistant, content: trimmedGreeting)
+            )
         }
         sessions.insert(session, at: 0)
         currentSessionID = session.id

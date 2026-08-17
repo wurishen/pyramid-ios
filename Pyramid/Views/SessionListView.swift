@@ -12,6 +12,7 @@ struct SessionListView: View {
     @State private var renameText = ""
     @State private var deleteTarget: ChatSession?
     @State private var showNewSessionWithCharacter = false
+    @State private var greetingCharacter: Character?
 
     private var orderedSessions: [ChatSession] { store.orderedSessions() }
     private var pinned: [ChatSession] { orderedSessions.filter(\.isPinned) }
@@ -43,11 +44,14 @@ struct SessionListView: View {
                 .sheet(isPresented: $showNewSessionWithCharacter) {
                     NewSessionWithCharacterSheet(
                         characters: characters.characters,
-                        onPicked: { character in
-                            store.createSession(character: character)
-                            dismiss()
-                        }
+                        onPicked: { character in proceedWithGreeting(character) }
                     )
+                }
+                .sheet(item: $greetingCharacter) { character in
+                    CharacterGreetingSheet(character: character) { picked, greeting in
+                        store.createSession(character: picked, greeting: greeting)
+                        dismiss()
+                    }
                 }
         }
     }
@@ -281,6 +285,17 @@ struct SessionListView: View {
     private func delete(at offsets: IndexSet, from list: [ChatSession]) {
         for index in offsets {
             store.delete(list[index].id)
+        }
+    }
+
+    /// 有开场白 → 弹 CharacterGreetingSheet；没有 → 直接建空白会话。
+    /// 跟 ContentView 里 QuickSwitcherBubbles 走同样的流程，保证两入口行为一致。
+    private func proceedWithGreeting(_ character: Character) {
+        if character.availableGreetings.isEmpty {
+            store.createSession(character: character)
+            dismiss()
+        } else {
+            greetingCharacter = character
         }
     }
 }
