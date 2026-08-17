@@ -57,13 +57,13 @@ struct ChatView: View {
             .sheet(isPresented: $showRolePicker, content: rolePickerSheet)
             .sheet(item: $editingMessage, content: editMessageSheet)
             .confirmationDialog(
-                "应用到当前会话？",
+                "新建对话窗？",
                 isPresented: $showRoleAction,
                 titleVisibility: .visible
             ) {
                 roleActionButtons
             } message: {
-                Text("选择「绑定到当前会话」会替换本对话的角色；选择「新建对话窗」会新开一个对话。")
+                Text("将为该角色卡新建一个独立的对话窗。")
             }
             .alert(
                 "该角色已有对话窗",
@@ -187,10 +187,6 @@ struct ChatView: View {
     @ViewBuilder
     private var roleActionButtons: some View {
         if let role = pendingRole {
-            Button("绑定到当前会话") {
-                if let sid = store.currentSessionID { store.setCharacter(role.id, for: sid) }
-                pendingRole = nil
-            }
             Button("新建对话窗") {
                 if store.sessions.contains(where: { $0.characterId == role.id && $0.id != store.currentSessionID }) {
                     showDuplicateAlert = true
