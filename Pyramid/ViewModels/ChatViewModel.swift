@@ -166,11 +166,39 @@ final class ChatViewModel: ObservableObject {
             errorMessage = "请先在「设置」中填写 API Base URL"
             return false
         }
-        guard !settings.modelName.isEmpty else {
-            errorMessage = "请先在「设置」中填写模型名"
+        guard !effectiveModelName.isEmpty else {
+            errorMessage = "请先在「设置」或预设中填写模型名"
             return false
         }
         return true
+    }
+
+    /// 实际发送使用的模型：预设的 modelName 优先（覆盖全局），否则用全局。
+    /// 切预设不会修改 `settings.modelName`，仅在本请求里生效。
+    private var effectiveModelName: String {
+        if let presetModel = currentPreset?.modelName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !presetModel.isEmpty {
+            return presetModel
+        }
+        return settings.modelName
+    }
+
+    /// 当前会话的角色名（用于宏展开）。当会话未绑定角色时宏留空。
+    private var currentCharacterName: String {
+        characters.character(for: store.currentSession?.characterId)?.name ?? ""
+    }
+
+    /// 在送入 API 的消息上展开宏 `{{user}}` `{{char}}` 及其大小写变体。
+    /// 存储与显示用的 `message.content` 永远保持原文。
+    private func expandMacros(in messages: [ChatMessage]) -> [ChatMessage] {
+        let user = effectiveUserDisplayName
+        let char = currentCharacterName
+        guard !user.isEmpty || !char.isEmpty else { return messages }
+        return messages.map { msg in
+            var copy = msg
+            copy.content = MacroExpander.expand(msg.content, user: user, char: char)
+            return copy
+        }
     }
 
     private func request(text: String, userMessageID: UUID?) {
@@ -189,10 +217,12 @@ final class ChatViewModel: ObservableObject {
         let preset = currentPreset
         // 应用上下文裁剪（不写入 API 正文，仅裁剪历史；楼层号 / 时间 / 注入指示仍为纯 UI）。
         let trimmedHistory = applyContextTrim(rawHistory, userMessageID: userMessageID)
+        // 宏展开：仅作用于送入 API 的消息文本，不修改存储 / 显示。
+        let apiHistory = expandMacros(in: trimmedHistory)
         let client = OpenAIClient(
             baseURL: settings.baseURL,
             apiKey: settings.apiKey,
-            model: settings.modelName,
+            model: effectiveModelName,
             systemPrompt: effectiveSystemPrompt,
             userPersonaText: userPersonaText,
             beforeSystemText: WorldBookService.injectionText(for: grouped[.beforeSystem] ?? []),
@@ -206,9 +236,9 @@ final class ChatViewModel: ObservableObject {
         currentTask?.cancel()
         currentTask = Task {
             if settings.useStreaming {
-                await streamReply(with: client, history: trimmedHistory, sessionID: sessionID, userMessageID: userMessageID)
+                await streamReply(with: client, history: apiHistory, sessionID: sessionID, userMessageID: userMessageID)
             } else {
-                await sendReply(with: client, history: trimmedHistory, sessionID: sessionID, userMessageID: userMessageID)
+                await sendReply(with: client, history: apiHistory, sessionID: sessionID, userMessageID: userMessageID)
             }
             isSending = false
             pendingInputText = nil
@@ -341,12 +371,21 @@ final class ChatViewModel: ObservableObject {
             if !charPrompt.isEmpty { parts.append(charPrompt) }
         }
 
+        // 预设的系统提示词优先；否则会话；再否则全局。
+        let presetPrompt = currentPreset?.systemPrompt?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let sessionPrompt = store.currentSession?.systemPrompt?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !sessionPrompt.isEmpty {
-            parts.append(sessionPrompt)
-        } else if parts.isEmpty {
-            parts.append(settings.systemPrompt)
+        let basePrompt: String
+        if !presetPrompt.isEmpty {
+            basePrompt = presetPrompt
+        } else if !sessionPrompt.isEmpty {
+            basePrompt = sessionPrompt
+        } else {
+            basePrompt = settings.systemPrompt
+        }
+        if !basePrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            parts.append(basePrompt)
         }
 
         return parts.joined(separator: "\n\n")

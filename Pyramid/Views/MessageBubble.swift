@@ -8,6 +8,9 @@ struct MessageBubble: View {
     var showTimestamp = false
     var showAvatar = false
     var userAvatarData: Data? = nil
+    var preset: Preset? = nil
+    var settings: AppSettings
+    var displayRegexes: [DisplayRegex] = []
     var onCopy: () -> Void = {}
     var onEdit: () -> Void = {}
     var onRegenerate: () -> Void = {}
@@ -15,6 +18,24 @@ struct MessageBubble: View {
 
     private static let collapseThreshold = 800
     @State private var expanded = false
+
+    /// 渲染后的文本：原始 content → 显示用正则 → 隐藏标签剥离 → Markdown / 纯文本。
+    /// 只用于显示；onCopy/onEdit/onRegenerate 始终传 `message.content` 原文。
+    private var renderedAttributed: AttributedString {
+        MessageRenderer.render(
+            MessageRenderer.Inputs(
+                raw: message.content,
+                role: message.role,
+                settings: settings,
+                preset: preset,
+                displayRegexes: displayRegexes
+            )
+        )
+    }
+
+    private var renderedPlain: String {
+        String(renderedAttributed.characters[...])
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -60,12 +81,14 @@ struct MessageBubble: View {
         }
     }
 
+    @ViewBuilder
     private var bubbleContent: some View {
         Group {
             if message.role == .assistant {
                 assistantContent
             } else {
-                Text(message.content)
+                Text(renderedAttributed)
+                    .textSelection(.enabled)
             }
         }
         .padding(.horizontal, 12)
@@ -93,10 +116,18 @@ struct MessageBubble: View {
         }
     }
 
+    @ViewBuilder
     private var assistantContent: some View {
-        let isLong = message.content.count > Self.collapseThreshold
-        return VStack(alignment: .leading, spacing: 6) {
-            MarkdownTextView(text: expanded ? message.content : collapsedContent)
+        let content = renderedPlain
+        let isLong = content.count > Self.collapseThreshold
+        VStack(alignment: .leading, spacing: 6) {
+            if isLong && !expanded {
+                Text(AttributedString(String(content.prefix(Self.collapseThreshold)) + "…"))
+                    .textSelection(.enabled)
+            } else {
+                Text(renderedAttributed)
+                    .textSelection(.enabled)
+            }
             if isLong {
                 Button(expanded ? "收起" : "展开") {
                     withAnimation { expanded.toggle() }
@@ -105,11 +136,5 @@ struct MessageBubble: View {
                 .foregroundStyle(Color.accentColor)
             }
         }
-    }
-
-    private var collapsedContent: String {
-        guard message.content.count > Self.collapseThreshold else { return message.content }
-        let end = message.content.index(message.content.startIndex, offsetBy: Self.collapseThreshold)
-        return String(message.content[..<end]) + "…"
     }
 }

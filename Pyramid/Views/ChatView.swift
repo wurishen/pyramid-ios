@@ -8,6 +8,7 @@ struct ChatView: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var presets: PresetStore
     @ObservedObject var characters: CharacterStore
+    @ObservedObject var displayRegexes: DisplayRegexStore
     @State private var showSessions = false
     @State private var editingMessage: ChatMessage?
     @State private var messageToDelete: ChatMessage?
@@ -20,17 +21,30 @@ struct ChatView: View {
     @FocusState private var inputFocused: Bool
     @State private var lastSessionID: UUID?
 
-    init(settings: AppSettings, store: ChatStore, worldBook: WorldBookStore, presets: PresetStore, characters: CharacterStore) {
+    init(
+        settings: AppSettings,
+        store: ChatStore,
+        worldBook: WorldBookStore,
+        presets: PresetStore,
+        characters: CharacterStore,
+        displayRegexes: DisplayRegexStore
+    ) {
         self.store = store
         self.worldBook = worldBook
         self.settings = settings
         self.presets = presets
         self.characters = characters
+        self.displayRegexes = displayRegexes
         _viewModel = StateObject(wrappedValue: ChatViewModel(settings: settings, store: store, worldBook: worldBook, characters: characters, presets: presets))
     }
 
     private var currentCharacter: Character? {
         characters.character(for: store.currentSession?.characterId)
+    }
+
+    private var currentPreset: Preset? {
+        guard let id = store.currentSession?.appliedPresetId else { return nil }
+        return presets.presets.first { $0.id == id }
     }
 
     var body: some View {
@@ -347,6 +361,9 @@ struct ChatView: View {
                             showTimestamp: settings.showTimestamps,
                             showAvatar: settings.showAvatars,
                             userAvatarData: settings.userAvatarData,
+                            preset: currentPreset,
+                            settings: settings,
+                            displayRegexes: displayRegexes.regexes,
                             onCopy: { UIPasteboard.general.string = message.content },
                             onEdit: { editingMessage = message },
                             onRegenerate: { regenerateMessage = message },
@@ -469,7 +486,8 @@ struct ChatView: View {
             store: ChatStore(),
             worldBook: WorldBookStore(),
             presets: PresetStore(),
-            characters: CharacterStore()
+            characters: CharacterStore(),
+            displayRegexes: DisplayRegexStore()
         )
     }
 }

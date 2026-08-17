@@ -1,7 +1,7 @@
 # Pyramid 产品规格文档
 
 > 本文档为 iOS / Android 双端共用的产品规格，描述当前已实现功能与计划功能（TODO）。
-> 最后更新：2026-08-17
+> 最后更新：2026-08-17（新增渲染管线 / 隐藏标签 / 显示用正则 / 宏 / 预设扩展字段）
 
 ---
 
@@ -293,8 +293,11 @@ TabView
 | `temperature` | Double? | 采样温度（nil = 不覆盖） |
 | `topP` | Double? | 核采样（0-1） |
 | `maxTokens` | Int? | 单次最大输出 token |
+| `enableMarkdown` | Bool? | 三态：true=强制开 / false=强制关 / nil=沿用全局 `enableMarkdown` |
+| `displayRegexIds` | `[UUID]` | 关联的「显示用正则」ID 列表；空 = 应用所有启用中的正则 |
 
 > 采样参数在「预设编辑」中有「覆盖采样参数」开关。开 = 任一字段填值会随下次请求一起发到 OpenAI 兼容接口；未填字段不写入请求体。
+> 切换预设保留所有消息历史（仅元数据 `appliedPresetId` / `systemPrompt` / `worldBookId` 更新）。
 
 ### 7.2 应用行为
 
@@ -305,6 +308,8 @@ TabView
 4. `appliedPresetId` 记录到会话，下次请求时携带其采样参数
 
 即：预设一次性把「系统提示词、世界书绑定」写入当前会话，模型名写入全局，采样参数延迟到下次请求生效。
+
+> 实际请求时 `effectiveModelName` / `effectiveSystemPrompt` 优先采用预设值，再回退到全局 / 会话 / 角色。`effectiveModelName` **不**会回写到 `settings.modelName` —— 切换预设只影响当前会话的下次请求。
 
 ---
 
@@ -393,16 +398,64 @@ TabView
   - 含「关闭」按钮：清空 `errorMessage` / `lastFailedUserMessageID` / `lastFailedReason`。
 - API 正文（向 `OpenAIClient` 发送的 `messages`）**永远不包含**楼层号、时间戳、「已注入世界书 N 条」、草稿、未发送输入；这些都是纯 UI 装饰。
 
-### 8.5 Markdown 渲染
+### 8.4 消息显示管线
 
-原生 `AttributedString` 渲染，支持：
+> **核心约束**：存储 / 编辑 / 复制 / 重新生成 / 发送 API 全部使用 `message.content` 原始内容；以下 4 个阶段**仅**作用于气泡渲染。
+
+```
+原始 content
+  ↓ (1) 显示用正则（仅助手消息，作用域 assistant.display.pre）
+  ↓ (2) 隐藏标签剥离（<tag>...</tag> 默认含 think / thinking）
+  ↓ (3) Markdown 渲染（AttributedString(markdown:)，失败则降级为剥离 HTML 后的纯文本）
+  ↓ (4) HTML 兜底（<…> 全部剥掉，避免残留）
+气泡显示
+```
+
+四阶段均不写回 `message.content`；任何阶段失败（正则不合法 / 隐藏标签 pattern 编译失败 / Markdown 解析失败）均回退到当前 stage 的原文，不崩溃。
+
+#### 8.4.1 显示用正则（Display Regex）
+
+- 字段：`id` / `name` / `pattern` / `replacement` / `enabled` / `scope`（固定 `assistant.display.pre`）
+- 行为：仅对 `role == .assistant` 的消息在渲染前依次应用；用户消息不经过。
+- 顺序：先按当前预设的 `displayRegexIds` 顺序，再追加其它启用的正则（兜底）。
+- 编辑：保存前用 `NSRegularExpression` 校验 `pattern`，失败给出错误提示并阻止保存。
+- 无 ST 脚本 / 扩展市场；不做全量 JS 沙箱。
+
+#### 8.4.2 隐藏标签剥离
+
+- 全局开关 `hideTagStripEnabled`（默认 true）。
+- 标签列表 `hideTagsRaw`（逗号或换行分隔），默认 `think,thinking`。
+- 模式：兼容 `<tag>...</tag>`、`<tag attr="...">...</tag>`、`<tag>` 与 `</tag>` 配对不严格的情况（`.` 跨行匹配）。
+- 失败：单个标签 pattern 编译失败时跳过该标签，不影响其他标签；绝不修改原文。
+
+#### 8.4.3 Markdown 渲染
+
+- `settings.enableMarkdown` 与 `preset.enableMarkdown` 同时为空 / 同时为 false 时，渲染为纯文本（仍会剥离 HTML 兜底）。
+- 实际生效：`preset.enableMarkdown` ≠ nil 时它覆盖全局；否则读全局 `enableMarkdown`（默认 true）。
+- 助手与用户气泡均生效；用户气泡走相同的 `MessageRenderer` 路径，因此同样保留隐藏标签剥离与正则管道（用户消息上的正则不会触发，因作用域限定助手）。
+
+### 8.5 Markdown 渲染（原生）
+
+原生 `AttributedString` 渲染（iOS 15+），支持：
 
 - **段落**：Markdown 自动解析
 - **代码块**：等宽字体、水平滚动、深色背景、圆角矩形
 - **列表**：有序/无序列表
 - **行内格式**：粗体、斜体、行内代码、可点击链接
+- **未识别 HTML 标签**：自动剥掉（`<…>` 整段匹配），不显示原始标签字符
 
-### 8.6 其他
+> **无 WebView**：禁止使用 `WKWebView` / `SFSafariViewController` 作为聊天列表或气泡。
+
+### 8.6 宏
+
+进入 API 之前在消息文本上展开 `{{user}}` / `{{char}}` 及其大小写变体（`{{User}}` / `{{CHAR}}` 等，匹配 `(?i)\{\{\s*<token>\s*\}\}`）。
+
+- `user` 解析顺序：会话 `userDisplayNameOverride` → 全局 `userDisplayName` → 全局 `userName`
+- `char` 解析：当前会话绑定的角色卡 `name`
+- 替换对象：**仅** 送入 `OpenAIClient` 的 `messages` 副本；**不**写回 `message.content`，**不**作用于气泡显示。
+- 顺序（与 SPEC §10.2 同步）：用户人设 → 角色 → 会话/预设 → 世界书 → 历史（已展开宏）→ 用户最新消息（已展开宏）。
+
+### 8.7 其他
 
 - **上下文长度提示**：可选栏显示当前上下文字符数，超过阈值变橙色警告（默认 12000，可调 2000-50000）
 - **注入调试指示器**：可选显示世界书注入状态
@@ -491,6 +544,7 @@ TabView
 - `systemPrompt` 内部合并：角色 `systemPromptText()` 优先 → 会话 `systemPrompt` → 全局 `systemPrompt`（兜底）
 - 采样参数（`temperature` / `top_p` / `max_tokens`）：仅在预设填写时随请求传递；留空 = 不写字段，使用后端默认
 - 模型列表：尝试 `GET /v1/models`（自动补 `/v1`，并回退到去掉 `/v1` 的 `/models`），兼容 `data[].id` 与纯字符串数组两种响应
+- 消息进入 API 前会做宏展开（`{{user}}` / `{{char}}`，大小写不敏感）。展开仅作用于送入 `OpenAIClient` 的副本，存储与显示始终保留原文。
 
 ### 10.3 不支持的特性
 
@@ -574,6 +628,9 @@ iOS 和 Android 双端应实现**相同的核心功能集**，包括：
 | `contextTrimMode` | enum | `.byMessages` | 上下文裁剪策略：`.off` / `.byMessages` / `.byCharacters` |
 | `contextTrimMessages` | Int | 50 | 按消息条数裁剪：保留最近 N 条（2-500） |
 | `contextTrimCharacters` | Int | 8000 | 按字符数裁剪：保留最近 C 字符（500-80000） |
+| `enableMarkdown` | Bool | true | 全局「启用 Markdown 渲染」开关（预设可覆盖） |
+| `hideTagStripEnabled` | Bool | true | 全局「剥离隐藏标签」开关 |
+| `hideTagsRaw` | String | `think,thinking` | 隐藏标签列表原文本（逗号 / 换行分隔） |
 
 ---
 

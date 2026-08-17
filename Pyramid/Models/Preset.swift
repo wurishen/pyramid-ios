@@ -10,6 +10,11 @@ struct Preset: Codable, Identifiable, Equatable {
     var temperature: Double?
     var topP: Double?
     var maxTokens: Int?
+    /// Markdown 渲染：true=强制开 / false=强制关 / nil=沿用全局设置。
+    /// 旧存档里没有此字段时，沿用全局（即默认为 nil）。
+    var enableMarkdown: Bool?
+    /// 关联的「显示用正则」ID 列表；为空 = 使用所有启用中的正则。
+    var displayRegexIds: [UUID]
 
     init(
         id: UUID = UUID(),
@@ -19,7 +24,9 @@ struct Preset: Codable, Identifiable, Equatable {
         worldBookId: UUID? = nil,
         temperature: Double? = nil,
         topP: Double? = nil,
-        maxTokens: Int? = nil
+        maxTokens: Int? = nil,
+        enableMarkdown: Bool? = nil,
+        displayRegexIds: [UUID] = []
     ) {
         self.id = id
         self.name = name
@@ -29,7 +36,12 @@ struct Preset: Codable, Identifiable, Equatable {
         self.temperature = temperature
         self.topP = topP
         self.maxTokens = maxTokens
+        self.enableMarkdown = enableMarkdown
+        self.displayRegexIds = displayRegexIds
     }
+
+    /// 是否「主动覆盖」了全局 Markdown 开关（不是 nil 就是覆盖）。
+    var useGlobalMarkdown: Bool { enableMarkdown == nil }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -41,5 +53,7 @@ struct Preset: Codable, Identifiable, Equatable {
         temperature = try? c.decodeIfPresent(Double.self, forKey: .temperature)
         topP = try? c.decodeIfPresent(Double.self, forKey: .topP)
         maxTokens = try? c.decodeIfPresent(Int.self, forKey: .maxTokens)
+        enableMarkdown = try? c.decodeIfPresent(Bool.self, forKey: .enableMarkdown)
+        displayRegexIds = (try? c.decodeIfPresent([UUID].self, forKey: .displayRegexIds)) ?? []
     }
 }

@@ -3,6 +3,7 @@ import SwiftUI
 struct PresetListView: View {
     @ObservedObject var store: PresetStore
     @ObservedObject var worldBook: WorldBookStore
+    @ObservedObject var displayRegexes: DisplayRegexStore
     @State private var editingPreset: Preset?
 
     var body: some View {
@@ -38,6 +39,12 @@ struct PresetListView: View {
                             if let m = preset.maxTokens {
                                 Text("≤\(m)")
                             }
+                            if let flag = preset.enableMarkdown {
+                                Text(flag ? "MD开" : "MD关")
+                            }
+                            if !preset.displayRegexIds.isEmpty {
+                                Text("正则×\(preset.displayRegexIds.count)")
+                            }
                         }
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -57,7 +64,11 @@ struct PresetListView: View {
             }
         }
         .sheet(item: $editingPreset) { preset in
-            PresetEditView(preset: preset, worldBook: worldBook) { updated in
+            PresetEditView(
+                preset: preset,
+                worldBook: worldBook,
+                displayRegexes: displayRegexes
+            ) { updated in
                 store.upsert(updated)
             }
         }
@@ -74,6 +85,7 @@ struct PresetListView: View {
 struct PresetEditView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var worldBook: WorldBookStore
+    @ObservedObject var displayRegexes: DisplayRegexStore
     private let preset: Preset
     private let onSave: (Preset) -> Void
 
@@ -85,10 +97,23 @@ struct PresetEditView: View {
     @State private var topPText: String
     @State private var maxTokensText: String
     @State private var hasSampling: Bool
+    /// 三态: nil = 沿用全局, true = 强制开, false = 强制关。
+    @State private var markdownPolicy: MarkdownPolicy
+    @State private var selectedRegexIDs: Set<UUID>
 
-    init(preset: Preset, worldBook: WorldBookStore, onSave: @escaping (Preset) -> Void) {
+    enum MarkdownPolicy: Hashable {
+        case useGlobal, on, off
+    }
+
+    init(
+        preset: Preset,
+        worldBook: WorldBookStore,
+        displayRegexes: DisplayRegexStore,
+        onSave: @escaping (Preset) -> Void
+    ) {
         self.preset = preset
         self.worldBook = worldBook
+        self.displayRegexes = displayRegexes
         self.onSave = onSave
         _name = State(initialValue: preset.name)
         _modelName = State(initialValue: preset.modelName ?? "")
@@ -98,6 +123,15 @@ struct PresetEditView: View {
         _topPText = State(initialValue: preset.topP.map { String(format: "%.2f", $0) } ?? "")
         _maxTokensText = State(initialValue: preset.maxTokens.map(String.init) ?? "")
         _hasSampling = State(initialValue: preset.temperature != nil || preset.topP != nil || preset.maxTokens != nil)
+        switch preset.enableMarkdown {
+        case .some(true):
+            _markdownPolicy = State(initialValue: .on)
+        case .some(false):
+            _markdownPolicy = State(initialValue: .off)
+        case .none:
+            _markdownPolicy = State(initialValue: .useGlobal)
+        }
+        _selectedRegexIDs = State(initialValue: Set(preset.displayRegexIds))
     }
 
     var body: some View {
@@ -141,6 +175,32 @@ struct PresetEditView: View {
                 } footer: {
                     Text("开启后会随下次请求一起发到后端；未填写的字段维持原值。")
                 }
+                Section {
+                    Picker("Markdown 渲染", selection: $markdownPolicy) {
+                        Text("沿用全局").tag(MarkdownPolicy.useGlobal)
+                        Text("强制开启").tag(MarkdownPolicy.on)
+                        Text("强制关闭").tag(MarkdownPolicy.off)
+                    }
+                } header: {
+                    Text("渲染")
+                } footer: {
+                    Text("仅影响气泡显示，永远不修改消息原文。")
+                }
+                Section {
+                    if displayRegexes.regexes.isEmpty {
+                        Text("还没有显示用正则。")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(displayRegexes.regexes) { regex in
+                            Toggle(regex.name.isEmpty ? regex.pattern : regex.name, isOn: binding(for: regex.id))
+                        }
+                        Text("未勾选任何正则 = 应用所有启用中的正则。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("关联的显示用正则")
+                }
             }
             .navigationTitle(preset.name.isEmpty ? "新建预设" : "编辑预设")
             .navigationBarTitleDisplayMode(.inline)
@@ -150,6 +210,12 @@ struct PresetEditView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
+                        let enableMarkdown: Bool?
+                        switch markdownPolicy {
+                        case .useGlobal: enableMarkdown = nil
+                        case .on: enableMarkdown = true
+                        case .off: enableMarkdown = false
+                        }
                         onSave(
                             Preset(
                                 id: preset.id,
@@ -159,7 +225,9 @@ struct PresetEditView: View {
                                 worldBookId: worldBookId,
                                 temperature: hasSampling ? parseDouble(temperatureText) : nil,
                                 topP: hasSampling ? parseDouble(topPText) : nil,
-                                maxTokens: hasSampling ? parseInt(maxTokensText) : nil
+                                maxTokens: hasSampling ? parseInt(maxTokensText) : nil,
+                                enableMarkdown: enableMarkdown,
+                                displayRegexIds: orderedSelectedRegexIDs()
                             )
                         )
                         dismiss()
@@ -168,6 +236,23 @@ struct PresetEditView: View {
                 }
             }
         }
+    }
+
+    private func binding(for regexID: UUID) -> Binding<Bool> {
+        Binding(
+            get: { selectedRegexIDs.contains(regexID) },
+            set: { isOn in
+                if isOn { selectedRegexIDs.insert(regexID) }
+                else { selectedRegexIDs.remove(regexID) }
+            }
+        )
+    }
+
+    /// 保持原始正则列表的顺序，方便用户在 UI 上看到稳定的顺序。
+    private func orderedSelectedRegexIDs() -> [UUID] {
+        displayRegexes.regexes
+            .map(\.id)
+            .filter { selectedRegexIDs.contains($0) }
     }
 
     private func trimmedOrNil(_ text: String) -> String? {
@@ -190,6 +275,10 @@ struct PresetEditView: View {
 
 #Preview {
     NavigationStack {
-        PresetListView(store: PresetStore(), worldBook: WorldBookStore())
+        PresetListView(
+            store: PresetStore(),
+            worldBook: WorldBookStore(),
+            displayRegexes: DisplayRegexStore()
+        )
     }
 }

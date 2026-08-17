@@ -7,6 +7,7 @@ struct SettingsView: View {
     @ObservedObject var store: ChatStore
     @ObservedObject var presets: PresetStore
     @ObservedObject var characters: CharacterStore
+    @ObservedObject var displayRegexes: DisplayRegexStore
     @State private var showClearSessionsDialog = false
     @State private var showResetWorldBookDialog = false
     @State private var isLoadingModels = false
@@ -109,8 +110,27 @@ struct SettingsView: View {
                 }
                 Section("预设") {
                     NavigationLink("预设管理") {
-                        PresetListView(store: presets, worldBook: worldBook)
+                        PresetListView(store: presets, worldBook: worldBook, displayRegexes: displayRegexes)
                     }
+                }
+                Section {
+                    Toggle("启用 Markdown 渲染", isOn: $settings.enableMarkdown)
+                    Text("作用于助手与用户气泡；不修改消息原文。无 WebView，未识别的 HTML 标签会被降级为纯文本。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Toggle("剥离隐藏标签", isOn: $settings.hideTagStripEnabled)
+                    TextField("隐藏标签列表（逗号或换行分隔）", text: $settings.hideTagsRaw, axis: .vertical)
+                        .lineLimit(2...6)
+                    Text("默认包含 think、thinking。剥离形如 <tag>...</tag> 的整段，失败则保留原文。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    NavigationLink("显示用正则") {
+                        DisplayRegexListView(store: displayRegexes)
+                    }
+                } header: {
+                    Text("渲染")
+                } footer: {
+                    Text("上述所有规则仅作用于气泡显示；复制/编辑/重新生成/发送 API 始终使用原始消息。")
                 }
                 Section("上下文") {
                     Toggle("显示上下文长度提示", isOn: $settings.showContextHint)
@@ -419,6 +439,7 @@ struct SettingsView: View {
         worldBook: WorldBookStore(),
         store: ChatStore(),
         presets: PresetStore(),
-        characters: CharacterStore()
+        characters: CharacterStore(),
+        displayRegexes: DisplayRegexStore()
     )
 }

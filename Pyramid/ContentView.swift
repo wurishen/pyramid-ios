@@ -7,17 +7,32 @@ struct ContentView: View {
     @ObservedObject var worldBook: WorldBookStore
     @ObservedObject var presets: PresetStore
     @ObservedObject var characters: CharacterStore
+    @ObservedObject var displayRegexes: DisplayRegexStore
     @State private var showQuickSwitcher = false
     @State private var selectedTab = 0
 
     var body: some View {
         ZStack {
-            ChatView(settings: settings, store: store, worldBook: worldBook, presets: presets, characters: characters)
-                .opacity(selectedTab == 0 ? 1 : 0)
-                .allowsHitTesting(selectedTab == 0)
-            SettingsView(settings: settings, worldBook: worldBook, store: store, presets: presets, characters: characters)
-                .opacity(selectedTab == 1 ? 1 : 0)
-                .allowsHitTesting(selectedTab == 1)
+            ChatView(
+                settings: settings,
+                store: store,
+                worldBook: worldBook,
+                presets: presets,
+                characters: characters,
+                displayRegexes: displayRegexes
+            )
+            .opacity(selectedTab == 0 ? 1 : 0)
+            .allowsHitTesting(selectedTab == 0)
+            SettingsView(
+                settings: settings,
+                worldBook: worldBook,
+                store: store,
+                presets: presets,
+                characters: characters,
+                displayRegexes: displayRegexes
+            )
+            .opacity(selectedTab == 1 ? 1 : 0)
+            .allowsHitTesting(selectedTab == 1)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .safeAreaInset(edge: .bottom) {
