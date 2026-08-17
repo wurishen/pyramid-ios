@@ -4,6 +4,8 @@ import UniformTypeIdentifiers
 struct CharacterListView: View {
     @ObservedObject var store: CharacterStore
     @ObservedObject var worldBook: WorldBookStore
+    /// 点选 → 新建窗并切到聊天 Tab。由 ContentView 注入。
+    var onCharacterTapped: (Character) -> Void = { _ in }
     @State private var editingCharacter: Character?
     @State private var showDocumentPicker = false
     @State private var importError: String?
@@ -17,7 +19,7 @@ struct CharacterListView: View {
             }
             ForEach(store.characters) { character in
                 Button {
-                    editingCharacter = character
+                    onCharacterTapped(character)
                 } label: {
                     HStack(spacing: 12) {
                         AvatarView(imageData: character.avatarData, name: character.name, size: 44)
@@ -32,6 +34,13 @@ struct CharacterListView: View {
                             }
                         }
                         Spacer()
+                    }
+                }
+                .contextMenu {
+                    Button {
+                        editingCharacter = character
+                    } label: {
+                        Label("编辑", systemImage: "pencil")
                     }
                 }
             }

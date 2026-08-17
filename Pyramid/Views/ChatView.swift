@@ -14,7 +14,6 @@ struct ChatView: View {
     @State private var messageToDelete: ChatMessage?
     @State private var regenerateMessage: ChatMessage?
     @State private var showCopiedFeedback = false
-    @State private var showDeleteSessionAlert = false
     @FocusState private var inputFocused: Bool
     @State private var lastSessionID: UUID?
 
@@ -35,10 +34,6 @@ struct ChatView: View {
         _viewModel = StateObject(wrappedValue: ChatViewModel(settings: settings, store: store, worldBook: worldBook, characters: characters, presets: presets))
     }
 
-    private var currentCharacter: Character? {
-        characters.character(for: store.currentSession?.characterId)
-    }
-
     private var currentPreset: Preset? {
         guard let id = store.currentSession?.appliedPresetId else { return nil }
         return presets.presets.first { $0.id == id }
@@ -52,14 +47,6 @@ struct ChatView: View {
         chatScreenDialogs
             .sheet(isPresented: $showSessions, content: sessionsSheet)
             .sheet(item: $editingMessage, content: editMessageSheet)
-            .alert(
-                "删除当前会话？",
-                isPresented: $showDeleteSessionAlert
-            ) {
-                deleteSessionAlertButtons
-            } message: {
-                Text("当前会话及其全部消息将被删除，此操作不可恢复。")
-            }
             .confirmationDialog(
                 "删除这条消息？",
                 isPresented: deleteDialogBinding,
@@ -101,7 +88,6 @@ struct ChatView: View {
             if let error = viewModel.errorMessage {
                 errorBanner(error)
             }
-            sessionBar()
             messageList
             if settings.showContextHint {
                 contextHintBar
@@ -145,17 +131,6 @@ struct ChatView: View {
     }
 
     @ViewBuilder
-    private var deleteSessionAlertButtons: some View {
-        Button("删除", role: .destructive) {
-            if let sid = store.currentSessionID {
-                store.delete(sid)
-            }
-            showDeleteSessionAlert = false
-        }
-        Button("取消", role: .cancel) { showDeleteSessionAlert = false }
-    }
-
-    @ViewBuilder
     private func editMessageSheet(_ message: ChatMessage) -> some View {
         EditMessageSheet(initialText: message.content) { text in
             viewModel.editMessage(message, newContent: text)
@@ -196,37 +171,6 @@ struct ChatView: View {
             regenerateMessage = nil
         }
         Button("取消", role: .cancel) { regenerateMessage = nil }
-    }
-
-    private func sessionBar() -> some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 8) {
-                AvatarView(
-                    imageData: currentCharacter?.avatarData,
-                    name: currentCharacter?.name ?? "未绑定角色",
-                    size: 28
-                )
-                Text(currentCharacter?.name ?? "未绑定角色")
-                    .font(.subheadline)
-                    .fontWeight(currentCharacter == nil ? .regular : .medium)
-                    .foregroundStyle(currentCharacter == nil ? Color.secondary : Color.primary)
-                    .lineLimit(1)
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("当前角色，长按删除会话")
-            .contentShape(Rectangle())
-            .onLongPressGesture {
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                showDeleteSessionAlert = true
-            }
-            Spacer()
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(.bar)
-        .overlay(alignment: .bottom) {
-            Divider()
-        }
     }
 
     private var deleteDialogBinding: Binding<Bool> {
