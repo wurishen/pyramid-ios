@@ -14,10 +14,6 @@ struct ChatView: View {
     @State private var messageToDelete: ChatMessage?
     @State private var regenerateMessage: ChatMessage?
     @State private var showCopiedFeedback = false
-    @State private var showRolePicker = false
-    @State private var pendingRole: Character?
-    @State private var showRoleAction = false
-    @State private var showDuplicateAlert = false
     @State private var showDeleteSessionAlert = false
     @FocusState private var inputFocused: Bool
     @State private var lastSessionID: UUID?
@@ -55,25 +51,7 @@ struct ChatView: View {
     private var chatScreen: some View {
         chatScreenDialogs
             .sheet(isPresented: $showSessions, content: sessionsSheet)
-            .sheet(isPresented: $showRolePicker, content: rolePickerSheet)
             .sheet(item: $editingMessage, content: editMessageSheet)
-            .confirmationDialog(
-                "新建对话窗？",
-                isPresented: $showRoleAction,
-                titleVisibility: .visible
-            ) {
-                roleActionButtons
-            } message: {
-                Text("将为该角色卡新建一个独立的对话窗。")
-            }
-            .alert(
-                "该角色已有对话窗",
-                isPresented: $showDuplicateAlert
-            ) {
-                duplicateAlertButtons
-            } message: {
-                Text("该角色已绑定其他对话窗，仍要新建一个吗？")
-            }
             .alert(
                 "删除当前会话？",
                 isPresented: $showDeleteSessionAlert
@@ -167,13 +145,6 @@ struct ChatView: View {
     }
 
     @ViewBuilder
-    private func rolePickerSheet() -> some View {
-        RolePickerView(characters: characters.characters) { role in
-            handleRoleSelection(role)
-        }
-    }
-
-    @ViewBuilder
     private var deleteSessionAlertButtons: some View {
         Button("删除", role: .destructive) {
             if let sid = store.currentSessionID {
@@ -201,32 +172,6 @@ struct ChatView: View {
                 .background(.regularMaterial, in: Capsule())
                 .padding(.bottom, 8)
                 .transition(.opacity)
-        }
-    }
-
-    @ViewBuilder
-    private var roleActionButtons: some View {
-        if let role = pendingRole {
-            Button("新建对话窗") {
-                if store.sessions.contains(where: { $0.characterId == role.id && $0.id != store.currentSessionID }) {
-                    showDuplicateAlert = true
-                } else {
-                    createSession(with: role)
-                    pendingRole = nil
-                }
-            }
-            Button("取消", role: .cancel) { pendingRole = nil }
-        }
-    }
-
-    @ViewBuilder
-    private var duplicateAlertButtons: some View {
-        if let role = pendingRole {
-            Button("仍要新建") {
-                createSession(with: role)
-                pendingRole = nil
-            }
-            Button("取消", role: .cancel) { pendingRole = nil }
         }
     }
 
@@ -275,22 +220,6 @@ struct ChatView: View {
                 showDeleteSessionAlert = true
             }
             Spacer()
-            Button {
-                showRolePicker = true
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                        .font(.subheadline)
-                    Text("切换")
-                        .font(.footnote)
-                }
-                .foregroundStyle(Color.accentColor)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(Color.accentColor.opacity(0.12), in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("切换绑定角色")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -298,16 +227,6 @@ struct ChatView: View {
         .overlay(alignment: .bottom) {
             Divider()
         }
-    }
-
-    private func handleRoleSelection(_ role: Character) {
-        pendingRole = role
-        showRoleAction = true
-    }
-
-    private func createSession(with role: Character) {
-        let session = store.createSession()
-        store.setCharacter(role.id, for: session.id)
     }
 
     private var deleteDialogBinding: Binding<Bool> {
