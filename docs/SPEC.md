@@ -201,11 +201,12 @@ TabView
 
 | 位置 | 规则 |
 |------|------|
-| 聊天页顶部栏 | 当前会话角色头像（若已绑定），28pt 圆形；受 `showAvatars` 控制 |
-| 用户消息气泡左侧 | 显示**用户头像**（在「设置 → 用户」中设置，圆形）；未设置头像时显示昵称/「我」首字母；受 `showAvatars` 控制 |
-| AI 消息气泡 | 不显示头像 |
+| 聊天页顶部栏 | 左侧：当前角色头像 28pt + 角色名（展示用，不可点）；右侧：「切换」按钮，点开角色选择器。**角色头像只在顶部栏出现**，不再贴在助手消息旁 |
+| 聊天页导航栏 | 左侧：会话列表按钮；右侧：复制全部 + **用户头像** 26pt（酒馆风格） |
+| 用户消息气泡 | 用户头像在气泡**右侧**外侧；未设置头像时显示昵称/「我」首字母；受 `showAvatars` 控制 |
+| 助手消息气泡 | **不显示任何角色头像**（角色信息只在顶部栏，避免重复） |
 | 会话列表每行 | 会话角色头像或默认首字母 |
-| 会话快速切换器 | 角色头像网格 |
+| 会话快速切换器 | 顶部长条栏 = 当前角色头像（居中）+ 右侧「选择角色卡」按钮；下方为角色头像圆形气泡网格，气泡下方显示会话标签 |
 
 ### 5.2 AvatarView 组件
 
@@ -252,6 +253,11 @@ TabView
 | `modelName` | String? | 模型名称（nil = 使用全局） |
 | `systemPrompt` | String? | 系统提示词（nil = 不覆盖会话） |
 | `worldBookId` | UUID? | 绑定的世界书（nil = 不覆盖会话） |
+| `temperature` | Double? | 采样温度（nil = 不覆盖） |
+| `topP` | Double? | 核采样（0-1） |
+| `maxTokens` | Int? | 单次最大输出 token |
+
+> 采样参数在「预设编辑」中有「覆盖采样参数」开关。开 = 任一字段填值会随下次请求一起发到 OpenAI 兼容接口；未填字段不写入请求体。
 
 ### 7.2 应用行为
 
@@ -259,8 +265,9 @@ TabView
 1. 设置会话的 `systemPrompt` 为预设值（可能为 nil）
 2. 设置会话的 `worldBookId` 为预设值（可能为 nil）
 3. 若预设的 `modelName` 非空，设置**全局** `modelName`
+4. `appliedPresetId` 记录到会话，下次请求时携带其采样参数
 
-即：预设一次性把「系统提示词、世界书绑定」写入当前会话，模型名写入全局，立即生效。
+即：预设一次性把「系统提示词、世界书绑定」写入当前会话，模型名写入全局，采样参数延迟到下次请求生效。
 
 ---
 
@@ -367,6 +374,15 @@ TabView
 - 支持格式见 4.2
 - 单个文件解析失败即中断，并弹出错误提示
 
+### 9.5 全量备份（设置 → 备份）
+
+- **导出**：JSON 单一文件（`pyramid-backup-yyyyMMdd-HHmmss.json`），内容包含会话列表（含消息）+ 当前会话指针 + 角色卡 + 世界书 + 预设，`pretty + sortedKeys`
+- **导入**：通过 `UIDocumentPicker` 选择 JSON
+  - **合并**：按 `id` 去重，已有保留本机版本，新条目追加；最后尝试恢复 `currentSessionID`
+  - **覆盖**：先清空本机所有数据再替换（需二次确认）
+- 失败原因（解析失败 / 版本不兼容）通过 alert 弹窗告知用户
+- 备份是单一 JSON，便于 iCloud / AirDrop / 「文件」App 迁移
+
 > **历史修复**：早期用 SwiftUI `fileImporter` 时，真机上会因 security-scoped URL 权限 / iCloud 占位文件导致「点打开无反应」；已改为 `UIDocumentPicker` 并强制 `asCopy: true`，把文件直接复制进 App 沙盒读取，彻底绕开该问题。
 
 ---
@@ -389,6 +405,8 @@ TabView
 - 60 秒请求超时
 - 支持无认证（本地服务器场景，apiKey 为空时跳过 Authorization 头）
 - 系统提示词组装顺序：`beforeSystem → systemPrompt → afterSystem → history → afterHistory`（均为独立 `system` 消息）
+- `systemPrompt` 内部合并：角色 `systemPromptText()` 优先 → 会话 `systemPrompt` → 全局 `systemPrompt`（兜底）
+- 采样参数（`temperature` / `top_p` / `max_tokens`）：仅在预设填写时随请求传递；留空 = 不写字段，使用后端默认
 - 模型列表：尝试 `GET /v1/models`（自动补 `/v1`，并回退到去掉 `/v1` 的 `/models`），兼容 `data[].id` 与纯字符串数组两种响应
 
 ### 10.3 不支持的特性

@@ -152,7 +152,7 @@ final class ChatStore: ObservableObject {
         }
     }
 
-    private func save() {
+    func save() {
         if let data = try? JSONEncoder().encode(sessions) {
             UserDefaults.standard.set(data, forKey: StorageKeys.sessions)
         }

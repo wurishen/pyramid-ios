@@ -25,7 +25,7 @@ struct ChatView: View {
         self.settings = settings
         self.presets = presets
         self.characters = characters
-        _viewModel = StateObject(wrappedValue: ChatViewModel(settings: settings, store: store, worldBook: worldBook, characters: characters))
+        _viewModel = StateObject(wrappedValue: ChatViewModel(settings: settings, store: store, worldBook: worldBook, characters: characters, presets: presets))
     }
 
     private var currentCharacter: Character? {
@@ -171,29 +171,39 @@ struct ChatView: View {
 
     private func sessionBar() -> some View {
         HStack(spacing: 12) {
+            // 左侧：当前角色卡头像 + 名称（不可点，仅展示）。
+            HStack(spacing: 8) {
+                AvatarView(
+                    imageData: currentCharacter?.avatarData,
+                    name: currentCharacter?.name ?? "未绑定角色",
+                    size: 28
+                )
+                Text(currentCharacter?.name ?? "未绑定角色")
+                    .font(.subheadline)
+                    .fontWeight(currentCharacter == nil ? .regular : .medium)
+                    .foregroundStyle(currentCharacter == nil ? Color.secondary : Color.primary)
+                    .lineLimit(1)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("当前角色")
+            Spacer()
+            // 右侧：切换绑定角色按钮（点开 RolePickerView）。
             Button {
                 showRolePicker = true
             } label: {
-                HStack(spacing: 8) {
-                    AvatarView(
-                        imageData: currentCharacter?.avatarData,
-                        name: currentCharacter?.name ?? "选择角色",
-                        size: 24
-                    )
-                    Text(currentCharacter?.name ?? "选择角色")
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
                         .font(.subheadline)
-                        .fontWeight(currentCharacter == nil ? .regular : .medium)
-                        .foregroundStyle(currentCharacter == nil ? Color.secondary : Color.primary)
+                    Text("切换")
+                        .font(.footnote)
                 }
-                .contentShape(Rectangle())
+                .foregroundStyle(Color.accentColor)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Color.accentColor.opacity(0.12), in: Capsule())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("选择角色卡")
-            Spacer()
-            Text(store.currentSession?.title ?? "新会话")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            .accessibilityLabel("切换绑定角色")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)

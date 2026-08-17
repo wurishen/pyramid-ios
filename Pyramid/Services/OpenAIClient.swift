@@ -31,6 +31,10 @@ struct OpenAIClient {
     let beforeSystemText: String
     let afterSystemText: String
     let afterHistoryText: String
+    /// 采样参数：nil = 不传给接口，使用后端默认。
+    var temperature: Double?
+    var topP: Double?
+    var maxTokens: Int?
 
     func send(messages: [ChatMessage]) async throws -> String {
         let data: Data
@@ -133,7 +137,10 @@ struct OpenAIClient {
         let body = ChatCompletionRequest(
             model: model,
             messages: requestMessages,
-            stream: stream
+            stream: stream,
+            temperature: temperature,
+            topP: topP,
+            maxTokens: maxTokens
         )
         request.httpBody = try JSONEncoder().encode(body)
         return request

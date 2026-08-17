@@ -159,6 +159,14 @@ struct QuickSwitcherView: View {
         }
         .alert("已有同角色对话", isPresented: $showDuplicateAlert) {
             if let char = pendingCharacter {
+                if let existing = existingSession(for: char) {
+                    Button("打开已有") {
+                        store.select(existing.id)
+                        pendingCharacter = nil
+                        dismiss()
+                        dismissTab()
+                    }
+                }
                 Button("仍要新建") {
                     store.createSession(character: char)
                     pendingCharacter = nil
@@ -169,9 +177,9 @@ struct QuickSwitcherView: View {
             }
         } message: {
             if let char = pendingCharacter {
-                Text("「\(char.name)」已绑定到其他对话，仍要新建一个吗？")
+                Text("「\(char.name)」已绑定到其他对话。可以打开已有对话，或继续新建一个。")
             } else {
-                Text("该角色已绑定到其他对话，仍要新建一个吗？")
+                Text("该角色已绑定到其他对话。")
             }
         }
     }
@@ -247,6 +255,7 @@ struct QuickSwitcherView: View {
 
     private func bubbleCell(for session: ChatSession) -> some View {
         let char = characters.character(for: session.characterId)
+        let label = displayTitle(for: session, character: char)
         return VStack(spacing: 6) {
             ZStack {
                 Circle()
@@ -254,11 +263,11 @@ struct QuickSwitcherView: View {
                     .frame(width: 66, height: 66)
                 AvatarView(
                     imageData: char?.avatarData,
-                    name: char?.name ?? session.title,
+                    name: char?.name ?? label,
                     size: 56
                 )
             }
-            Text(session.title)
+            Text(label)
                 .font(.caption)
                 .foregroundStyle(.primary)
                 .lineLimit(1)
@@ -267,6 +276,20 @@ struct QuickSwitcherView: View {
         .padding(.vertical, 6)
         .padding(.horizontal, 4)
         .frame(maxWidth: .infinity)
+    }
+
+    /// 气泡下方的会话标签。
+    /// 优先级: 显式标题（非「新会话」占位）→ 角色名 → 「新会话」。
+    /// 旧版本只读 `session.title`，遇到首条消息还没写入的会话就会显示空 / 截断后的「…」。
+    private func displayTitle(for session: ChatSession, character: Character?) -> String {
+        let trimmed = session.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty && trimmed != "新会话" {
+            return trimmed
+        }
+        if let name = character?.name, !name.isEmpty {
+            return name
+        }
+        return "新会话"
     }
 
     private func handleCharacterPick(_ character: Character) {
@@ -278,6 +301,10 @@ struct QuickSwitcherView: View {
             dismiss()
             dismissTab()
         }
+    }
+
+    private func existingSession(for character: Character) -> ChatSession? {
+        store.sessions.first { $0.characterId == character.id }
     }
 }
 

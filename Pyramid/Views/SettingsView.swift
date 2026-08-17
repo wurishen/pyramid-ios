@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @ObservedObject var settings: AppSettings
@@ -13,6 +14,14 @@ struct SettingsView: View {
     @State private var showUserAvatarPicker = false
     @State private var fetchedModels: [String] = []
     @State private var modelError: String?
+
+    @State private var backupURL: URL?
+    @State private var backupError: String?
+    @State private var backupSuccess: String?
+    @State private var showBackupPicker = false
+    @State private var pendingBackup: PyramidBackup?
+    @State private var showBackupMergeConfirm = false
+    @State private var showBackupOverwriteConfirm = false
 
     var body: some View {
         NavigationStack {
@@ -120,6 +129,26 @@ struct SettingsView: View {
                         showResetWorldBookDialog = true
                     }
                 }
+                Section("备份") {
+                    Button {
+                        exportBackup()
+                    } label: {
+                        Label("导出备份", systemImage: "square.and.arrow.up")
+                    }
+                    Button {
+                        showBackupPicker = true
+                    } label: {
+                        Label("导入备份", systemImage: "square.and.arrow.down")
+                    }
+                    if let url = backupURL {
+                        ShareLink(item: url, preview: SharePreview("Pyramid 备份", image: Image(systemName: "doc"))) {
+                            Label("分享最新备份", systemImage: "paperplane")
+                        }
+                    }
+                    Text("导出包含会话、角色、世界书、预设；导入需选择合并或覆盖。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
                 Section("说明") {
                     Text("Base URL 可带或不带 /v1，应用会自动拼接 chat/completions。所有设置只保存在本机（UserDefaults）。")
                         .font(.footnote)
@@ -159,6 +188,73 @@ struct SettingsView: View {
                 Button("取消", role: .cancel) {}
             } message: {
                 Text("将删除所有世界书及其全部条目，并重建一本空的「全局世界书」，此操作不可恢复。")
+            }
+            .sheet(isPresented: $showBackupPicker) {
+                DocumentPicker(
+                    allowedTypes: [UTType.json, .data, .item],
+                    allowsMultipleSelection: false,
+                    onPicked: { urls in handleBackupPicked(urls: urls) },
+                    onCancel: {}
+                )
+            }
+            .alert("备份失败", isPresented: backupErrorBinding) {
+                Button("好", role: .cancel) { backupError = nil }
+            } message: {
+                Text(backupError ?? "")
+            }
+            .alert("导入完成", isPresented: backupSuccessBinding) {
+                Button("好", role: .cancel) { backupSuccess = nil }
+            } message: {
+                Text(backupSuccess ?? "")
+            }
+            .confirmationDialog(
+                "如何导入备份？",
+                isPresented: $showBackupMergeConfirm,
+                titleVisibility: .visible
+            ) {
+                if let backup = pendingBackup {
+                    Button("合并到现有数据") {
+                        BackupService.merge(
+                            backup: backup,
+                            store: store,
+                            characters: characters,
+                            worldBook: worldBook,
+                            presets: presets
+                        )
+                        backupSuccess = "已合并 \(backup.sessions.count) 个会话 / \(backup.characters.count) 个角色 / \(backup.worldBooks.count) 本世界书 / \(backup.presets.count) 个预设"
+                        pendingBackup = nil
+                    }
+                    Button("覆盖现有数据", role: .destructive) {
+                        showBackupMergeConfirm = false
+                        showBackupOverwriteConfirm = true
+                    }
+                    Button("取消", role: .cancel) {
+                        pendingBackup = nil
+                    }
+                }
+            } message: {
+                Text("合并会按 id 去重，保留本机已有数据；覆盖会先清空所有本地数据再替换，不可恢复。")
+            }
+            .alert("确认覆盖全部数据？",
+                   isPresented: $showBackupOverwriteConfirm) {
+                Button("覆盖", role: .destructive) {
+                    if let backup = pendingBackup {
+                        BackupService.overwrite(
+                            backup: backup,
+                            store: store,
+                            characters: characters,
+                            worldBook: worldBook,
+                            presets: presets
+                        )
+                        backupSuccess = "已覆盖：\(backup.sessions.count) 个会话 / \(backup.characters.count) 个角色 / \(backup.worldBooks.count) 本世界书 / \(backup.presets.count) 个预设"
+                    }
+                    pendingBackup = nil
+                }
+                Button("取消", role: .cancel) {
+                    pendingBackup = nil
+                }
+            } message: {
+                Text("覆盖会删除你所有本机会话、角色、世界书与预设，并替换为备份内容。此操作不可恢复。")
             }
         }
     }
@@ -228,6 +324,51 @@ struct SettingsView: View {
         } catch {
             modelError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
+    }
+
+    // MARK: - 备份
+
+    private func exportBackup() {
+        do {
+            let url = try BackupService.makeBackup(
+                store: store,
+                characters: characters,
+                worldBook: worldBook,
+                presets: presets
+            )
+            backupURL = url
+            backupSuccess = "已导出：\(url.lastPathComponent)"
+        } catch {
+            backupError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    private func handleBackupPicked(urls: [URL]) {
+        guard let url = urls.first else {
+            backupError = "未选择任何文件"
+            return
+        }
+        do {
+            let backup = try BackupService.parseBackup(from: url)
+            pendingBackup = backup
+            showBackupMergeConfirm = true
+        } catch {
+            backupError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    private var backupErrorBinding: Binding<Bool> {
+        Binding(
+            get: { backupError != nil },
+            set: { if !$0 { backupError = nil } }
+        )
+    }
+
+    private var backupSuccessBinding: Binding<Bool> {
+        Binding(
+            get: { backupSuccess != nil },
+            set: { if !$0 { backupSuccess = nil } }
+        )
     }
 }
 

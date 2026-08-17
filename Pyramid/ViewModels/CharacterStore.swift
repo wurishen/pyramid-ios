@@ -35,7 +35,7 @@ final class CharacterStore: ObservableObject {
         characters = decoded
     }
 
-    private func save() {
+    func save() {
         if let data = try? JSONEncoder().encode(characters) {
             UserDefaults.standard.set(data, forKey: StorageKeys.characters)
         }

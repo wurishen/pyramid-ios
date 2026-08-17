@@ -314,7 +314,7 @@ final class WorldBookStore: ObservableObject {
         books = decoded
     }
 
-    private func save() {
+    func save() {
         if let data = try? JSONEncoder().encode(books) {
             UserDefaults.standard.set(data, forKey: StorageKeys.books)
         }

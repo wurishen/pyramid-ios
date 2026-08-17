@@ -12,12 +12,20 @@ final class ChatViewModel: ObservableObject {
     private let settings: AppSettings
     private let worldBook: WorldBookStore
     private let characters: CharacterStore
+    private let presets: PresetStore
 
-    init(settings: AppSettings, store: ChatStore, worldBook: WorldBookStore, characters: CharacterStore) {
+    init(settings: AppSettings, store: ChatStore, worldBook: WorldBookStore, characters: CharacterStore, presets: PresetStore) {
         self.settings = settings
         self.store = store
         self.worldBook = worldBook
         self.characters = characters
+        self.presets = presets
+    }
+
+    /// 当前会话应用的预设（含采样参数）。appliedPresetId 失效时回退 nil。
+    private var currentPreset: Preset? {
+        guard let id = store.currentSession?.appliedPresetId else { return nil }
+        return presets.presets.first { $0.id == id }
     }
 
     var messages: [ChatMessage] {
@@ -85,6 +93,7 @@ final class ChatViewModel: ObservableObject {
         let entries = worldBookEntries(input: text, history: history)
         lastInjectedCount = entries.count
         let grouped = WorldBookService.groupByPosition(entries)
+        let preset = currentPreset
         let client = OpenAIClient(
             baseURL: settings.baseURL,
             apiKey: settings.apiKey,
@@ -92,7 +101,10 @@ final class ChatViewModel: ObservableObject {
             systemPrompt: effectiveSystemPrompt,
             beforeSystemText: WorldBookService.injectionText(for: grouped[.beforeSystem] ?? []),
             afterSystemText: WorldBookService.injectionText(for: grouped[.afterSystem] ?? []),
-            afterHistoryText: WorldBookService.injectionText(for: grouped[.afterHistory] ?? [])
+            afterHistoryText: WorldBookService.injectionText(for: grouped[.afterHistory] ?? []),
+            temperature: preset?.temperature,
+            topP: preset?.topP,
+            maxTokens: preset?.maxTokens
         )
 
         Task {
