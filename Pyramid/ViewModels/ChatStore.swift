@@ -223,7 +223,39 @@ final class ChatStore: ObservableObject {
         }
     }
 
+    // MARK: - 持久化（节流写盘）
+    //
+    // 旧实现是每次 mutate 立即 `JSONEncoder().encode(sessions)` + UserDefaults 写：
+    // streaming 一个 1000-token 回复 = 主线程 1000 次全量编码 + 写盘，开销巨大。
+    // 现在改为：mutate → `save()` 排一个 250ms 的去抖任务，期间重复 mutate 只重置定时器；
+    // scenePhase 切到 .background/.inactive 时 `flushPendingSave()` 强制立即落盘，
+    // 保证 OS kill 前数据安全。
+    private var pendingSaveTask: Task<Void, Never>?
+    private static let saveDebounceNanoseconds: UInt64 = 250_000_000
+
     func save() {
+        scheduleSave(after: Self.saveDebounceNanoseconds)
+    }
+
+    /// 强制立即落盘：取消排队的去抖任务，同步执行一次 encode + write。
+    /// 退出前台 / 切到后台时调用，确保数据安全。
+    func flushPendingSave() {
+        pendingSaveTask?.cancel()
+        pendingSaveTask = nil
+        performSaveNow()
+    }
+
+    private func scheduleSave(after nanoseconds: UInt64) {
+        pendingSaveTask?.cancel()
+        pendingSaveTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: nanoseconds)
+            if Task.isCancelled { return }
+            self?.pendingSaveTask = nil
+            self?.performSaveNow()
+        }
+    }
+
+    private func performSaveNow() {
         if let data = try? JSONEncoder().encode(sessions) {
             UserDefaults.standard.set(data, forKey: StorageKeys.sessions)
         }
