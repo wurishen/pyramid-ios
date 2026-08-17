@@ -19,107 +19,137 @@ struct SessionListView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                if !pinned.isEmpty {
-                    Section("置顶") {
-                        ForEach(pinned) { session in
-                            sessionRow(session)
-                                .listRowBackground(session.id == store.currentSessionID ? Color.accentColor.opacity(0.12) : nil)
+            sessionList
+                .navigationTitle("会话")
+                .toolbar { sessionListToolbar }
+                .sheet(item: $detailSession) { session in detailSheet(session) }
+                .alert("重命名会话", isPresented: renameDialogBinding) {
+                    TextField("标题", text: $renameText)
+                    Button("保存") { commitRename() }
+                    Button("取消", role: .cancel) { renameTarget = nil }
+                } message: {
+                    Text("留空则恢复为「新会话」。")
+                }
+                .confirmationDialog(
+                    "删除会话？",
+                    isPresented: deleteDialogBinding,
+                    titleVisibility: .visible
+                ) {
+                    Button("删除", role: .destructive) { commitDelete() }
+                    Button("取消", role: .cancel) { deleteTarget = nil }
+                } message: {
+                    deleteDialogMessage
+                }
+                .sheet(isPresented: $showNewSessionWithCharacter) {
+                    NewSessionWithCharacterSheet(
+                        characters: characters.characters,
+                        store: store,
+                        onPicked: { character in
+                            store.createSession(character: character)
+                            dismiss()
                         }
-                        .onDelete { indexSet in delete(at: indexSet, from: pinned) }
-                    }
+                    )
                 }
-                Section(pinned.isEmpty ? "全部会话" : "其它") {
-                    ForEach(others) { session in
-                        sessionRow(session)
-                            .listRowBackground(session.id == store.currentSessionID ? Color.accentColor.opacity(0.12) : nil)
-                    }
-                    .onDelete { indexSet in delete(at: indexSet, from: others) }
-                } footer: {
-                    Text("左滑可重命名 / 置顶 / 删除；点行进入会话，点「详情」编辑绑定。")
-                }
+        }
+    }
+
+    private var sessionList: some View {
+        List {
+            if !pinned.isEmpty {
+                pinnedSection
             }
-            .navigationTitle("会话")
+            othersSection
+        }
+    }
+
+    private var pinnedSection: some View {
+        Section("置顶") {
+            ForEach(pinned) { session in
+                sessionRow(session)
+                    .listRowBackground(rowBackground(for: session))
+            }
+            .onDelete { indexSet in delete(at: indexSet, from: pinned) }
+        }
+    }
+
+    private var othersSection: some View {
+        Section(pinned.isEmpty ? "全部会话" : "其它") {
+            ForEach(others) { session in
+                sessionRow(session)
+                    .listRowBackground(rowBackground(for: session))
+            }
+            .onDelete { indexSet in delete(at: indexSet, from: others) }
+        } footer: {
+            Text("左滑可重命名 / 置顶 / 删除；点行进入会话，点「详情」编辑绑定。")
+        }
+    }
+
+    private func rowBackground(for session: ChatSession) -> Color? {
+        session.id == store.currentSessionID ? Color.accentColor.opacity(0.12) : nil
+    }
+
+    @ToolbarContentBuilder
+    private var sessionListToolbar: some ToolbarContent {
+        ToolbarItem(placement: .confirmationAction) {
+            Menu {
+                Button {
+                    store.createSession()
+                    dismiss()
+                } label: {
+                    Label("新建空白会话", systemImage: "plus.bubble")
+                }
+                if !characters.characters.isEmpty {
+                    Button {
+                        showNewSessionWithCharacter = true
+                    } label: {
+                        Label("新建并绑定角色", systemImage: "person.crop.circle.badge.plus")
+                    }
+                }
+            } label: {
+                Label("新建", systemImage: "plus")
+            }
+        }
+        ToolbarItem(placement: .topBarLeading) {
+            Button("完成") { dismiss() }
+        }
+    }
+
+    private func detailSheet(_ session: ChatSession) -> some View {
+        NavigationStack {
+            SessionDetailView(
+                store: store,
+                worldBook: worldBook,
+                settings: settings,
+                presets: presets,
+                characters: characters,
+                sessionID: session.id
+            )
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Menu {
-                        Button {
-                            store.createSession()
-                            dismiss()
-                        } label: {
-                            Label("新建空白会话", systemImage: "plus.bubble")
-                        }
-                        if !characters.characters.isEmpty {
-                            Button {
-                                showNewSessionWithCharacter = true
-                            } label: {
-                                Label("新建并绑定角色", systemImage: "person.crop.circle.badge.plus")
-                            }
-                        }
-                    } label: {
-                        Label("新建", systemImage: "plus")
-                    }
-                }
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("完成") { dismiss() }
+                    Button("完成") { detailSession = nil }
                 }
             }
-            .sheet(item: $detailSession) { session in
-                NavigationStack {
-                    SessionDetailView(
-                        store: store,
-                        worldBook: worldBook,
-                        settings: settings,
-                        presets: presets,
-                        characters: characters,
-                        sessionID: session.id
-                    )
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("完成") { detailSession = nil }
-                        }
-                    }
-                }
-            }
-            .alert("重命名会话", isPresented: renameDialogBinding) {
-                TextField("标题", text: $renameText)
-                Button("保存") {
-                    if let target = renameTarget {
-                        store.rename(target.id, to: renameText)
-                    }
-                    renameTarget = nil
-                }
-                Button("取消", role: .cancel) { renameTarget = nil }
-            } message: {
-                Text("留空则恢复为「新会话」。")
-            }
-            .confirmationDialog(
-                "删除会话？",
-                isPresented: deleteDialogBinding,
-                titleVisibility: .visible
-            ) {
-                Button("删除", role: .destructive) {
-                    if let target = deleteTarget { store.delete(target.id) }
-                    deleteTarget = nil
-                }
-                Button("取消", role: .cancel) { deleteTarget = nil }
-            } message: {
-                if let target = deleteTarget {
-                    Text("「\(target.title)」及其全部消息将被删除，此操作不可恢复。")
-                } else {
-                    Text("该会话及其全部消息将被删除，此操作不可恢复。")
-                }
-            }
-            .sheet(isPresented: $showNewSessionWithCharacter) {
-                NewSessionWithCharacterSheet(
-                    characters: characters.characters,
-                    store: store,
-                    onPicked: { character in
-                        store.createSession(character: character)
-                        dismiss()
-                    }
-                )
-            }
+        }
+    }
+
+    private func commitRename() {
+        if let target = renameTarget {
+            store.rename(target.id, to: renameText)
+        }
+        renameTarget = nil
+    }
+
+    private func commitDelete() {
+        if let target = deleteTarget { store.delete(target.id) }
+        deleteTarget = nil
+    }
+
+    @ViewBuilder
+    private var deleteDialogMessage: some View {
+        if let target = deleteTarget {
+            Text("「\(target.title)」及其全部消息将被删除，此操作不可恢复。")
+        } else {
+            Text("该会话及其全部消息将被删除，此操作不可恢复。")
         }
     }
 
