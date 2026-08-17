@@ -51,12 +51,6 @@ struct WorldBookView: View {
         _viewingBookID = State(initialValue: store.globalBook.id)
     }
 
-    init(store: WorldBookStore, settings: AppSettings) {
-        self.store = store
-        self.settings = settings
-        _viewingBookID = State(initialValue: store.globalBook.id)
-    }
-
     private var currentBook: WorldBook {
         store.book(for: viewingBookID)
     }

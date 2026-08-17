@@ -25,7 +25,7 @@ struct SessionDetailView: View {
                         .tag(Optional(char.id))
                     }
                 }
-                if let char = characters.character(for: session?.characterId) {
+                if characters.character(for: session?.characterId) != nil {
                     Text("角色系统提示词将合并到对话请求中。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
