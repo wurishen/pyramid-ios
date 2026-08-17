@@ -1,9 +1,47 @@
 import Foundation
+import os
 
 enum WorldBookService {
     static let maxEntries = 20
     static let maxCharacters = 2000
     static let defaultScanDepth = 4
+
+    // MARK: - Item 6 H5：每条目的「懒编译」小写关键字缓存
+    //
+    // 旧实现每次 selectedEntries 都 entry.keywords.map { $0.lowercased() } +
+    // matches(...) 内部再 keyword.lowercased()：N 本书 × M 条目 × K 关键字的输入下，
+    // 每轮请求都要重复小写化字符串。WorldBookEntry 由 value 持有但 ID 稳定，
+    // 这里按 id 缓存 (primaryLower, secondaryLower) + hash 校验关键字是否改了，
+    // 改后自动重建。匹配语义不变 —— matches 仍接收已小写化字符串。
+    private struct KeywordSnapshot {
+        let primaryHash: Int
+        let secondaryHash: Int
+        let primary: [String]
+        let secondary: [String]
+    }
+    private static let lowercasedKeywordsCache = OSAllocatedUnfairLock<[UUID: KeywordSnapshot]>(initialState: [:])
+
+    /// 读取 / 构建某条目的小写化关键字。命中缓存且关键字未变则复用；否则重建。
+    static func lowercasedKeywords(for entry: WorldBookEntry) -> (primary: [String], secondary: [String]) {
+        let primaryHash = entry.keywords.reduce(0) { $0 ^ $1.hashValue }
+        let secondaryHash = entry.secondaryKeywords.reduce(0) { $0 ^ $1.hashValue }
+        return lowercasedKeywordsCache.withLock { cache in
+            if let snap = cache[entry.id],
+               snap.primaryHash == primaryHash,
+               snap.secondaryHash == secondaryHash {
+                return (snap.primary, snap.secondary)
+            }
+            let p = entry.keywords.map { $0.lowercased() }
+            let s = entry.secondaryKeywords.map { $0.lowercased() }
+            cache[entry.id] = KeywordSnapshot(
+                primaryHash: primaryHash,
+                secondaryHash: secondaryHash,
+                primary: p,
+                secondary: s
+            )
+            return (p, s)
+        }
+    }
 
     static func selectedEntries(for input: String, history: [ChatMessage], entries: [WorldBookEntry]) -> [WorldBookEntry] {
         var searchableCache: [Int: String] = [:]
@@ -21,10 +59,12 @@ enum WorldBookService {
             guard entry.isEnabled else { return false }
             if entry.isConstant { return true }
             let text = searchable(for: entry)
-            let primaryHit = entry.keywords.contains { matches($0, mode: entry.matchMode, in: text) }
+            // Item 6 H5：使用每条目懒编译的小写关键字，避免每次调用再 lowercase
+            let lowered = lowercasedKeywords(for: entry)
+            let primaryHit = lowered.primary.contains { matches($0, mode: entry.matchMode, in: text) }
             guard primaryHit else { return false }
-            if entry.secondaryKeywords.isEmpty { return true }
-            return entry.secondaryKeywords.contains { matches($0, mode: entry.matchMode, in: text) }
+            if lowered.secondary.isEmpty { return true }
+            return lowered.secondary.contains { matches($0, mode: entry.matchMode, in: text) }
         }
 
         // 概率：probability < 100 时按 (条目 id + 匹配文本) 的哈希确定性决定，
@@ -67,9 +107,10 @@ enum WorldBookService {
         return parts.joined(separator: "\n\n")
     }
 
-    private static func matches(_ keyword: String, mode: WorldBookMatchMode, in text: String) -> Bool {
-        guard !keyword.isEmpty else { return false }
-        let keywordLower = keyword.lowercased()
+    private static func matches(_ keywordLower: String, mode: WorldBookMatchMode, in text: String) -> Bool {
+        // Item 6 H5：调用方已通过 `lowercasedKeywords(for:)` 提供小写形式，
+        // 这里不再重复 lowercase。text 也在 `searchable(for:)` 里已统一小写化。
+        guard !keywordLower.isEmpty else { return false }
         switch mode {
         case .contains:
             return text.contains(keywordLower)
