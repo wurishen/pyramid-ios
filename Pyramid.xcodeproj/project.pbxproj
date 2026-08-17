@@ -40,7 +40,6 @@
 		AB000000000000000000020C /* MessageBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000211 /* MessageBubble.swift */; };
 		AB000000000000000000020D /* CharacterGreetingSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000212 /* CharacterGreetingSheet.swift */; };
 		AB000000000000000000020E /* EditMessageSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000213 /* EditMessageSheet.swift */; };
-		AB000000000000000000020F /* NewSessionWithCharacterSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000214 /* NewSessionWithCharacterSheet.swift */; };
 		AB0000000000000000000215 /* MessageRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000021F /* MessageRenderer.swift */; };
 		AB0000000000000000000216 /* DisplayRegex.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000220 /* DisplayRegex.swift */; };
 		AB0000000000000000000217 /* MacroExpander.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000221 /* MacroExpander.swift */; };
@@ -86,7 +85,6 @@
 		AB0000000000000000000211 /* MessageBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBubble.swift; sourceTree = "<group>"; };
 		AB0000000000000000000212 /* CharacterGreetingSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharacterGreetingSheet.swift; sourceTree = "<group>"; };
 		AB0000000000000000000213 /* EditMessageSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditMessageSheet.swift; sourceTree = "<group>"; };
-		AB0000000000000000000214 /* NewSessionWithCharacterSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewSessionWithCharacterSheet.swift; sourceTree = "<group>"; };
 		AB000000000000000000021F /* MessageRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageRenderer.swift; sourceTree = "<group>"; };
 		AB0000000000000000000220 /* DisplayRegex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayRegex.swift; sourceTree = "<group>"; };
 		AB0000000000000000000221 /* MacroExpander.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacroExpander.swift; sourceTree = "<group>"; };
@@ -190,7 +188,6 @@
 				AB0000000000000000000211 /* MessageBubble.swift */,
 				AB0000000000000000000212 /* CharacterGreetingSheet.swift */,
 				AB0000000000000000000213 /* EditMessageSheet.swift */,
-				AB0000000000000000000214 /* NewSessionWithCharacterSheet.swift */,
 				AB0000000000000000000222 /* DisplayRegexListView.swift */,
 				AB0000000000000000000281 /* AvatarImageCache.swift */,
 			);
@@ -307,7 +304,6 @@
 				AB000000000000000000020C /* MessageBubble.swift in Sources */,
 				AB000000000000000000020D /* CharacterGreetingSheet.swift in Sources */,
 				AB000000000000000000020E /* EditMessageSheet.swift in Sources */,
-				AB000000000000000000020F /* NewSessionWithCharacterSheet.swift in Sources */,
 				AB0000000000000000000215 /* MessageRenderer.swift in Sources */,
 				AB0000000000000000000216 /* DisplayRegex.swift in Sources */,
 				AB0000000000000000000217 /* MacroExpander.swift in Sources */,
