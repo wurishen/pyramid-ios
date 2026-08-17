@@ -15,17 +15,6 @@ struct ContentView: View {
     // 这样启动期只跑 ChatView 的初始化路径，避免一打开就同时初始化
     // NavigationStack + CharacterListView/WorldBookView 等子页 Stub。
     @State private var settingsMounted = false
-    // 1:N 重构：角色卡列表点选 → 新建窗。开场白 sheet 由 ContentView 统一挂载，
-    // QuickSwitcherBubbles 路径继续走它自己的内联实现（互不影响）。
-    @State private var newSessionGreetingCharacter: Character?
-
-    private func startNewSessionWithCharacter(_ character: Character) {
-        if character.availableGreetings.isEmpty {
-            store.createSession(character: character)
-        } else {
-            newSessionGreetingCharacter = character
-        }
-    }
 
     var body: some View {
         ZStack {
@@ -46,11 +35,7 @@ struct ContentView: View {
                     store: store,
                     presets: presets,
                     characters: characters,
-                    displayRegexes: displayRegexes,
-                    onCharacterTapped: { character in
-                        selectedTab = 0
-                        startNewSessionWithCharacter(character)
-                    }
+                    displayRegexes: displayRegexes
                 )
                 .opacity(selectedTab == 1 ? 1 : 0)
                 .allowsHitTesting(selectedTab == 1)
@@ -74,12 +59,6 @@ struct ContentView: View {
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.78), value: showQuickSwitcher)
-        .sheet(item: $newSessionGreetingCharacter) { character in
-            CharacterGreetingSheet(character: character) { picked, greeting in
-                store.createSession(character: picked, greeting: greeting)
-                newSessionGreetingCharacter = nil
-            }
-        }
         .onChange(of: selectedTab) { _, new in
             // 用户首次切到设置 Tab 时再挂载。挂上去后再不卸载 ——
             // 子导航（角色卡、世界书等）保留滚动位置与展开状态。

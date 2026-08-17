@@ -209,6 +209,13 @@ final class ChatStore: ObservableObject {
         save()
     }
 
+    func setCharacter(_ characterId: UUID?, for sessionID: UUID) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        sessions[index].characterId = characterId
+        sessionsVersion &+= 1
+        save()
+    }
+
     func setUserDisplayNameOverride(_ name: String, for sessionID: UUID) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         sessions[index].userDisplayNameOverride = name

@@ -10,8 +10,6 @@ struct SettingsView: View {
     @ObservedObject var presets: PresetStore
     @ObservedObject var characters: CharacterStore
     @ObservedObject var displayRegexes: DisplayRegexStore
-    /// 角色卡点选 → 新建窗回调。ContentView 注入。
-    var onCharacterTapped: (Character) -> Void = { _ in }
 
     var body: some View {
         NavigationStack {
@@ -23,11 +21,7 @@ struct SettingsView: View {
                         Label("用户", systemImage: "person.crop.circle")
                     }
                     NavigationLink {
-                        CharacterListView(
-                            store: characters,
-                            worldBook: worldBook,
-                            onCharacterTapped: onCharacterTapped
-                        )
+                        CharacterListView(store: characters, worldBook: worldBook)
                     } label: {
                         Label("角色卡", systemImage: "person.crop.rectangle.stack")
                     }

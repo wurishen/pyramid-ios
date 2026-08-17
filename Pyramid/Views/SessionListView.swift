@@ -11,6 +11,8 @@ struct SessionListView: View {
     @State private var renameTarget: ChatSession?
     @State private var renameText = ""
     @State private var deleteTarget: ChatSession?
+    @State private var showNewSessionWithCharacter = false
+    @State private var greetingCharacter: Character?
 
     private var orderedSessions: [ChatSession] { store.orderedSessions() }
     private var pinned: [ChatSession] { orderedSessions.filter(\.isPinned) }
@@ -27,7 +29,7 @@ struct SessionListView: View {
                     Button("保存") { commitRename() }
                     Button("取消", role: .cancel) { renameTarget = nil }
                 } message: {
-                    Text("留空则恢复为「新会���」。")
+                    Text("留空则恢复为「新会话」。")
                 }
                 .confirmationDialog(
                     "删除会话？",
@@ -38,6 +40,18 @@ struct SessionListView: View {
                     Button("取消", role: .cancel) { deleteTarget = nil }
                 } message: {
                     deleteDialogMessage
+                }
+                .sheet(isPresented: $showNewSessionWithCharacter) {
+                    NewSessionWithCharacterSheet(
+                        characters: characters.characters,
+                        onPicked: { character in proceedWithGreeting(character) }
+                    )
+                }
+                .sheet(item: $greetingCharacter) { character in
+                    CharacterGreetingSheet(character: character) { picked, greeting in
+                        store.createSession(character: picked, greeting: greeting)
+                        dismiss()
+                    }
                 }
         }
     }
@@ -72,7 +86,7 @@ struct SessionListView: View {
         } header: {
             Text(title)
         } footer: {
-            Text("左滑可重命名 / 置顶 / 删除；点行进入会话，点「详情」查看设置。")
+            Text("左滑可重命名 / 置顶 / 删除；点行进入会话，点「详情」编辑绑定。")
         }
     }
 
@@ -83,10 +97,20 @@ struct SessionListView: View {
     @ToolbarContentBuilder
     private var sessionListToolbar: some ToolbarContent {
         ToolbarItem(placement: .confirmationAction) {
-            // 1:N 重构：会话列表 + 只新建空白。绑角色走角色卡列表点选 / 聊天 Tab 长按气泡条 +。
-            Button {
-                store.createSession()
-                dismiss()
+            Menu {
+                Button {
+                    store.createSession()
+                    dismiss()
+                } label: {
+                    Label("新建空白会话", systemImage: "plus.bubble")
+                }
+                if !characters.characters.isEmpty {
+                    Button {
+                        showNewSessionWithCharacter = true
+                    } label: {
+                        Label("新建并绑定角色", systemImage: "person.crop.circle.badge.plus")
+                    }
+                }
             } label: {
                 Label("新建", systemImage: "plus")
             }
@@ -261,6 +285,17 @@ struct SessionListView: View {
     private func delete(at offsets: IndexSet, from list: [ChatSession]) {
         for index in offsets {
             store.delete(list[index].id)
+        }
+    }
+
+    /// 有开场白 → 弹 CharacterGreetingSheet；没有 → 直接建空白会话。
+    /// 跟 ContentView 里 QuickSwitcherBubbles 走同样的流程，保证两入口行为一致。
+    private func proceedWithGreeting(_ character: Character) {
+        if character.availableGreetings.isEmpty {
+            store.createSession(character: character)
+            dismiss()
+        } else {
+            greetingCharacter = character
         }
     }
 }
