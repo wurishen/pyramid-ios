@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		6260EDB37D77A388336AA654 /* MarkdownParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F335F5581A7ABA559708895E /* MarkdownParserTests.swift */; };
 		AB0000000000000000000001 /* PyramidApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000016 /* PyramidApp.swift */; };
 		AB0000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000017 /* ContentView.swift */; };
 		AB0000000000000000000003 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000018 /* Assets.xcassets */; };
@@ -27,6 +28,9 @@
 		AB0000000000000000000012 /* WorldBookEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000027 /* WorldBookEditView.swift */; };
 		AB0000000000000000000013 /* WorldBook.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000028 /* WorldBook.swift */; };
 		AB0000000000000000000014 /* SessionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000029 /* SessionDetailView.swift */; };
+		AB00000000000000000000A2 /* ImportSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000000A1 /* ImportSupport.swift */; };
+		AB00000000000000000000A4 /* DocumentPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000000A3 /* DocumentPicker.swift */; };
+		AB00000000000000000000A6 /* BackupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000000A5 /* BackupService.swift */; };
 		AB0000000000000000000101 /* Preset.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000104 /* Preset.swift */; };
 		AB0000000000000000000102 /* PresetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000105 /* PresetStore.swift */; };
 		AB0000000000000000000103 /* PresetListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000106 /* PresetListView.swift */; };
@@ -44,17 +48,26 @@
 		AB0000000000000000000215 /* MessageRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000021F /* MessageRenderer.swift */; };
 		AB0000000000000000000216 /* DisplayRegex.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000220 /* DisplayRegex.swift */; };
 		AB0000000000000000000217 /* MacroExpander.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000221 /* MacroExpander.swift */; };
+		AB0000000000000000000218 /* DisplayRegexListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000222 /* DisplayRegexListView.swift */; };
+		AB0000000000000000000280 /* AvatarImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000281 /* AvatarImageCache.swift */; };
 		AB0000000000000000000282 /* SillyTavernRegexScript.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000283 /* SillyTavernRegexScript.swift */; };
 		AB0000000000000000000290 /* MessageRendererCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000291 /* MessageRendererCore.swift */; };
 		AB0000000000000000000292 /* RenderEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000293 /* RenderEngine.swift */; };
-		AB0000000000000000000280 /* AvatarImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000281 /* AvatarImageCache.swift */; };
-		AB0000000000000000000218 /* DisplayRegexListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000222 /* DisplayRegexListView.swift */; };
-		AB00000000000000000000A2 /* ImportSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000000A1 /* ImportSupport.swift */; };
-		AB00000000000000000000A4 /* DocumentPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000000A3 /* DocumentPicker.swift */; };
-		AB00000000000000000000A6 /* BackupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000000A5 /* BackupService.swift */; };
+		DA11D69CA3FEDDF2BB037B8E /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D4BA2716C46090FD9377A5AB /* Foundation.framework */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		BE33E4D17E946C94F7A5A7B7 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AB0000000000000000000033 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AB0000000000000000000032;
+			remoteInfo = Pyramid;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		2E6D2111D5BCE93B43E6F173 /* PyramidTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PyramidTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB0000000000000000000015 /* Pyramid.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Pyramid.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB0000000000000000000016 /* PyramidApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PyramidApp.swift; sourceTree = "<group>"; };
 		AB0000000000000000000017 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -76,6 +89,9 @@
 		AB0000000000000000000027 /* WorldBookEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorldBookEditView.swift; sourceTree = "<group>"; };
 		AB0000000000000000000028 /* WorldBook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorldBook.swift; sourceTree = "<group>"; };
 		AB0000000000000000000029 /* SessionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionDetailView.swift; sourceTree = "<group>"; };
+		AB00000000000000000000A1 /* ImportSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportSupport.swift; sourceTree = "<group>"; };
+		AB00000000000000000000A3 /* DocumentPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentPicker.swift; sourceTree = "<group>"; };
+		AB00000000000000000000A5 /* BackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupService.swift; sourceTree = "<group>"; };
 		AB0000000000000000000104 /* Preset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Preset.swift; sourceTree = "<group>"; };
 		AB0000000000000000000105 /* PresetStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetStore.swift; sourceTree = "<group>"; };
 		AB0000000000000000000106 /* PresetListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetListView.swift; sourceTree = "<group>"; };
@@ -92,18 +108,25 @@
 		AB0000000000000000000214 /* NewSessionWithCharacterSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewSessionWithCharacterSheet.swift; sourceTree = "<group>"; };
 		AB000000000000000000021F /* MessageRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageRenderer.swift; sourceTree = "<group>"; };
 		AB0000000000000000000220 /* DisplayRegex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayRegex.swift; sourceTree = "<group>"; };
+		AB0000000000000000000221 /* MacroExpander.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacroExpander.swift; sourceTree = "<group>"; };
+		AB0000000000000000000222 /* DisplayRegexListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayRegexListView.swift; sourceTree = "<group>"; };
+		AB0000000000000000000281 /* AvatarImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarImageCache.swift; sourceTree = "<group>"; };
 		AB0000000000000000000283 /* SillyTavernRegexScript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SillyTavernRegexScript.swift; sourceTree = "<group>"; };
 		AB0000000000000000000291 /* MessageRendererCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageRendererCore.swift; sourceTree = "<group>"; };
 		AB0000000000000000000293 /* RenderEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderEngine.swift; sourceTree = "<group>"; };
-		AB0000000000000000000221 /* MacroExpander.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacroExpander.swift; sourceTree = "<group>"; };
-		AB0000000000000000000281 /* AvatarImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarImageCache.swift; sourceTree = "<group>"; };
-		AB0000000000000000000222 /* DisplayRegexListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayRegexListView.swift; sourceTree = "<group>"; };
-		AB00000000000000000000A1 /* ImportSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportSupport.swift; sourceTree = "<group>"; };
-		AB00000000000000000000A3 /* DocumentPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentPicker.swift; sourceTree = "<group>"; };
-		AB00000000000000000000A5 /* BackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupService.swift; sourceTree = "<group>"; };
+		D4BA2716C46090FD9377A5AB /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		F335F5581A7ABA559708895E /* MarkdownParserTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MarkdownParserTests.swift; path = PyramidTests/MarkdownParserTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		7846A4E5F1C911A16C1A3C53 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DA11D69CA3FEDDF2BB037B8E /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AB000000000000000000002A /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -114,11 +137,39 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		29C6343A9DD3A54A672EE994 /* PyramidTests */ = {
+			isa = PBXGroup;
+			children = (
+				F335F5581A7ABA559708895E /* MarkdownParserTests.swift */,
+				2E6D2111D5BCE93B43E6F173 /* PyramidTests.xctest */,
+			);
+			name = PyramidTests;
+			path = PyramidTests;
+			sourceTree = "<group>";
+		};
+		50BD365BFBA669A06A5F50CD /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				9DE1EC993B84F9B4C654B59E /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		9DE1EC993B84F9B4C654B59E /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				D4BA2716C46090FD9377A5AB /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
 		AB000000000000000000002B = {
 			isa = PBXGroup;
 			children = (
 				AB000000000000000000002C /* Pyramid */,
 				AB0000000000000000000031 /* Products */,
+				29C6343A9DD3A54A672EE994 /* PyramidTests */,
+				50BD365BFBA669A06A5F50CD /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -217,6 +268,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		12CBC9D0C5B2B38C8B7D3125 /* PyramidTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 67B24A15FFD3D8D33D17581E /* Build configuration list for PBXNativeTarget "PyramidTests" */;
+			buildPhases = (
+				76338CB35230F80CEB090284 /* Sources */,
+				7846A4E5F1C911A16C1A3C53 /* Frameworks */,
+				066F0022C07008F86F9C9E07 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				2CDFA84DEA4C03DD2ABD67C3 /* PBXTargetDependency */,
+			);
+			name = PyramidTests;
+			productName = PyramidTests;
+			productReference = 2E6D2111D5BCE93B43E6F173 /* PyramidTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		AB0000000000000000000032 /* Pyramid */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = AB000000000000000000003B /* Build configuration list for PBXNativeTarget "Pyramid" */;
@@ -263,11 +332,19 @@
 			projectRoot = "";
 			targets = (
 				AB0000000000000000000032 /* Pyramid */,
+				12CBC9D0C5B2B38C8B7D3125 /* PyramidTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		066F0022C07008F86F9C9E07 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AB0000000000000000000034 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -279,6 +356,14 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		76338CB35230F80CEB090284 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6260EDB37D77A388336AA654 /* MarkdownParserTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AB0000000000000000000035 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -332,7 +417,41 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		2CDFA84DEA4C03DD2ABD67C3 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = Pyramid;
+			target = AB0000000000000000000032 /* Pyramid */;
+			targetProxy = BE33E4D17E946C94F7A5A7B7 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		5C9FCA4C2672B1EA9D86EC5E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pyramid.ios.tests.PyramidTests;
+				SDKROOT = iphoneos;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Pyramid.app/Pyramid";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		81906C0A7ED0E4CFC58004FC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pyramid.ios.tests.PyramidTests;
+				SDKROOT = iphoneos;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Pyramid.app/Pyramid";
+			};
+			name = Debug;
+		};
 		AB0000000000000000000036 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -511,6 +630,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		67B24A15FFD3D8D33D17581E /* Build configuration list for PBXNativeTarget "PyramidTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5C9FCA4C2672B1EA9D86EC5E /* Release */,
+				81906C0A7ED0E4CFC58004FC /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		AB000000000000000000003A /* Build configuration list for PBXProject "Pyramid" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
