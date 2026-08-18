@@ -92,50 +92,27 @@ struct MarkdownTextView: View {
     let text: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(MarkdownParser.blocks(from: text).enumerated()), id: \.offset) { _, block in
-                blockView(block)
-            }
-        }
-        .environment(\.openURL, OpenURLAction { url in
-            UIApplication.shared.open(url)
-            return .handled
-        })
-    }
-
-    @ViewBuilder
-    private func blockView(_ block: MarkdownBlock) -> some View {
-        switch block {
-        case .paragraph(let string):
-            Text(attributed(string))
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-        case .codeBlock(let code):
-            ScrollView(.horizontal, showsIndicators: false) {
-                Text(code)
-                    .font(.system(.footnote, design: .monospaced))
-                    .textSelection(.enabled)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(8)
-            .background(Color.black.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-        case .list(let items):
-            VStack(alignment: .leading, spacing: 3) {
-                ForEach(items.indices, id: \.self) { index in
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(items[index].prefix)
-                            .foregroundStyle(.secondary)
-                        Text(attributed(items[index].content))
-                            .fixedSize(horizontal: false, vertical: true)
-                            .textSelection(.enabled)
-                    }
-                }
-            }
-        }
+        // 直接把整段文本交给 SwiftUI 原生 AttributedString(markdown:) 解析：
+        //   **bold** / *italic* / ~~strike~~ / `code` / [link](url) / 围栏代码块 都会被渲染。
+        // 之前用一个手写的块级 parser 把文本切成 paragraph / code / list 再分别渲染，
+        // 在某些文本（例如单行内联 markdown）上会"看着像没渲染"——根因是逐块解析
+        // 加上 AttributedString 失败时静默回退到纯文本，肉眼难分辨。
+        // 这里改成「一次解析整段」，并用 .returnPartiallyParsedIfPossible 让部分
+        // 失败也尽量保留已解析的范围；最终失败再回退到纯文本（不抛错）。
+        Text(attributed(text))
+            .textSelection(.enabled)
+            .fixedSize(horizontal: false, vertical: true)
+            .environment(\.openURL, OpenURLAction { url in
+                UIApplication.shared.open(url)
+                return .handled
+            })
     }
 
     private func attributed(_ string: String) -> AttributedString {
-        (try? AttributedString(markdown: string)) ?? AttributedString(string)
+        var options = AttributedString.MarkdownParsingOptions()
+        options.allowsExtendedAttributes = true
+        options.failurePolicy = .returnPartiallyParsedIfPossible
+        options.interpretedSyntax = .full
+        return (try? AttributedString(markdown: string, options: options)) ?? AttributedString(string)
     }
 }
