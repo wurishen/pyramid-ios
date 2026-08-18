@@ -12,6 +12,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Cache DerivedData + SwiftPM build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Developer/Xcode/DerivedData
+            swift-tests/.build
+          key: ${{ runner.os }}-xcode-${{ hashFiles('Pyramid/**/*.swift', 'swift-tests/**/*.swift', 'Pyramid.xcodeproj/**') }}
+          restore-keys: |
+            ${{ runner.os }}-xcode-
+
       - name: Xcode version
         run: xcodebuild -version
 

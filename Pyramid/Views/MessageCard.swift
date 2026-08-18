@@ -212,3 +212,104 @@ struct MessageCard: View {
         return settings.enableMarkdown
     }
 }
+
+// MARK: - SwiftUI Preview
+
+#Preview("MessageCard - assistant with regex applied") {
+    ScrollView {
+        VStack(spacing: 12) {
+            MessageCard(
+                message: ChatMessage(
+                    id: UUID(),
+                    role: .assistant,
+                    content: "Hello **World**",
+                    createdAt: Date(),
+                    isIncluded: true
+                ),
+                floorNumber: 1,
+                isSending: false,
+                compact: false,
+                showTimestamp: true,
+                showAvatar: true,
+                character: Character(name: "助手", description: ""),
+                userAvatarData: nil,
+                preset: nil,
+                settings: AppSettings(),
+                displayRegexes: [
+                    DisplayRegex(name: "World → Pyramid", pattern: "World", replacement: "Pyramid", enabled: true)
+                ]
+            )
+
+            MessageCard(
+                message: ChatMessage(
+                    id: UUID(),
+                    role: .user,
+                    content: "Hello from user",
+                    createdAt: Date(),
+                    isIncluded: true
+                ),
+                floorNumber: 2,
+                isSending: false,
+                compact: false,
+                showTimestamp: true,
+                showAvatar: true,
+                character: Character(name: "助手", description: ""),
+                userAvatarData: nil,
+                preset: nil,
+                settings: AppSettings(),
+                displayRegexes: []
+            )
+
+            MessageCard(
+                message: ChatMessage(
+                    id: UUID(),
+                    role: .assistant,
+                    content: """
+                    # Markdown sample
+
+                    Long content for collapse testing — this should trigger the
+                    >800 char threshold and show the collapse toggle button at the end.
+                    """ + String(repeating: "padding line for length ", count: 60),
+                    createdAt: Date(),
+                    isIncluded: true
+                ),
+                floorNumber: 3,
+                isSending: false,
+                compact: false,
+                showTimestamp: false,
+                showAvatar: false,
+                character: nil,
+                userAvatarData: nil,
+                preset: nil,
+                settings: AppSettings(),
+                displayRegexes: []
+            )
+        }
+        .padding()
+    }
+}
+
+#Preview("MessageCard - markdown disabled (plain text)") {
+    let plain = AppSettings()
+    // 直接覆盖 @AppStorage 不方便；用 SwiftUI 上下文传入 enableMarkdown=false 的 preset。
+    let preset = Preset(name: "preview", enableMarkdown: false)
+    return MessageCard(
+        message: ChatMessage(
+            id: UUID(),
+            role: .assistant,
+            content: "Plain text rendering — no **markdown** here.",
+            createdAt: nil,
+            isIncluded: true
+        ),
+        floorNumber: 1,
+        isSending: false,
+        compact: false,
+        showTimestamp: false,
+        showAvatar: false,
+        character: nil,
+        userAvatarData: nil,
+        preset: preset,
+        settings: plain,
+        displayRegexes: []
+    )
+}

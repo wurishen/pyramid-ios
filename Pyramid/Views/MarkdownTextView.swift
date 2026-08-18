@@ -450,3 +450,49 @@ struct MarkdownTextView: View {
         string.index(idx, offsetBy: offset)
     }
 }
+
+// MARK: - SwiftUI Preview
+
+#Preview("MarkdownTextView - all block types") {
+    let sample = """
+    # Heading 1
+    ## Heading 2
+    ### Heading 3
+
+    Paragraph with **bold**, *italic*, `inline code`, ~~strike~~, [link](https://example.com).
+
+    > Blockquote line one
+    > Blockquote line two
+
+    - unordered item A
+    - unordered item B
+
+    1. ordered item one
+    2. ordered item two
+
+    ```swift
+    let code = "fenced"
+    print(code)
+    ```
+
+    ---
+
+    Plain paragraph after divider.
+    """
+    return ScrollView {
+        MarkdownTextView(text: sample)
+            .padding()
+    }
+}
+
+#Preview("MarkdownTextView - inline only") {
+    ScrollView {
+        MarkdownTextView(text: "**bold** *italic* `code` ~~strike~~ [link](https://example.com)")
+            .padding()
+    }
+}
+
+#Preview("MarkdownTextView - empty") {
+    MarkdownTextView(text: "")
+        .padding()
+}
