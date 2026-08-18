@@ -25,16 +25,29 @@ jobs:
         run: ruby scripts/add-pyramid-tests-target.rb
 
       - name: Verify target + scheme wiring
+        id: verify
         run: |
+          echo "=== generated scheme ==="
+          cat Pyramid.xcodeproj/xcshareddata/xcschemes/Pyramid.xcscheme
+          echo "========================"
           xcodebuild -project Pyramid.xcodeproj -list
           echo "---"
-          # Verify the scheme now lists PyramidTests in Testables
           if grep -q 'PyramidTests' Pyramid.xcodeproj/xcshareddata/xcschemes/Pyramid.xcscheme; then
             echo "✓ PyramidTests is in Pyramid scheme Testables"
           else
             echo "✗ PyramidTests NOT in scheme — aborting commit"
             exit 1
           fi
+
+      - name: Upload debug artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootstrap-debug
+          path: |
+            Pyramid.xcodeproj/project.pbxproj
+            Pyramid.xcodeproj/xcshareddata/xcschemes/Pyramid.xcscheme
+          if-no-files-found: ignore
 
       - name: Commit pbxproj changes
         run: |
