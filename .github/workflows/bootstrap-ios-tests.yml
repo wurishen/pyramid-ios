@@ -1,0 +1,49 @@
+name: Bootstrap iOS test target
+on:
+  workflow_dispatch:
+
+# 在 macos-14 runner 上跑 scripts/add-pyramid-tests-target.rb（用 xcodeproj gem），
+# 把 PyramidTests target 永久装进 Pyramid.xcodeproj，并把 project.pbxproj 的改动
+# 自动 commit 回来。一次跑就够（脚本本身幂等），之后 CI 测试步骤会自动激活。
+#
+# 触发方式（两种都行）：
+#   gh workflow run bootstrap-ios-tests.yml
+#   GitHub UI → Actions → Bootstrap iOS test target → Run workflow
+
+jobs:
+  bootstrap:
+    runs-on: macos-14
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install xcodeproj gem
+        run: gem install xcodeproj --no-document
+
+      - name: Run Ruby bootstrap script
+        run: ruby scripts/add-pyramid-tests-target.rb
+
+      - name: Verify target + scheme wiring
+        run: |
+          xcodebuild -project Pyramid.xcodeproj -list
+          echo "---"
+          # Verify the scheme now lists PyramidTests in Testables
+          if grep -q 'PyramidTests' Pyramid.xcodeproj/xcshareddata/xcschemes/Pyramid.xcscheme; then
+            echo "✓ PyramidTests is in Pyramid scheme Testables"
+          else
+            echo "✗ PyramidTests NOT in scheme — aborting commit"
+            exit 1
+          fi
+
+      - name: Commit pbxproj changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Pyramid.xcodeproj/project.pbxproj Pyramid.xcodeproj/xcshareddata/xcschemes/Pyramid.xcscheme
+          if git diff --cached --quiet; then
+            echo "No changes to commit (target already registered)"
+          else
+            git commit -m "chore(tests): bootstrap PyramidTests target into pbxproj via xcodeproj gem"
+            git push
+          fi

@@ -70,6 +70,14 @@ target.build_configurations.each do |config|
   config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = "#{BUNDLE_ID}.#{TARGET_NAME}"
 end
 
+# 9) 把 PyramidTests 加到 Pyramid scheme 的 Testables
+#    xcodebuild 否则会报 "scheme is not currently configured for the test action"。
+scheme = project.scheme(APP_TARGET_NAME)
+unless scheme.test_targets.include?(target)
+  scheme.add_test(target)
+  puts "  → wired #{TARGET_NAME} into #{APP_TARGET_NAME} scheme Testables"
+end
+
 project.save
 
 puts "✓ Added #{TARGET_NAME} target to #{PROJECT_PATH}"
