@@ -27,6 +27,7 @@ let package = Package(
             path: "Tests/PyramidCoreTests",
             sources: [
                 "SillyTavernRegexScriptTests.swift",
+                "MessageRendererChainTests.swift",
             ]
         ),
     ]

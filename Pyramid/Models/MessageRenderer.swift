@@ -87,7 +87,7 @@ enum MessageRenderer {
         return stripHideTags(stage1, settings: inputs.settings)
     }
 
-    /// 「显示用正则」只对助手消��起作用；空 pattern / 非法 pattern / 关闭条目一律跳过。
+    /// 「显示用正则」只对助手消息起作用；空 pattern / 非法 pattern / 关闭条目一律跳过。排序委托给 MessageRendererCore.orderedRegexes。
     private static func applyDisplayRegex(
         to text: String,
         role: ChatMessage.Role,
@@ -95,19 +95,12 @@ enum MessageRenderer {
         all: [DisplayRegex]
     ) -> String {
         guard role == .assistant else { return text }
-        let allowed = preset?.displayRegexIds ?? []
-        let byID: [UUID: DisplayRegex] = Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })
-        // 顺序：先用预设里指定的那批（按预设顺序���，再追加「全启用且未指定」的正则作为兜底。
-        var ordered: [DisplayRegex] = []
-        var seen = Set<UUID>()
-        for id in allowed {
-            if let r = byID[id], r.enabled, !seen.contains(id) {
-                ordered.append(r); seen.insert(id)
-            }
-        }
-        for r in all where r.enabled && !seen.contains(r.id) {
-            ordered.append(r); seen.insert(r.id)
-        }
+        // 算法委托给 MessageRendererCore —— 纯 Foundation 单元，可在 Linux SPM 上独立测试。
+        let presetIds = preset?.displayRegexIds ?? []
+        let ordered = MessageRendererCore.orderedRegexes(
+            presetDisplayRegexIds: presetIds,
+            all: all
+        )
         guard !ordered.isEmpty else { return text }
         var result = text
         for regex in ordered {
