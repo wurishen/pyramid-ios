@@ -28,7 +28,16 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES">
       <Testables>
-      </Testables>
+      <Testable>
+   <BuildableReference
+      BuildableIdentifier = "primary"
+      BlueprintIdentifier = "1793B24E91C4E0E73B0898F5"
+      BuildableName = "PyramidTests.xctest"
+      BlueprintName = "PyramidTests"
+      ReferencedContainer = "container:Pyramid.xcodeproj">
+   </BuildableReference>
+</Testable>
+   </Testables>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"
