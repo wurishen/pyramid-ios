@@ -52,7 +52,6 @@ target = project.new_target(
   test_group,
   :swift
 )
-target.product_bundle_identifier = "#{BUNDLE_ID}.#{TARGET_NAME}"
 
 # 6) Sources build phase：把测试文件加进去
 sources = target.source_build_phase
