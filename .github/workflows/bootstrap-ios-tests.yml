@@ -24,18 +24,25 @@ jobs:
       - name: Run Ruby bootstrap script
         run: ruby scripts/add-pyramid-tests-target.rb
 
-      - name: Verify target + scheme wiring
+      - name: Verify scheme wiring
         id: verify
         run: |
-          echo "=== generated scheme ==="
-          cat Pyramid.xcodeproj/xcshareddata/xcschemes/Pyramid.xcscheme
-          echo "========================"
-          xcodebuild -project Pyramid.xcodeproj -list
-          echo "---"
+          echo "=== generated scheme Testables section ==="
+          awk '/<Testables>/,/<\/Testables>/' Pyramid.xcodeproj/xcshareddata/xcschemes/Pyramid.xcscheme
+          echo "=========================================="
+          # 只 grep 验证，避开 xcodebuild -list 在 macOS-14+Xcode 16 上偶发的
+          # `-[__NSArrayM setScheme:]: unrecognized selector` 内部崩溃。
+          # 主 CI workflow 在 bootstrap 提交后会跑真正的 xcodebuild test。
           if grep -q 'PyramidTests' Pyramid.xcodeproj/xcshareddata/xcschemes/Pyramid.xcscheme; then
             echo "✓ PyramidTests is in Pyramid scheme Testables"
           else
             echo "✗ PyramidTests NOT in scheme — aborting commit"
+            exit 1
+          fi
+          if grep -q 'PyramidTests.*\.xctest' Pyramid.xcodeproj/project.pbxproj; then
+            echo "✓ PyramidTests target exists in pbxproj"
+          else
+            echo "✗ PyramidTests target missing in pbxproj — aborting commit"
             exit 1
           fi
 
