@@ -30,9 +30,13 @@ jobs:
           cd swift-tests
           swift test
 
-      - name: Simulator build (quick check)
+      - name: Simulator build + tests
         run: |
-          xcodebuild -project Pyramid.xcodeproj -scheme Pyramid -destination 'generic/platform=iOS Simulator' -configuration Debug CODE_SIGNING_ALLOWED=NO build
+          xcodebuild -project Pyramid.xcodeproj -scheme Pyramid \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            build test
 
       - name: Archive for device (unsigned)
         run: |
