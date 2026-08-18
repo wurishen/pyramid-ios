@@ -71,13 +71,30 @@ end
 
 # 9) 把 PyramidTests 加到 Pyramid scheme 的 Testables
 #    xcodebuild 否则会报 "scheme is not currently configured for the test action"。
-scheme = project.scheme(APP_TARGET_NAME)
-unless scheme.test_targets.include?(target)
-  scheme.add_test(target)
+#    不同版本的 xcodeproj gem 提供的 scheme helper API 不一致；直接改 XML 最稳。
+project.save
+
+scheme_path = File.join(PROJECT_PATH, 'xcshareddata/xcschemes', "#{APP_TARGET_NAME}.xcscheme")
+scheme_xml = File.read(scheme_path)
+testable_block = <<~XML
+         <Testable>
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "#{target.uuid}"
+               BuildableName = "#{TARGET_NAME}.xctest"
+               BlueprintName = "#{TARGET_NAME}"
+               ReferencedContainer = "container:Pyramid.xcodeproj">
+            </BuildableReference>
+         </Testable>
+XML
+
+if scheme_xml.include?(%(BlueprintName = "#{TARGET_NAME}")) || scheme_xml.include?(%(BlueprintName = '#{TARGET_NAME}'))
+  puts "  → #{TARGET_NAME} already in scheme Testables"
+else
+  new_scheme_xml = scheme_xml.sub('</Testables>', "#{testable_block}   </Testables>")
+  File.write(scheme_path, new_scheme_xml)
   puts "  → wired #{TARGET_NAME} into #{APP_TARGET_NAME} scheme Testables"
 end
-
-project.save
 
 puts "✓ Added #{TARGET_NAME} target to #{PROJECT_PATH}"
 puts "  Next steps:"
