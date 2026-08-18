@@ -45,6 +45,25 @@ TabView
 │   │       └── PresetEditView（编辑预设，Sheet）
 ```
 
+### 2.1.1 消息列表形态（酒馆式「回复视窗」）
+
+聊天页不再使用 iMessage 风格的左右气泡。每条消息是一张完整卡片，结构自上而下：
+
+- **头部行** — 头像（28 pt 圆形）+ 角色名 / 用户名 + 楼层号 `#N` + 时间戳；助手头像在左、用户头像在右（视觉区分）
+- **正文卡片** — 圆角矩形（cornerRadius = 12），内含渲染后的内容；助手卡片底色 `Color(.systemGray6)`、淡灰描边；用户卡片底色 `Color.accentColor.opacity(0.12)`、强调色描边
+- **被排除标签** — 不可进入上下文的消息在头部右侧追加 `已排除` 胶囊
+- **长文折叠** — 清洗后正文 > 800 字符默认折叠到前 800 字 + `…`，底部追加「展开 / 收起」按钮（独立 `@State`）
+
+视觉差异（用户 / 助手）通过 **头像位置 + 背景色 + 描边色 + 名字颜色** 实现，**不再是严格的左右气泡布局**。
+
+渲染管线（仅作用于展示层，**不动 `message.content`**）：
+
+1. `MessageRenderer.preprocess(...)` — 显示用正则 → 隐藏标签剥离；任一阶段失败回退原文
+2. `MarkdownTextView(text:)` — 块级 Markdown 排版（段落 / 围栏代码块 / 列表）
+3. 三态 Markdown 开关：预设 `enableMarkdown: Bool?` 三态 > 全局 `AppSettings.enableMarkdown`
+
+> 流式期间仅 `streamingMessageID` 对应的卡片接收 `liveContent`，其余卡片不重绘。
+
 ### 2.2 导航逻辑
 
 - 首页为两 Tab 结构：聊天 + 设置

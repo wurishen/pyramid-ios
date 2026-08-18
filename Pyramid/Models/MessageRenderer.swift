@@ -78,6 +78,15 @@ enum MessageRenderer {
         }
     }
 
+    /// 仅做展示侧预处理：显示用正则 + 隐藏标签剥离。
+    /// 用于「酒馆式」回复视窗（MessageCard）等需要把清洗后的纯文本交给下游
+    /// 渲染器（如 MarkdownTextView）自行完成块级 Markdown 排版的场景。
+    /// 与 `render(_:)` 共享相同的缓存与降级语义（任一阶段失败回退为原文）。
+    static func preprocess(_ inputs: Inputs) -> String {
+        let stage1 = applyDisplayRegex(to: inputs.raw, role: inputs.role, preset: inputs.preset, all: inputs.displayRegexes)
+        return stripHideTags(stage1, settings: inputs.settings)
+    }
+
     /// 「显示用正则」只对助手消��起作用；空 pattern / 非法 pattern / 关闭条目一律跳过。
     private static func applyDisplayRegex(
         to text: String,

@@ -103,6 +103,7 @@ struct ChatView: View {
             }
             sessionBar()
             messageList
+                .background(Color(.systemGroupedBackground))
             if settings.showContextHint {
                 contextHintBar
             }
@@ -280,17 +281,17 @@ struct ChatView: View {
     private var messageList: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: settings.compactMode ? 6 : 12) {
+                LazyVStack(spacing: settings.compactMode ? 8 : 14) {
                     if viewModel.messages.isEmpty {
                         Text("还没有消息，打个招呼开始对话吧")
                             .foregroundStyle(.secondary)
                             .padding(.top, 40)
                     }
                     ForEach(Array(viewModel.messages.enumerated()), id: \.element.id) { index, message in
-                        // Item 4：只有 id 匹配 streamingMessageID 的 bubble 才接收 liveContent，
-                        // 其他 bubble 不参与流式重绘，session 重发不再每次波及全列表。
+                        // Item 4：只有 id 匹配 streamingMessageID 的卡片才接收 liveContent，
+                        // 其他卡片不参与流式重绘，session 重发不再每次波及全列表。
                         let live: String? = (message.id == viewModel.streamingMessageID) ? viewModel.streamingContent : nil
-                        MessageBubble(
+                        MessageCard(
                             message: message,
                             liveContent: live,
                             floorNumber: index + 1,
@@ -298,6 +299,7 @@ struct ChatView: View {
                             compact: settings.compactMode,
                             showTimestamp: settings.showTimestamps,
                             showAvatar: settings.showAvatars,
+                            character: currentCharacter,
                             userAvatarData: settings.userAvatarData,
                             preset: currentPreset,
                             settings: settings,
@@ -324,7 +326,7 @@ struct ChatView: View {
                             .padding(.top, -4)
                     }
                 }
-                .padding()
+                .padding(.vertical, 8)
             }
             .onChange(of: viewModel.scrollVersion) { _, _ in
                 if let last = viewModel.messages.last {

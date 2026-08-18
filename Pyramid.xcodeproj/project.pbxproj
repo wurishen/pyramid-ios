@@ -37,7 +37,7 @@
 		AB0000000000000000000204 /* AvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000208 /* AvatarView.swift */; };
 		AB0000000000000000000209 /* ContextTrimMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000020A /* ContextTrimMode.swift */; };
 		AB000000000000000000020B /* MarkdownTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000210 /* MarkdownTextView.swift */; };
-		AB000000000000000000020C /* MessageBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000211 /* MessageBubble.swift */; };
+		AB000000000000000000020C /* MessageCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000211 /* MessageCard.swift */; };
 		AB000000000000000000020D /* CharacterGreetingSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000212 /* CharacterGreetingSheet.swift */; };
 		AB000000000000000000020E /* EditMessageSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000213 /* EditMessageSheet.swift */; };
 		AB000000000000000000020F /* NewSessionWithCharacterSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000214 /* NewSessionWithCharacterSheet.swift */; };
@@ -83,7 +83,7 @@
 		AB0000000000000000000208 /* AvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarView.swift; sourceTree = "<group>"; };
 		AB000000000000000000020A /* ContextTrimMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextTrimMode.swift; sourceTree = "<group>"; };
 		AB0000000000000000000210 /* MarkdownTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownTextView.swift; sourceTree = "<group>"; };
-		AB0000000000000000000211 /* MessageBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBubble.swift; sourceTree = "<group>"; };
+		AB0000000000000000000211 /* MessageCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageCard.swift; sourceTree = "<group>"; };
 		AB0000000000000000000212 /* CharacterGreetingSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharacterGreetingSheet.swift; sourceTree = "<group>"; };
 		AB0000000000000000000213 /* EditMessageSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditMessageSheet.swift; sourceTree = "<group>"; };
 		AB0000000000000000000214 /* NewSessionWithCharacterSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewSessionWithCharacterSheet.swift; sourceTree = "<group>"; };
@@ -187,7 +187,7 @@
 				AB0000000000000000000207 /* CharacterListView.swift */,
 				AB0000000000000000000208 /* AvatarView.swift */,
 				AB0000000000000000000210 /* MarkdownTextView.swift */,
-				AB0000000000000000000211 /* MessageBubble.swift */,
+				AB0000000000000000000211 /* MessageCard.swift */,
 				AB0000000000000000000212 /* CharacterGreetingSheet.swift */,
 				AB0000000000000000000213 /* EditMessageSheet.swift */,
 				AB0000000000000000000214 /* NewSessionWithCharacterSheet.swift */,
@@ -304,7 +304,7 @@
 				AB0000000000000000000280 /* AvatarImageCache.swift in Sources */,
 				AB0000000000000000000209 /* ContextTrimMode.swift in Sources */,
 				AB000000000000000000020B /* MarkdownTextView.swift in Sources */,
-				AB000000000000000000020C /* MessageBubble.swift in Sources */,
+				AB000000000000000000020C /* MessageCard.swift in Sources */,
 				AB000000000000000000020D /* CharacterGreetingSheet.swift in Sources */,
 				AB000000000000000000020E /* EditMessageSheet.swift in Sources */,
 				AB000000000000000000020F /* NewSessionWithCharacterSheet.swift in Sources */,
