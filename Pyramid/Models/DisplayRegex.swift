@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(Combine)
+import Combine
+#endif
 
 /// 「显示用正则」条目。仅作用于助手消息、且只在渲染前生效。
 /// 作用域在本版本固定为 `assistant.display.pre`；不暴露更多 scope，避免无谓复杂度。
@@ -68,6 +71,10 @@ enum DisplayRegexError: LocalizedError {
     }
 }
 
+#if canImport(Combine)
+/// `ObservableObject` + `@Published` 依赖 Combine —— 仅在 Apple 平台编译。
+/// Linux / 其他无 Combine 的平台：只有 DisplayRegex struct + DisplayRegexError 可用，
+/// 足够纯 Foundation 的 SillyTavern 兼容层测试使用。
 final class DisplayRegexStore: ObservableObject {
     @Published var regexes: [DisplayRegex] = []
 
@@ -111,3 +118,4 @@ final class DisplayRegexStore: ObservableObject {
         static let displayRegexes = "displayRegexes"
     }
 }
+#endif

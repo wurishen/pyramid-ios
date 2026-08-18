@@ -15,6 +15,11 @@ jobs:
       - name: Xcode version
         run: xcodebuild -version
 
+      - name: SillyTavern compat layer tests (Swift Package)
+        run: |
+          cd swift-tests
+          swift test
+
       - name: Simulator build (quick check)
         run: |
           xcodebuild -project Pyramid.xcodeproj -scheme Pyramid -destination 'generic/platform=iOS Simulator' -configuration Debug CODE_SIGNING_ALLOWED=NO build
