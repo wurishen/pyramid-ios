@@ -28,6 +28,7 @@ let package = Package(
             sources: [
                 "SillyTavernRegexScriptTests.swift",
                 "MessageRendererChainTests.swift",
+                "RenderEngineTests.swift",
             ]
         ),
     ]

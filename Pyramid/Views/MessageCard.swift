@@ -118,15 +118,17 @@ struct MessageCard: View {
     @ViewBuilder
     private func contentCard(isUser: Bool) -> some View {
         let raw = liveContent ?? message.content
-        let cleaned = MessageRenderer.preprocess(
-            MessageRenderer.Inputs(
-                raw: raw,
-                role: message.role,
-                settings: settings,
-                preset: preset,
-                displayRegexes: displayRegexes
-            )
+        // 通过 RenderEngine 加工：raw 永不被修改，每次都从 raw 重新计算。
+        // 同一 (raw, context) → 相同 Result；context 改变 → SwiftUI 自动重绘。
+        let context = RenderEngine.Context(
+            isAssistant: message.role == .assistant,
+            presetDisplayRegexIds: preset?.displayRegexIds ?? [],
+            allDisplayRegexes: displayRegexes,
+            hideTagStripEnabled: settings.hideTagStripEnabled,
+            hideTags: settings.hideTags,
+            markdownEnabled: preset?.enableMarkdown ?? settings.enableMarkdown
         )
+        let cleaned = RenderEngine.render(raw: raw, context: context).cleanedText
 
         VStack(alignment: .leading, spacing: 6) {
             bodyContent(cleaned: cleaned, isUser: isUser)
