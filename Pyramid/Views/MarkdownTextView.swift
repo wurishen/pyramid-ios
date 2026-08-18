@@ -6,7 +6,7 @@ import UIKit
 /// Markdown 块级元素。
 /// 每种 case 都对应一种独立的 SwiftUI 渲染（在 `MarkdownTextView.renderBlock` 里），
 /// 行内语法（**bold** / *italic* / `code` / [link](url) / ~~strike~~）由
-/// `AttributedString(markdown:)` 在每个块内部处理。
+/// `MarkdownTextView.parseInline` 手写 token 解析后挂上显式视觉属性。
 enum MarkdownBlock: Hashable {
     case heading(Int, String)                      // level, text  → # / ## / ###
     case paragraph(String)
@@ -81,6 +81,9 @@ enum MarkdownParser {
                     } else if l.hasPrefix("> ") {
                         quoteLines.append(String(l.dropFirst(2)))
                         index += 1
+                    } else if l.isEmpty {
+                        // 空行结束引用块
+                        break
                     } else {
                         break
                     }
@@ -195,8 +198,14 @@ enum MarkdownParser {
 
 /// 把 Markdown 文本渲染成 SwiftUI 富文本。
 /// 流水线：原始文本 → `MarkdownParser.blocks` 切成块 → 每块独立 SwiftUI View →
-/// 行内语法（**bold** / *italic* / `~~strike~~` / `` `code` `` / `[link](url)`）
-/// 由 `AttributedString(markdown:options:)` 解析后塞进对应 View。
+/// 行内语法（**bold** / *italic* / `code` / ~~strike~~ / [text](url)）由
+/// `parseInline` 手写 token 解析后挂上显式 `.font` / `.foregroundColor` /
+/// `.backgroundColor` / `.underlineStyle` / `.strikethroughStyle` / `.link` 属性。
+///
+/// 关键点：**不再** 走 `AttributedString(markdown:)`。iOS 17 上把整段 markdown
+/// 丢给 AttributedString(markdown:) 时，行内语法（** / * / `）会被剥离但视觉属性
+/// 不一定真正生效——`Text(AttributedString)` 偶尔只会显示成普通字符串。手写 token
+/// 解析 + 显式属性可以保证每个 Markdown 语义都对应到 SwiftUI 的视觉样式。
 ///
 /// 与 `MessageRenderer.preprocess(_:)` 配合：`preprocess` 先做 DisplayRegex + 隐藏标签剥离，
 /// 清洗后的 String 再交给本视图渲染（不动 `message.content`）。
@@ -208,7 +217,7 @@ struct MarkdownTextView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                 renderBlock(block)
             }
@@ -225,63 +234,74 @@ struct MarkdownTextView: View {
         case .heading(let level, let text):
             Text(parseInline(text))
                 .font(headingFont(level: level))
-                .fontWeight(.bold)
+                .fontWeight(level <= 2 ? .bold : .semibold)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
+                .padding(.top, level <= 2 ? 4 : 2)
         case .paragraph(let text):
             Text(parseInline(text))
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
         case .codeBlock(let code):
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal, showsIndicators: true) {
                 Text(code)
-                    .font(.system(.footnote, design: .monospaced))
+                    .font(.system(.body, design: .monospaced))
                     .textSelection(.enabled)
+                    .padding(.vertical, 2)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(8)
-            .background(Color.black.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .padding(10)
+            .background(Color(.systemGray6))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.secondary.opacity(0.25), lineWidth: 0.5)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8))
         case .blockquote(let text):
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .top, spacing: 0) {
                 Rectangle()
-                    .fill(Color.secondary.opacity(0.4))
+                    .fill(Color.accentColor.opacity(0.55))
                     .frame(width: 3)
                 Text(parseInline(text))
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
                     .foregroundStyle(.secondary)
+                    .padding(.leading, 10)
+                    .padding(.vertical, 2)
             }
+            .padding(.vertical, 2)
         case .unorderedList(let items):
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text("•")
                             .foregroundStyle(.secondary)
+                            .font(.body)
                         Text(parseInline(item))
                             .fixedSize(horizontal: false, vertical: true)
                             .textSelection(.enabled)
                     }
                 }
             }
+            .padding(.leading, 4)
         case .orderedList(let items):
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text("\(idx + 1).")
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
+                            .font(.body)
                         Text(parseInline(item))
                             .fixedSize(horizontal: false, vertical: true)
                             .textSelection(.enabled)
                     }
                 }
             }
+            .padding(.leading, 4)
         case .thematicBreak:
-            Rectangle()
-                .fill(Color.secondary.opacity(0.3))
-                .frame(height: 1)
-                .padding(.vertical, 4)
+            Divider()
+                .padding(.vertical, 6)
         }
     }
 
@@ -296,15 +316,137 @@ struct MarkdownTextView: View {
         }
     }
 
-    /// 行内语法解析：交给 SwiftUI 原生 AttributedString(markdown:)。
-    /// `interpretedSyntax = .inlineOnlyPreservingWhitespace` 只解析行内（bold/italic/code/link/strike），
-    /// 块级标记（# / - 等）已经被 `MarkdownParser` 处理过，不应该再被这里二次解析。
-    /// `failurePolicy = .returnPartiallyParsedIfPossible` 让部分失败保留已解析范围。
+    /// 行内语法 token 解析器。把 `**bold**` / `*italic*` / `` `code` `` / `~~strike~~`
+    /// / `[text](url)` 切成片段，并为每个匹配片段挂上 SwiftUI 视觉属性。
+    ///
+    /// 优先级（长前缀优先）：` ** ` → ` ~~ ` → ` ` ` → ` * ` → ` [text](url) ` → 普通字符。
+    /// 之所以手动实现而不是用 `AttributedString(markdown:)`，是因为后者在 iOS 17
+    /// 的 inlineOnly 模式下常出现「符号被剥掉但视觉属性没真正生效」的回归。
+    ///
+    /// 输出：`Text(AttributedString)` 会按 attribute 直接渲染：
+    /// - **bold**：`.font = .body.weight(.bold)` + `.inlinePresentationIntent = .stronglyEmphasized`
+    /// - *italic*：`.font = .body.italic()` + `.inlinePresentationIntent = .emphasized`
+    /// - `code`：`.font = .system(.body, design: .monospaced)` + `.backgroundColor` + `.inlinePresentationIntent = .code`
+    /// - ~~strike~~：`.strikethroughStyle = .single` + `.inlinePresentationIntent = .strikethrough`
+    /// - [text](url)：`.link = URL` + `.foregroundColor = .accentColor` + `.underlineStyle = .single`
     private func parseInline(_ string: String) -> AttributedString {
-        var options = AttributedString.MarkdownParsingOptions()
-        options.allowsExtendedAttributes = true
-        options.failurePolicy = .returnPartiallyParsedIfPossible
-        options.interpretedSyntax = .inlineOnlyPreservingWhitespace
-        return (try? AttributedString(markdown: string, options: options)) ?? AttributedString(string)
+        var result = AttributedString()
+        var idx = string.startIndex
+
+        while idx < string.endIndex {
+            let remaining = Substring(string[idx...])
+            let startOffset = remaining.startIndex
+
+            // 1) **bold** —— 最长前缀优先，避免被单 * 误吃
+            if remaining.hasPrefix("**") {
+                let afterOpen = remaining.index(startOffset, offsetBy: 2)
+                if let closeRange = remaining.range(of: "**", options: .literal, range: afterOpen..<remaining.endIndex),
+                   closeRange.lowerBound > afterOpen {
+                    let content = String(remaining[afterOpen..<closeRange.lowerBound])
+                    var seg = AttributedString(content)
+                    seg.font = .body.weight(.bold)
+                    seg.inlinePresentationIntent = .stronglyEmphasized
+                    result.append(seg)
+                    idx = advance(idx: idx, by: remaining.distance(from: startOffset, to: closeRange.upperBound), in: string)
+                    continue
+                }
+            }
+
+            // 2) ~~strikethrough~~
+            if remaining.hasPrefix("~~") {
+                let afterOpen = remaining.index(startOffset, offsetBy: 2)
+                if let closeRange = remaining.range(of: "~~", options: .literal, range: afterOpen..<remaining.endIndex),
+                   closeRange.lowerBound > afterOpen {
+                    let content = String(remaining[afterOpen..<closeRange.lowerBound])
+                    var seg = AttributedString(content)
+                    seg.strikethroughStyle = .single
+                    seg.inlinePresentationIntent = .strikethrough
+                    result.append(seg)
+                    idx = advance(idx: idx, by: remaining.distance(from: startOffset, to: closeRange.upperBound), in: string)
+                    continue
+                }
+            }
+
+            // 3) `inline code` —— 等宽字体 + 浅背景
+            if remaining.first == "`" {
+                let afterOpen = remaining.index(after: startOffset)
+                if let closeRange = remaining.range(of: "`", options: .literal, range: afterOpen..<remaining.endIndex),
+                   closeRange.lowerBound > afterOpen {
+                    let content = String(remaining[afterOpen..<closeRange.lowerBound])
+                    var seg = AttributedString(content)
+                    seg.font = .system(.body, design: .monospaced)
+                    seg.backgroundColor = Color.secondary.opacity(0.18)
+                    seg.inlinePresentationIntent = .code
+                    result.append(seg)
+                    idx = advance(idx: idx, by: remaining.distance(from: startOffset, to: closeRange.upperBound), in: string)
+                    continue
+                }
+            }
+
+            // 4) *italic* —— 单星；** 已被吃掉，扫到下一个不与邻居配对的 *
+            if remaining.first == "*" {
+                let afterOpen = remaining.index(after: startOffset)
+                var scan = afterOpen
+                var foundClose: String.Index? = nil
+                while scan < remaining.endIndex {
+                    if remaining[scan] == "*" {
+                        let prev = remaining.index(before: scan)
+                        let next = remaining.index(after: scan)
+                        let prevIsStar = prev >= afterOpen && remaining[prev] == "*"
+                        let nextIsStar = next < remaining.endIndex && remaining[next] == "*"
+                        if !prevIsStar && !nextIsStar && scan > afterOpen {
+                            foundClose = scan
+                            break
+                        }
+                    }
+                    scan = remaining.index(after: scan)
+                }
+                if let close = foundClose {
+                    let content = String(remaining[afterOpen..<close])
+                    var seg = AttributedString(content)
+                    seg.font = .body.italic()
+                    seg.inlinePresentationIntent = .emphasized
+                    result.append(seg)
+                    idx = advance(idx: idx, by: remaining.distance(from: startOffset, to: remaining.index(after: close)), in: string)
+                    continue
+                }
+            }
+
+            // 5) [text](url) —— 链接
+            if remaining.first == "[" {
+                if let linkEnd = remaining.range(of: "](", options: .literal, range: startOffset..<remaining.endIndex),
+                   let urlEnd = remaining.range(of: ")", options: .literal, range: linkEnd.upperBound..<remaining.endIndex) {
+                    let content = String(remaining[remaining.index(after: startOffset)..<linkEnd.lowerBound])
+                    let url = String(remaining[linkEnd.upperBound..<urlEnd.lowerBound])
+                    if !content.isEmpty,
+                       !content.contains("\n"),
+                       !url.contains("\n"),
+                       !url.contains(" "),
+                       let parsed = URL(string: url) {
+                        var seg = AttributedString(content)
+                        // link attribute 在 Foundation scope（SwiftUI scope 没有）。
+                        // 没有 import UIKit 所以不会与 UIKit scope 歧义。
+                        seg[AttributeScopes.FoundationAttributes.LinkAttribute.self] = parsed
+                        seg.foregroundColor = .accentColor
+                        seg.underlineStyle = .single
+                        result.append(seg)
+                        idx = advance(idx: idx, by: remaining.distance(from: startOffset, to: urlEnd.upperBound), in: string)
+                        continue
+                    }
+                }
+            }
+
+            // 无匹配：拷贝 1 个字符
+            let ch = remaining.first!
+            result.append(AttributedString(String(ch)))
+            idx = string.index(after: idx)
+        }
+
+        return result
+    }
+
+    /// `String.index(_:offsetBy:)` 的小封装，避免每个分支重复写。
+    private func advance(idx: String.Index, by offset: Int, in string: String) -> String.Index {
+        string.index(idx, offsetBy: offset)
     }
 }
