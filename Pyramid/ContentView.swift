@@ -90,7 +90,7 @@ struct CustomTabBar: View {
         Button {
             selectedTab = 0
         } label: {
-            tabLabel("bubble.left.and.bubble.right", "聊天", active: selectedTab == 0)
+            tabIcon("bubble.left.and.bubble.right", active: selectedTab == 0)
         }
         .frame(maxWidth: .infinity)
         .buttonStyle(TabBarButtonStyle())
@@ -125,23 +125,19 @@ struct CustomTabBar: View {
         Button {
             selectedTab = 1
         } label: {
-            tabLabel("gearshape", "设置", active: selectedTab == 1)
+            tabIcon("gearshape", active: selectedTab == 1)
         }
         .frame(maxWidth: .infinity)
         .buttonStyle(TabBarButtonStyle())
         .accessibilityLabel("设置")
     }
 
-    private func tabLabel(_ icon: String, _ title: String, active: Bool) -> some View {
-        VStack(spacing: 3) {
-            Image(systemName: icon)
-                .font(.system(size: 22, weight: .medium))
-            Text(title)
-                .font(.caption2)
-        }
-        .foregroundStyle(active ? Color.accentColor : Color.secondary)
-        .frame(maxWidth: .infinity)
-        .contentShape(Rectangle())
+    private func tabIcon(_ icon: String, active: Bool) -> some View {
+        Image(systemName: icon)
+            .font(.system(size: 22, weight: .medium))
+            .foregroundStyle(active ? Color.accentColor : Color.secondary)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
     }
 }
 
