@@ -45,7 +45,9 @@ enum ImportSupport {
     /// ST v1 字段在根层；ST v2 (chara_card_v2) 字段在 `data` 子对象。
     /// 映射：name/description/personality/scenario/system_prompt/first_mes/alternate_greetings/
     ///      mes_example/creator_notes/post_history_instructions/tags/creator/character_version。
-    private static func parseSillyTavernCard(_ json: [String: Any]) -> Character {
+    /// 同时从 `data.extensions.regex_scripts` 读出 ST 角色内嵌的 Regex Script（保留原字段）。
+    /// `internal`（非 private）以便 `@testable import PyramidCore` 的 SPM 测试访问。
+    static func parseSillyTavernCard(_ json: [String: Any]) -> Character {
         let root = (json["data"] as? [String: Any]) ?? json
         var character = Character()
         character.name = (root["name"] as? String) ?? ""
@@ -65,7 +67,23 @@ enum ImportSupport {
            let imageData = Data(base64Encoded: avatar) {
             character.avatarData = imageData
         }
+        // ST 角色内嵌 regex scripts：`data.extensions.regex_scripts` 是 Regex Script 数组。
+        // 失败 / 缺失 / 字段不是数组 → 当作没有，角色照样入库（不影响其它字段）。
+        if let scripts = parseExtensionsRegexScripts(root: root) {
+            character.extensionsRegexScripts = scripts
+        }
         return character
+    }
+
+    /// 解析 `data.extensions.regex_scripts` → [SillyTavernRegexScript]。
+    /// 失败（缺字段 / 类型错 / JSON 编码失败）一律返回 nil；调用方退化为空数组。
+    private static func parseExtensionsRegexScripts(root: [String: Any]) -> [SillyTavernRegexScript]? {
+        guard let extensions = root["extensions"] as? [String: Any] else { return nil }
+        guard let raw = extensions["regex_scripts"] else { return nil }
+        guard JSONSerialization.isValidJSONObject(raw) || raw is NSNull else { return nil }
+        if raw is NSNull { return nil }
+        guard let data = try? JSONSerialization.data(withJSONObject: raw, options: []) else { return nil }
+        return try? JSONDecoder().decode([SillyTavernRegexScript].self, from: data)
     }
 
     /// SillyTavern 角色卡常以 PNG 分发，角色数据存在 tEXt chunk 的 `chara` 关键字中。

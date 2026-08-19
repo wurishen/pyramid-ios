@@ -27,7 +27,7 @@ Pyramid 的最小原生 iOS 应用 —— 纯 SwiftUI，不依赖 WKWebView / �
 - **系统提示词**：全局值，会话未设置时作为兜底。
 - **世界书**：多本世界书（「全局世界书」不可删）+ 条目增删改查；导出 / 导入（合并 or 覆盖）；开启「显示注入提示」时聊天页回复下方会显示「已注入世界书 N 条」。
 - **预设**：把「模型名 / 系统提示词 / 绑定的世界书 / 启用 Markdown（三态：用全局 / 开 / 关） / 显示用正则 ID / 采样参数（温度、Top P、最大输出 token）」打包成预设，会话详情里一键应用。预设里的采样参数为空时不传给接口，使用后端默认。
-- **显示用正则**：作用域固定 `assistant.display.pre`，在助手原文渲染前执行；命中多条按顺序串行替换。空 pattern / 无效正则保存时即时报错。
+- **显示用正则**：作用域固定 `assistant.display.pre`，在助手原文渲染前执行；命中多条按顺序串行替换。空 pattern / 无效正则保存时即时报错。**SillyTavern 兼容**：酒馆角色卡 `data.extensions.regex_scripts` 在导入时自动解析并转成 DisplayRegex（支持 `regex / replacement / enabled / flags / placement / substituteRegex / prompt_only` 字段，详见 `docs/SPEC.md` §4.6）；转换出的条目带 `sourceCharacterId`，删除该角色时同步清理。**Phase 1 不执行 JS 沙箱**——只接受已落盘 JSON 字段。
 - **渲染**：全局「启用 Markdown 渲染」开关（预设未自覆盖时生效）；「剥离隐藏标签」开关 + 隐藏标签列表（逗号或换行分隔，默认 `think,thinking`），匹配 `<tag>...</tag>`（含跨行）整段剥离，仅作用于卡片渲染。
 - **上下文 / 界面 / 关于 / 备份**：上下文裁剪策略三选一（**不裁剪 / 最近 N 条消息 / 最近 C 字符**，当前用户消息始终保留），字符数估算 + 超出提示；**界面**子页集中放客户端展示类选项（**界面缩放** / 显示头像 / 显示时间戳 / 紧凑模式），渲染管线类（启用 Markdown / 剥离隐藏标签 / 显示用正则）统一在「**渲染**」子页；关于页含项目说明与 Base URL 提示；备份页支持导出 / 分享 / 导入（合并 or 覆盖），按 id 去重入库。**没有「清空全部会话与设置」的入口**——要清空可用「导入覆盖」功能。
 
@@ -65,7 +65,7 @@ Pyramid 的最小原生 iOS 应用 —— 纯 SwiftUI，不依赖 WKWebView / �
 - 预设：模型 / 系统提示词 / 世界书绑定 / 启用 Markdown / 显示用正则 ID 一键应用到会话。
 - 会话：多会话本地持久化、置顶、重命名、按角色 1:N 绑定、长按头像删除。
 - 消息操作：长按菜单（复制 / 编辑 / 重新生成 / 删除 / **包含在上下文切换**）+ 流式停止 + 错误重试；排除消息在 UI 显示但不进 API。
-- 显示管线：原始 → 显示用正则（仅助手）→ 隐藏标签剥离 → **RenderNode 解析**（`<status>` 块转原生 `StatusView`）→ Markdown / 原生面板渲染（仅作用于卡片，`MarkdownTextView` 块级排版 + `StatusView` 原生面板）。
+- 显示管线：原始 → 显示用正则（仅助手；含角色内嵌 ST Regex Script 自动转出的条目）→ 隐藏标签剥离 → **RenderNode 解析**（`<status>` 块转原生 `StatusView`）→ Markdown / 原生面板渲染（仅作用于卡片，`MarkdownTextView` 块级排版 + `StatusView` 原生面板）。
 - 宏：`{{user}}` / `{{User}}` / `{{char}}` / `{{Char}}`，仅作用于发送给 API 的文本。
 - 不含：云同步、第三方渲染（WKWebView / SFSafariViewController）、正则脚本热更新。
 - **数据兼容**：所有「v0.6 新增字段」（Character 的 8 个 ST 字段 + ChatMessage.isIncluded）走 `init(from:) decodeIfPresent` 给默认值，旧 v0.5 JSON / UserDefaults 数据 load 时自动补齐，**无需主动迁移、不会丢任何旧数据**。

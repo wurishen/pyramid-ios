@@ -254,6 +254,7 @@ ForEach(tree.nodes) { node in
 | `scenario` | String | 场景 |
 | `systemPrompt` | String | 角色专属系统提示词 |
 | `worldBookId` | UUID? | 绑定的世界书（可选） |
+| `extensionsRegexScripts` | `[SillyTavernRegexScript]` | 酒馆角色卡内嵌的 Regex Script（来自 `data.extensions.regex_scripts`）；导入时自动转成 DisplayRegex（见 §4.6） |
 
 ### 4.2 导入与头像
 
@@ -293,6 +294,31 @@ ForEach(tree.nodes) { node in
 1. 会话绑定的世界书（`ChatSession.worldBookId`）
 2. 角色绑定的世界书（`Character.worldBookId`）
 3. 全局世界书
+
+### 4.6 SillyTavern Regex Script 自动发现（角色内嵌）
+
+酒馆角色卡可在 `data.extensions.regex_scripts` 内嵌 Regex Script 数组。导入时自动读出、经 `SillyTavernScriptImporter` 转成 DisplayRegex 后入库；同一会话立即生效（无需重启 / 重发 / 写回 raw）。
+
+**字段映射**（依据酒馆 `public/scripts/extensions/regex/{index,engine}.js` 实际 schema）：
+
+| ST 字段 | Pyramid 字段 | 备注 |
+|---|---|---|
+| `name` / `scriptName` | `DisplayRegex.name` | 取第一个非空；空时标 "(SillyTavern 导入)" |
+| `regex` / `findRegex` | `DisplayRegex.pattern` | 必填；空 / 缺失则整条跳过 |
+| `replacement` / `replaceString` | `DisplayRegex.replacement` | 缺省视为空串 |
+| `flags` (g/i/m/s) | inline flag group | g 隐式；i/m/s → `(?i)` `(?m)` `(?s)` 前缀 |
+| `enabled` / `!disabled` | `DisplayRegex.enabled` | nil → 视为启用；false → 整条跳过 |
+| `placement` (数组) | 过滤 | 含 0（MD_DISPLAY）或 2（AI_OUTPUT）才保留；1/3/5/6 跳过 |
+| `substituteRegex` (0/1/2) | replacement 处理 | 0=NONE 字面；1=RAW 支持 `$1`/`\1`；2=ESCAPED 先 JSON unescape |
+| `promptOnly` / `markdownOnly` / `runOnEdit` | 过滤 / 仅记录 | `promptOnly=true` → 跳过；其余仅记录语义 |
+
+**执行顺序**：JSON 数组顺序保留 → `extensionsRegexScripts` 顺序 → `convert` 后 DisplayRegex 数组顺序 = 实际渲染顺序。
+
+**生命周期绑定**：转换出的 DisplayRegex 携带 `sourceCharacterId = character.id`。删除角色时 `DisplayRegexStore.removeCharacterScopedScripts` 同步清掉对应条目；用户手动添加的 DisplayRegex（`sourceCharacterId == nil`）不被影响。
+
+**作用域**：Pyramid Phase 1 固定为 `assistant.display.pre`（与 `MessageRenderer.applyDisplayRegex` 生效范围一致）。用户消息与系统提示词不受这些脚本影响。
+
+**Phase 1 暂不支持**：JS 引擎执行、`WebView`、HTML/DOM 注入、`promptOnly` 的回写语义。这些留作未来扩展位。
 
 ---
 
@@ -550,11 +576,12 @@ ForEach(tree.nodes) { node in
 
 #### 8.4.1 显示用正则（Display Regex）
 
-- 字段：`id` / `name` / `pattern` / `replacement` / `enabled` / `scope`（固定 `assistant.display.pre`）
+- 字段：`id` / `name` / `pattern` / `replacement` / `enabled` / `scope`（固定 `assistant.display.pre`）/ `sourceCharacterId`（可空，来自角色内嵌 ST Regex Script 自动转出）
 - 行为：仅对 `role == .assistant` 的消息在渲染前依次应用；用户消息不经过。
 - 顺序：先按当前预设的 `displayRegexIds` 顺序，再追加其它启用的正则（兜底）。
 - 编辑：保存前用 `NSRegularExpression` 校验 `pattern`，失败给出错误提示并阻止保存。
-- 无 ST 脚本 / 扩展市场；不做全量 JS 沙箱。
+- 来源：① 用户在「显示用正则」面板手动创建；② 酒馆角色卡导入时由 §4.6 的 ST Regex Script 自动转出（带 `sourceCharacterId`，删除角色时同步清理）。
+- **Phase 1 无 ST 脚本 / 扩展市场**：不做全量 JS 沙箱；只接受酒馆已落盘的 JSON 字段（详见 §4.6 表）。
 
 #### 8.4.2 隐藏标签剥离
 

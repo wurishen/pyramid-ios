@@ -19,6 +19,11 @@ struct Character: Codable, Identifiable, Equatable {
     var tags: [String]
     var creator: String
     var characterVersion: String
+    /// SillyTavern 角色卡内嵌的 Regex Script（位于 `data.extensions.regex_scripts`）。
+    /// 由 ImportSupport 在解析时从 ST v2 角色卡 / PNG 内嵌 chara 中读出，**原始 ST 字段保留**，
+    /// 真正的 → DisplayRegex 转换由 CharacterStore 在角色入库时调用 SillyTavernScriptImporter 完成。
+    /// 旧角色卡没有此字段 → decodeIfPresent 给空数组。
+    var extensionsRegexScripts: [SillyTavernRegexScript]
 
     init(
         id: UUID = UUID(),
@@ -36,7 +41,8 @@ struct Character: Codable, Identifiable, Equatable {
         postHistoryInstructions: String = "",
         tags: [String] = [],
         creator: String = "",
-        characterVersion: String = ""
+        characterVersion: String = "",
+        extensionsRegexScripts: [SillyTavernRegexScript] = []
     ) {
         self.id = id
         self.name = name
@@ -54,6 +60,7 @@ struct Character: Codable, Identifiable, Equatable {
         self.tags = tags
         self.creator = creator
         self.characterVersion = characterVersion
+        self.extensionsRegexScripts = extensionsRegexScripts
     }
 
     // MARK: - Codable：旧角色卡没有这些字段时全部 decodeIfPresent 给默认值。
@@ -66,6 +73,7 @@ struct Character: Codable, Identifiable, Equatable {
         case postHistoryInstructions = "post_history_instructions"
         case tags, creator
         case characterVersion = "character_version"
+        case extensionsRegexScripts = "extensionsRegexScripts"
     }
 
     init(from decoder: Decoder) throws {
@@ -86,6 +94,7 @@ struct Character: Codable, Identifiable, Equatable {
         self.tags = (try? c.decode([String].self, forKey: .tags)) ?? []
         self.creator = (try? c.decode(String.self, forKey: .creator)) ?? ""
         self.characterVersion = (try? c.decode(String.self, forKey: .characterVersion)) ?? ""
+        self.extensionsRegexScripts = (try? c.decode([SillyTavernRegexScript].self, forKey: .extensionsRegexScripts)) ?? []
     }
 
     func systemPromptText() -> String {

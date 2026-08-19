@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 struct CharacterListView: View {
     @ObservedObject var store: CharacterStore
     @ObservedObject var worldBook: WorldBookStore
+    @ObservedObject var displayRegexes: DisplayRegexStore
     @State private var editingCharacter: Character?
     @State private var showDocumentPicker = false
     @State private var importError: String?
@@ -85,6 +86,8 @@ struct CharacterListView: View {
         let ids = offsets.map { store.characters[$0].id }
         for id in ids {
             store.delete(id)
+            // 同步清掉该角色内嵌 ST Regex Script 自动转出的 DisplayRegex。
+            displayRegexes.removeCharacterScopedScripts(characterId: id)
         }
     }
 
@@ -95,12 +98,23 @@ struct CharacterListView: View {
                 return
             }
             var total = 0
+            var totalScripts = 0
             for url in urls {
                 do {
                     let data = try ImportSupport.readImportedData(from: url)
                     let characters = try ImportSupport.parseCharacters(from: data)
                     for character in characters {
+                        // 自动发现 `character.extensionsRegexScripts`（ST 角色卡内嵌的
+                        // `data.extensions.regex_scripts`）→ 转成 DisplayRegex → 入库。
+                        // **同一会话自动生效**：RenderEngine.Context.allDisplayRegexes 直接
+                        // 来自 displayRegexes.regexes，无需重启 / 重发 / 写回 raw。
+                        let scripts = scriptsFor(character)
                         store.upsert(character)
+                        displayRegexes.replaceCharacterScopedScripts(
+                            characterId: character.id,
+                            scripts: scripts
+                        )
+                        totalScripts += scripts.count
                         total += 1
                     }
                 } catch {
@@ -108,8 +122,35 @@ struct CharacterListView: View {
                     return
                 }
             }
-            importSuccess = "已导入 \(total) 张角色卡"
+            if totalScripts > 0 {
+                importSuccess = "已导入 \(total) 张角色卡（含 \(totalScripts) 条角色内嵌 Regex）"
+            } else {
+                importSuccess = "已导入 \(total) 张角色卡"
+            }
         }
+    }
+
+    /// 把 Character.extensionsRegexScripts 经 SillyTavernScriptImporter 转成 DisplayRegex。
+    /// 失败 / 空 → 返回空数组。给每条 DisplayRegex 标 sourceCharacterId = character.id
+    /// 以便后续删除角色时同步清理。
+    private func scriptsFor(_ character: Character) -> [DisplayRegex] {
+        guard !character.extensionsRegexScripts.isEmpty else { return [] }
+        let payloads = character.extensionsRegexScripts
+        let converted: [DisplayRegex] = payloads.compactMap { script in
+            SillyTavernScriptImporter.convert(script).map { display in
+                // 保留 DisplayRegex 原 id（避免 UUID 漂移），仅追加 sourceCharacterId。
+                DisplayRegex(
+                    id: display.id,
+                    name: display.name,
+                    pattern: display.pattern,
+                    replacement: display.replacement,
+                    enabled: display.enabled,
+                    scope: display.scope,
+                    sourceCharacterId: character.id
+                )
+            }
+        }
+        return converted
     }
 
     private var importErrorBinding: Binding<Bool> {
@@ -401,6 +442,6 @@ private extension UIImage {
 
 #Preview {
     NavigationStack {
-        CharacterListView(store: CharacterStore(), worldBook: WorldBookStore())
+        CharacterListView(store: CharacterStore(), worldBook: WorldBookStore(), displayRegexes: DisplayRegexStore())
     }
 }
