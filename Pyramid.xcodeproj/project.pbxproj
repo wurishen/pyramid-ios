@@ -47,6 +47,7 @@
 		AB0000000000000000000282 /* SillyTavernRegexScript.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000283 /* SillyTavernRegexScript.swift */; };
 		AB0000000000000000000290 /* MessageRendererCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000291 /* MessageRendererCore.swift */; };
 		AB0000000000000000000292 /* RenderEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000293 /* RenderEngine.swift */; };
+		AB0000000000000000000294 /* RenderInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000295 /* RenderInspectorView.swift */; };
 		AB0000000000000000000280 /* AvatarImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000281 /* AvatarImageCache.swift */; };
 		AB0000000000000000000218 /* DisplayRegexListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000222 /* DisplayRegexListView.swift */; };
 		AB00000000000000000000A2 /* ImportSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000000A1 /* ImportSupport.swift */; };
@@ -95,6 +96,7 @@
 		AB0000000000000000000283 /* SillyTavernRegexScript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SillyTavernRegexScript.swift; sourceTree = "<group>"; };
 		AB0000000000000000000291 /* MessageRendererCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageRendererCore.swift; sourceTree = "<group>"; };
 		AB0000000000000000000293 /* RenderEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderEngine.swift; sourceTree = "<group>"; };
+		AB0000000000000000000295 /* RenderInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderInspectorView.swift; sourceTree = "<group>"; };
 		AB0000000000000000000221 /* MacroExpander.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacroExpander.swift; sourceTree = "<group>"; };
 		AB0000000000000000000281 /* AvatarImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarImageCache.swift; sourceTree = "<group>"; };
 		AB0000000000000000000222 /* DisplayRegexListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayRegexListView.swift; sourceTree = "<group>"; };
@@ -202,6 +204,7 @@
 				AB0000000000000000000214 /* NewSessionWithCharacterSheet.swift */,
 				AB0000000000000000000222 /* DisplayRegexListView.swift */,
 				AB0000000000000000000281 /* AvatarImageCache.swift */,
+				AB0000000000000000000295 /* RenderInspectorView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -327,6 +330,7 @@
 				AB00000000000000000000A2 /* ImportSupport.swift in Sources */,
 				AB00000000000000000000A4 /* DocumentPicker.swift in Sources */,
 				AB00000000000000000000A6 /* BackupService.swift in Sources */,
+				AB0000000000000000000294 /* RenderInspectorView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
