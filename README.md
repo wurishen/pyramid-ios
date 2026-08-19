@@ -22,7 +22,7 @@ Pyramid 的最小原生 iOS 应用 —— 纯 SwiftUI，不依赖 WKWebView / �
 ### 设置
 
 - **用户**：昵称（消息卡片头部显示）+ 圆形头像（相册/相机）；可选「对 AI 显示的用户名」与人设正文，开关控制是否把用户人设注入对话。
-- **角色卡**：列表 + 行内编辑（头像、名字、描述、性格、场景、系统提示词、可绑一本世界书）；展开「**SillyTavern 字段（高级）**」折叠组可继续填默认开场白（first_mes）、备用开场白（alternate_greetings，每行一条）、对话示例（mes_example，注入系统提示词时带「[对话示例]」小标题）、创作者备注（creator_notes）、历史后指令（post_history_instructions）、标签（tags，逗号分隔）、创作者（creator）、版本号（character_version）。支持 **JSON / PNG（PNG tEXt `chara` 块 / zlib+base64）** 导入，**SillyTavern v1（根层字段）** 与 **v2（`data` 子对象 = chara_card_v2）** 都自动回填以上 ST 字段；也支持 Pyramid 原生 JSON 单文件或多选批量导入；导入后去重入库并提示「已导入 N 张角色卡」。
+- **角色卡**：列表 + 行内编辑（头像、名字、描述、性格、场景、系统提示词、可绑一本世界书）；展开「**SillyTavern 字段（高级）**」折叠组可继续填默认开场白（first_mes）、备用开场白（alternate_greetings，每行一条）、对话示例（mes_example，注入系统提示词时带「[对话示例]」小标题）、创作者备注（creator_notes）、历史后指令（post_history_instructions）、标签（tags，逗号分隔）、创作者（creator）、版本号（character_version）。支持 **JSON / PNG（PNG tEXt `chara` 块 / zlib+base64）** 导入，**SillyTavern v1（根层字段）**、**v2（`data` 子对象 = chara_card_v2）** 与 **v3（`spec: chara_card_v3`）** 都自动回填以上 ST 字段 + V3 扩展：`data.character_book` 内嵌世界书自动建书并参与聊天注入；`extensions.talkativeness` / `fav` / `depth_prompt` typed lift；`depth_prompt` 在聊天时按 ST 规则注入（`inChat` 插入历史 / `before` 拼 system 段 / `after` 拼 history 段）。也支持 Pyramid 原生 JSON 单文件或多选批量导入；导入后去重入库并提示「已导入 N 张角色卡」。
 - **API 配置**：Base URL（可带或不带 `/v1`，自动补齐再拼 `/chat/completions`）、API Key（可空）、模型名、流式输出开关（默认开）。**超时为代码内固定值**（普通请求 60 s、流式 30 s），**失败不自动重试**——聊天页错误条带提供「重试」按钮复用最近失败的用户消息。
 - **系统提示词**：全局值，会话未设置时作为兜底。
 - **世界书**：多本世界书（「全局世界书」不可删）+ 条目增删改查；导出 / 导入（合并 or 覆盖）；开启「显示注入提示」时聊天页回复下方会显示「已注入世界书 N 条」。
@@ -59,8 +59,9 @@ Pyramid 的最小原生 iOS 应用 —— 纯 SwiftUI，不依赖 WKWebView / �
 ## 功能范围
 
 - API：OpenAI 兼容 `/v1/chat/completions`，流式（SSE）+ 整段两种模式；URLSession，主线程更新 UI；可设超时与重试。
-- 世界书：多本、按 ID 三级作用域（全局启用 / 角色绑定 / 会话额外启用），关键词匹配，注入上限 20 条 / 2000 字符。
-- 角色卡：CRUD、JSON / PNG 导入（含 SillyTavern chara_card_v1/v2 兼容，回填 `first_mes / alternate_greetings / mes_example / creator_notes / post_history_instructions / tags / creator / character_version`）、头像（相册/相机，自动缩放到 512px JPEG）、存在开场白时新建会话前弹出开场白选择 Sheet。
+- 世界书：多本、按 ID 三级作用域（全局启用 / 角色绑定 / 会话额外启用）+ **V3 内嵌 world book**（`data.character_book` 导入时自动建书，绑定到角色，非全局启用，参与聊天注入；删除角色同步清理），关键词匹配，注入上限 20 条 / 2000 字符。
+- 角色卡：CRUD、JSON / PNG 导入（含 SillyTavern chara_card_v1/v2/v3 兼容，回填 `first_mes / alternate_greetings / mes_example / creator_notes / post_history_instructions / tags / creator / character_version` + V3 typed lift：`talkativeness` / `isFavorite` / `depthPrompt`；V3 World Book Entry 全部 17 个新字段；`characterBookRaw` 保留字节级 round-trip），头像（相册/相机，自动缩放到 512px JPEG），存在开场白时新建会话前弹出开场白选择 Sheet。
+- Context 构建：消息序列为「用户人设 → 角色（desc + personality + scenario + character.systemPrompt + `[对话示例]\n{mes_example}`）→ 会话/预设系统词 → 世界书 before/after system 条目（含 V3 内嵌书）→ 历史消息 → 世界书 after-history 条目 + 角色 `post_history_instructions`」；**V3 `depth_prompt`** 在 `expandMacros` 之后按 `(role, position)` 注入（`inChat + user/assistant` 插历史；`inChat + system` / `before` 拼 system 段；`after` 拼 history 段；空 content 不注入）；所有角色字段缺省视为空，旧数据 `decodeIfPresent` 兜底。
 - Context 构建：消息序列为「用户人设 → 角色（desc + personality + scenario + character.systemPrompt + `[对话示例]\n{mes_example}`）→ 会话/预设系统词 → 世界书 before/after system 条目 → 历史消息 → 世界书 after-history 条目 + 角色 `post_history_instructions`」；所有角色字段缺省视为空，旧数据 `decodeIfPresent` 兜底。
 - 预设：模型 / 系统提示词 / 世界书绑定 / 启用 Markdown / 显示用正则 ID 一键应用到会话。
 - 会话：多会话本地持久化、置顶、重命名、按角色 1:N 绑定、长按头像删除。

@@ -391,3 +391,33 @@ gh run watch   # 等 lint / build / release 三 job 全绿
 ## 一句话结论
 
 **首要缺口是"未知字段透传通道不存在"**——结构性、三层叠加（解析 → 模型 → 持久化）。阶段 1 最小改造（~200 行 Swift + 1 新文件 + 8 测试）就能让 V3 角色卡**零丢失导入 + 零丢失导出重导入**，不引入 JS / WebView / 任何第三方依赖。阶段 2-3 是世界书落地和 MVU，按需追加。
+
+---
+
+## Phase 2 落地记录（2026-08-19）
+
+| Commit | SHA | 范围 |
+|---|---|---|
+| 1 | `732bb1b` | `WorldBookEntry` 加 17 个 V3 字段；`parseSillyTavernEntry` 6 值 position 映射 + `positionRaw` 保留 |
+| 2 | `87a60dc` | V3 `character_book` 内嵌世界书自动建书：`WorldBookStore.adoptEmbeddedWorldBook(for:)` + `Character.embeddedWorldBookId` + `activeBooks` 优先级注入 + 删除角色清理 |
+| 3 | `2191b52` | `extensions` typed lift：`CharacterDepthPrompt` 新建 + `Character.talkativeness` / `isFavorite` / `depthPrompt`；`ImportSupport.applyRawPassthrough` 镜像 strip 模式；失败字段保留 raw 不动 |
+| 4 | `618e83d` | `depth_prompt` 运行时注入：`DepthPromptInjector.injectInChat` / `systemAppendage`；`ChatViewModel.request` switch (role, position) → system 段拼 / history 注入；`computeContextFingerprint` 加 3 字段 |
+| 5 | `7654418` | SPM 测试：3 个新文件 + `Package.swift` 更新（`V3WorldBookEntryTests` 11 例 / `CharacterExtensionsLiftTests` 17 例 / `DepthPromptInjectionTests` 14 例） |
+
+### B 表缺口（Phase 2 后）
+
+| 缺口 | Phase 2 状态 |
+|---|---|
+| 角色卡内嵌世界书 `data.character_book` | ✅ 导入时自动建书，参与运行时注入；`characterBookRaw` 保留字节级 round-trip |
+| `data.extensions` 整块保留 | ✅ typed lift（`talkativeness` / `fav` / `depth_prompt`）+ 其余子键保留在 `extensionsRaw` |
+| `data.extensions.depth_prompt` | ✅ typed 字段 + 运行时按 ST 规则注入（`.inChat` 插历史 / `.before` 拼 system / `.after` 拼 history）|
+| V3 World Book Entry 字段（17 个） | ✅ 全部落到 typed 字段；`positionRaw` 保留 ST 原值避免折叠漂移 |
+| ST `position` 4 值映射 | ✅ `insertionPosition` 仍是 3 值（beforeSystem / afterSystem / afterHistory），1-2 / 3-6 折叠规则不变 |
+
+### Phase 3（暂不做，按需追加）
+
+- MVU / JSON Patch / 变量 store / stat_data UI
+- `<status>` 块扩展接受任意键值对
+- 编辑器 UI（character_book / depth_prompt 页面）
+- `selectiveLogic` / `sticky` / `cooldown` 运行时语义
+- `case_sensitive` 改动 `WorldBookService.matches`

@@ -220,7 +220,7 @@ ForEach(tree.nodes) { node in
 
 ### 3.5 SillyTavern 导入兼容
 
-支持导入 SillyTavern 格式的 JSON 世界书，字段映射：
+支持导入 SillyTavern 格式的 JSON 世界书，字段映射（V1/V2/V3 共用）：
 
 | SillyTavern 字段 | Pyramid 字段 |
 |---|---|
@@ -234,7 +234,28 @@ ForEach(tree.nodes) { node in
 | `matchWholeWords` | `matchMode = .exact` |
 | `useProbability` / `probability` | `probability`（钳制 0-100；`useProbability=false` 视为恒触发） |
 | `depth` / `scanDepth` | `scanDepth` |
-| `position` (0=before, 1-2=afterSystem, 3-6=afterHistory) | `insertionPosition` |
+| `position` (0=before, 1-2=afterSystem, 3-6=afterHistory) | `insertionPosition` + `positionRaw`（保留 ST 原值 0-6，避免折叠漂移） |
+
+**V3 新增字段（仅存储，运行时未消费；导出/重导入 round-trip 不丢）**：
+
+| ST V3 字段 | Pyramid 字段 |
+|---|---|
+| `uid` (Int/String) | `externalId: Int?` |
+| `group` | `groupKey: String?` |
+| `group_weight` | `groupWeight: Double?` |
+| `weight` | `weight: Double?` |
+| `decay` | `decay: Double?` |
+| `case_sensitive` | `caseSensitive: Bool?` |
+| `useGroupScoring` | `useGroupScoring: Bool?` |
+| `automationId` | `automationId: String?` |
+| `role` (0/1/2) | `roleRaw: Int?` |
+| `vectorized` | `vectorized: Bool?` |
+| `sticky` / `cooldown` / `delay` | `sticky/cooldown/delay: Int?` |
+| `displayIndex` | `displayIndex: Int?` |
+| `triggers` / `excludes` | `[String]` |
+| `outletName` | `outletName: String?` |
+| `selectiveLogic` (0..3) | `selectiveLogicRaw: Int?` |
+| per-entry `extensions` | `extensionsRaw: JSONValue?` |
 
 导入选项：新建世界书 / 合并到当前 / 覆盖当前条目
 
@@ -254,16 +275,24 @@ ForEach(tree.nodes) { node in
 | `scenario` | String | 场景 |
 | `systemPrompt` | String | 角色专属系统提示词 |
 | `worldBookId` | UUID? | 绑定的世界书（可选） |
+| `embeddedWorldBookId` | UUID? | ST V3 内嵌 `data.character_book` 自动建的书 ID（见 §4.8）；非全局，参与注入但不出现在全局世界书列表 |
 | `extensionsRegexScripts` | `[SillyTavernRegexScript]` | 酒馆角色卡内嵌的 Regex Script（来自 `data.extensions.regex_scripts`）；导入时自动转成 DisplayRegex（见 §4.6） |
+| `talkativeness` | Double? | ST `data.extensions.talkativeness`（0.0–1.0；导入时 clamp） |
+| `isFavorite` | Bool? | ST `data.extensions.fav` |
+| `depthPrompt` | `CharacterDepthPrompt?` | ST `data.extensions.depth_prompt`（typed lift；运行时按 ST 规则注入，见 §4.9） |
+| `extensionsRaw` | `JSONValue?` | `data.extensions` 中未被 typed lift 的剩余子键（`world`、第三方扩展等）—— 字节级 round-trip |
+| `tavernHelperRaw` | `JSONValue?` | `data.extensions.tavern_helper` 便捷指针（同时存在于 `extensionsRaw`） |
+| `characterBookRaw` | `JSONValue?` | V3 `data.character_book` 整块 —— auto-build 后保留字节级 round-trip |
 
 ### 4.2 导入与头像
 
 **导入格式**（自动识别，支持多文件同时选择）：
 
 - **Pyramid 原生**：单个 `Character` 对象或 `[Character]` 数组
-- **SillyTavern 角色卡 JSON**：兼容 `spec` v1（字段在根层）与 v2（字段在 `data` 子对象）
+- **SillyTavern 角色卡 JSON**：兼容 `spec` v1（字段在根层）、v2（`data` 子对象 = chara_card_v2）、**v3**（`spec: chara_card_v3` + `character_book` + `extensions.depth_prompt` 等）
   - 字段映射：`name`, `description`, `personality`, `scenario`, `system_prompt`
   - `avatar`（base64）→ `avatarData`
+  - V3 扩展：`data.character_book` → 自动建内嵌世界书（见 §4.8）；`data.extensions.talkativeness` / `fav` / `depth_prompt` → typed lift（见 §4.1 表）；其余 extensions 子键 + `tavern_helper` → `extensionsRaw` / `tavernHelperRaw` 保真
 - **SillyTavern PNG 角色卡**：数据存于 PNG `tEXt` chunk 的 `chara` 关键字；解码兼容三种编码——明文 JSON、`zlib 压缩 + base64`（ST 标准）、纯 base64 JSON
 
 导入后直接写入本地（自动 upsert），完成后提示「已导入 N 张角色卡」。
@@ -319,6 +348,54 @@ ForEach(tree.nodes) { node in
 **作用域**：Pyramid Phase 1 固定为 `assistant.display.pre`（与 `MessageRenderer.applyDisplayRegex` 生效范围一致）。用户消息与系统提示词不受这些脚本影响。
 
 **Phase 1 暂不支持**：JS 引擎执行、`WebView`、HTML/DOM 注入、`promptOnly` 的回写语义。这些留作未来扩展位。
+
+### 4.7 V3 内嵌世界书自动建书（`data.character_book`）
+
+V3 角色卡可在 `data.character_book` 内嵌一本世界书（条目数 / 标题 / `entries`）。导入时自动构建，绑定到该角色，参与聊天注入。
+
+**触发路径**：`CharacterListView.handleImport` 在 `store.upsert(character)` 之前调用 `WorldBookStore.adoptEmbeddedWorldBook(for:)`；返回值（book UUID）写回 `character.embeddedWorldBookId`，再 upsert。
+
+**行为**：
+
+- `characterBookRaw` 为 nil 或非 `.object` → no-op（V1/V2 角色卡保持原行为）。
+- 优先复用 `character.embeddedWorldBookId` 对应的现有书（同 ID 命中即更新，不重复建）。
+- 否则 `createBook(title:isGloballyEnabled:false)` 新建 —— **embedded 永不全局启用**。
+- 书名：`raw["name"]`（String）→ 否则 `"\(character.name) 内嵌世界书"`。
+- `entries`：接受 `array` / 数字键字典（ST 两种都有）→ 逐条 `parseSillyTavernEntry`（V3 字段全表，见 §3.5）。
+- 合并策略：按 `externalId == uid` 匹配替换旧条目；否则追加。**幂等**：同一角色二次导入复用同一本书，不重复创建。
+- `characterBookRaw` 保留字节级 round-trip（导出 → 重导入仍能解析）。
+
+**注入优先级**（`WorldBookStore.activeBooks`，从低到高）：
+
+1. 全局启用世界书（`isGloballyEnabled == true`）
+2. **embedded world book**（`character.embeddedWorldBookId`）
+3. 角色手动绑定的世界书（`character.worldBookId`）
+4. 会话额外启用的世界书（`session.extraWorldBookIds`）
+
+embedded 排在「manual 绑定」之前，让用户 override 优先级；同 ID 重复出现只保留首个。
+
+**删除角色清理**：`CharacterListView.deleteCharacters` 在 `store.delete(id)` 之前调 `worldBook.deleteBook(bookID)`（已守住 `books.count > 1`，最后一本书不会被删）。
+
+### 4.8 V3 depth_prompt 运行时注入（`extensions.depth_prompt`）
+
+V3 角色卡可在 `data.extensions.depth_prompt` 定义一条消息：指定 `role`（system/user/assistant）、`depth`（插入位置）、`content`、`position`（before/after/in-chat）。导入时 lift 到 typed `Character.depthPrompt: CharacterDepthPrompt?`，运行时按 ST 规则注入到当前请求的上下文。
+
+**注入路径**：`ChatViewModel.request` 在 `expandMacros` 之后、构造 `OpenAIClient` 之前 switch `(role, position)`：
+
+| `position` | `role` | 注入方式 |
+|---|---|---|
+| `.inChat` | `.user` / `.assistant` | `DepthPromptInjector.injectInChat(history:&apiHistory, prompt:dp)` —— `count - clamp(depth, 0, count)` 处插一条新消息（depth=0 → 末条后；depth=count → 首条前；越界 clamp） |
+| `.inChat` | `.system` | caller 改走 `systemAppendage`（`ChatMessage.Role` 只 user/assistant，system 不进 history） |
+| `.before` | 任意 | 拼到 `OpenAIClient.afterSystemText` 末尾（`WorldBookService.injectionText` 之后） |
+| `.after` | 任意 | 拼到 `OpenAIClient.afterHistoryText` 末尾（`post_history_instructions` 之后） |
+
+**空内容 guard**：`content.trimmingCharacters(...).isEmpty` 时不注入（`injectInChat` / `systemAppendage` 都早退）；`position=.inChat + role=.system` 静默 no-op（caller 应该改走 systemAppendage）。
+
+**指纹失效**：`computeContextFingerprint` 把 `talkativeness` / `isFavorite` / `depthPrompt` 加入指纹（`Hashable` 合成），三个字段任一改动 → 缓存失效 → 下次请求重算。
+
+**OpenAIClient 接口不变**：`depth_prompt` 内容通过 `afterSystemText` / `afterHistoryText` 现有的拼接路径直接吸收，零新字段。
+
+**未实现语义（保留 raw）**：`position` 之外的 ST 特性（`sticky` / `cooldown` / `delay` 等 World Book Entry 时间字段）只存不消费；`selectiveLogic` / `case_sensitive` 暂不改 `WorldBookService.matches`。这些留作 P3。
 
 ---
 
