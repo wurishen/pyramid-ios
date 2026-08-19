@@ -48,6 +48,9 @@
 		AB0000000000000000000290 /* MessageRendererCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000291 /* MessageRendererCore.swift */; };
 		AB0000000000000000000292 /* RenderEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000293 /* RenderEngine.swift */; };
 		AB0000000000000000000294 /* RenderInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000295 /* RenderInspectorView.swift */; };
+		AB000000000000000000029A /* RenderNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000029B /* RenderNode.swift */; };
+		AB000000000000000000029C /* RenderNodeParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000029D /* RenderNodeParser.swift */; };
+		AB000000000000000000029E /* StatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000029F /* StatusView.swift */; };
 		AB0000000000000000000280 /* AvatarImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000281 /* AvatarImageCache.swift */; };
 		AB0000000000000000000218 /* DisplayRegexListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000222 /* DisplayRegexListView.swift */; };
 		AB00000000000000000000A2 /* ImportSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000000A1 /* ImportSupport.swift */; };
@@ -97,6 +100,9 @@
 		AB0000000000000000000291 /* MessageRendererCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageRendererCore.swift; sourceTree = "<group>"; };
 		AB0000000000000000000293 /* RenderEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderEngine.swift; sourceTree = "<group>"; };
 		AB0000000000000000000295 /* RenderInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderInspectorView.swift; sourceTree = "<group>"; };
+		AB000000000000000000029B /* RenderNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderNode.swift; sourceTree = "<group>"; };
+		AB000000000000000000029D /* RenderNodeParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderNodeParser.swift; sourceTree = "<group>"; };
+		AB000000000000000000029F /* StatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusView.swift; sourceTree = "<group>"; };
 		AB0000000000000000000296 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
 		AB0000000000000000000298 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		AB0000000000000000000299 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
@@ -159,6 +165,8 @@
 				AB0000000000000000000283 /* SillyTavernRegexScript.swift */,
 				AB0000000000000000000291 /* MessageRendererCore.swift */,
 				AB0000000000000000000293 /* RenderEngine.swift */,
+				AB000000000000000000029B /* RenderNode.swift */,
+				AB000000000000000000029D /* RenderNodeParser.swift */,
 				AB0000000000000000000221 /* MacroExpander.swift */,
 			);
 			path = Models;
@@ -219,6 +227,7 @@
 				AB0000000000000000000222 /* DisplayRegexListView.swift */,
 				AB0000000000000000000281 /* AvatarImageCache.swift */,
 				AB0000000000000000000295 /* RenderInspectorView.swift */,
+				AB000000000000000000029F /* StatusView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -345,6 +354,9 @@
 				AB00000000000000000000A4 /* DocumentPicker.swift in Sources */,
 				AB00000000000000000000A6 /* BackupService.swift in Sources */,
 				AB0000000000000000000294 /* RenderInspectorView.swift in Sources */,
+				AB000000000000000000029A /* RenderNode.swift in Sources */,
+				AB000000000000000000029C /* RenderNodeParser.swift in Sources */,
+				AB000000000000000000029E /* StatusView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

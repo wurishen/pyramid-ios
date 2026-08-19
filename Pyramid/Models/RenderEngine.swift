@@ -5,10 +5,11 @@ import Foundation
 /// 关键不变量：
 /// - **不修改 raw**：`render` 是纯函数，每次调用基于 raw 重新计算。
 /// - **可重复调用**：相同 (raw, context) → 相同 Result（`Result: Equatable`）。
-/// - **可独立使用**：`Result` 是值类型，传给 SwiftUI 视图后视图按值相等自动 diff，
+/// - **可独立使用**：`Result` 是值类型，传给 SwiftUI 视图后视图按值���等自动 diff，
 ///   context 改变 → 新 Result → SwiftUI 自动重绘。raw 始终是消息源文本。
 ///
-/// 流水线：raw → 显示用正则（仅助手） → 隐藏标签剥离 → `Result.cleanedText`。
+/// 流水线：raw → 显示用正则（仅助手） → 隐藏标签剥离 → 特殊节点解析（RenderNodeParser）
+/// → `Result.tree`。
 enum RenderEngine {
     struct Context: Equatable, Sendable {
         let isAssistant: Bool
@@ -20,8 +21,12 @@ enum RenderEngine {
     }
 
     struct Result: Equatable, Sendable {
-        let cleanedText: String
+        /// 解析后的渲染树：MessageCard 遍历该数组逐节点渲染。
+        let tree: RenderTree
         let markdownEnabled: Bool
+
+        /// 调试 / 兼容用：把所有 `.text` 节点拼回一段纯文本，便于折叠判断 / RenderInspector 显示。
+        var cleanedText: String { tree.flattenedText }
     }
 
     /// 纯函数：不持有状态，不修改 raw，可重复调用。
@@ -38,8 +43,9 @@ enum RenderEngine {
             enabled: context.hideTagStripEnabled,
             tags: context.hideTags
         )
+        let tree = RenderNodeParser.parse(afterHideTags)
         return Result(
-            cleanedText: afterHideTags,
+            tree: tree,
             markdownEnabled: context.markdownEnabled
         )
     }

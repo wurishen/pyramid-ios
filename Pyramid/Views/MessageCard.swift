@@ -55,7 +55,6 @@ struct MessageCard: View {
             markdownEnabled: preset?.enableMarkdown ?? settings.enableMarkdown
         )
         let result = RenderEngine.render(raw: raw, context: context)
-        let cleaned = result.cleanedText
 
         VStack(alignment: .leading, spacing: 6) {
             headerRow(
@@ -63,7 +62,7 @@ struct MessageCard: View {
                 displayName: displayName,
                 avatarData: avatarData
             )
-            contentCard(isUser: isUser, raw: raw, cleaned: cleaned)
+            contentCard(isUser: isUser, raw: raw, tree: result.tree)
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
         .padding(.horizontal, 12)
@@ -137,9 +136,9 @@ struct MessageCard: View {
     // MARK: - 正文卡片
 
     @ViewBuilder
-    private func contentCard(isUser: Bool, raw: String, cleaned: String) -> some View {
+    private func contentCard(isUser: Bool, raw: String, tree: RenderTree) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            bodyContent(cleaned: cleaned, isUser: isUser)
+            bodyContent(tree: tree, isUser: isUser)
             if let createdAt = message.createdAt, showTimestamp, isUser {
                 Text(createdAt.formatted(date: .omitted, time: .shortened))
                     .font(.caption2)
@@ -159,12 +158,44 @@ struct MessageCard: View {
     }
 
     @ViewBuilder
-    private func bodyContent(cleaned: String, isUser: Bool) -> some View {
-        // 渲染前折叠判断：按 cleaned 长度阈值，>800 默认折叠到 800 + 「…」。
-        let isLong = cleaned.count > Self.collapseThreshold
+    private func bodyContent(tree: RenderTree, isUser: Bool) -> some View {
+        // 渲染前折叠判断：按全部 .text 节点的拼回长度判断，>800 默认折叠。
+        // 折叠只影响 .text 节点；.status 节点不受折叠限制。
+        let flattened = tree.flattenedText
+        let isLong = flattened.count > Self.collapseThreshold
+
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(tree.nodes.enumerated()), id: \.offset) { _, node in
+                renderNode(node, isLong: isLong)
+            }
+        }
+
+        if isLong {
+            Button(expanded ? "收起" : "展开") {
+                withAnimation { expanded.toggle() }
+            }
+            .font(.caption)
+            .foregroundStyle(Color.accentColor)
+        }
+    }
+
+    @ViewBuilder
+    private func renderNode(_ node: RenderNode, isLong: Bool) -> some View {
+        switch node {
+        case let .text(text):
+            textNodeView(text, isLong: isLong)
+        case let .status(hp, affection):
+            // .status 节点不受折叠影响；视觉上本身是一个紧凑面板。
+            StatusView(hp: hp, affection: affection)
+        }
+    }
+
+    @ViewBuilder
+    private func textNodeView(_ text: String, isLong: Bool) -> some View {
+        // 长文折叠时截断 .text 节点；保留所有节点原顺序。
         let visibleText: String = (isLong && !expanded)
-            ? String(cleaned.prefix(Self.collapseThreshold)) + "…"
-            : cleaned
+            ? String(text.prefix(Self.collapseThreshold)) + "…"
+            : text
 
         Group {
             // 三态：预设 nil → 用全局；预设 Bool → 用预设。
@@ -177,14 +208,6 @@ struct MessageCard: View {
             }
         }
         .foregroundStyle(.primary)
-
-        if isLong {
-            Button(expanded ? "收起" : "展开") {
-                withAnimation { expanded.toggle() }
-            }
-            .font(.caption)
-            .foregroundStyle(Color.accentColor)
-        }
     }
 
     @ViewBuilder
@@ -320,4 +343,27 @@ struct MessageCard: View {
         settings: plain,
         displayRegexes: []
     )
+}
+
+#Preview("MessageCard - assistant with status block") {
+    MessageCard(
+        message: ChatMessage(
+            id: UUID(),
+            role: .assistant,
+            content: "你推开酒馆的木门。\n\n<status>\nHP: 80\n好感度: 65\n</status>\n\n老板抬头看了你一眼。",
+            createdAt: nil,
+            isIncluded: true
+        ),
+        floorNumber: 2,
+        isSending: false,
+        compact: false,
+        showTimestamp: false,
+        showAvatar: true,
+        character: nil,
+        userAvatarData: nil,
+        preset: nil,
+        settings: AppSettings(),
+        displayRegexes: []
+    )
+    .padding()
 }

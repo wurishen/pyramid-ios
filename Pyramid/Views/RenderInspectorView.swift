@@ -20,6 +20,7 @@ struct RenderInspectorView: View {
                     statsSection
                     section("原文 (raw)", text: raw, copyable: true)
                     section("处理后 (cleaned)", text: result.cleanedText, copyable: true)
+                    nodesSection
                     regexSection
                     hideTagsSection
                 }
@@ -126,6 +127,55 @@ struct RenderInspectorView: View {
 
     // MARK: - 隐藏标签
 
+    private var nodesSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("RenderNode 树（\(result.tree.nodes.count) 个节点）").font(.caption).foregroundStyle(.secondary)
+            if result.tree.nodes.isEmpty {
+                Text("(空)")
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .background(Color(.systemGray6))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(Array(result.tree.nodes.enumerated()), id: \.offset) { idx, node in
+                        nodeRow(idx: idx, node: node)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func nodeRow(idx: Int, node: RenderNode) -> some View {
+        switch node {
+        case let .text(s):
+            VStack(alignment: .leading, spacing: 2) {
+                Text("[\(idx)] .text (\(s.count) 字符)").font(.caption.weight(.medium))
+                Text(s.isEmpty ? "(空)" : s)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        case let .status(hp, affection):
+            VStack(alignment: .leading, spacing: 2) {
+                Text("[\(idx)] .status").font(.caption.weight(.medium))
+                Text("HP: \(hp) · 好感度: \(affection)")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+    }
+
     private var hideTagsSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("隐藏标签剥离").font(.caption).foregroundStyle(.secondary)
@@ -147,9 +197,24 @@ struct RenderInspectorView: View {
 #Preview("Render Inspector - with regex + hide tags") {
     RenderInspectorView(
         raw: "Hello <System>World</System>{{hello}} **bold**",
-        result: RenderEngine.Result(
-            cleanedText: "Hello World **bold**",
-            markdownEnabled: true
+        result: RenderEngine.render(
+            raw: "Hello <System>World</System>{{hello}} **bold**",
+            context: RenderEngine.Context(
+                isAssistant: true,
+                presetDisplayRegexIds: [UUID()],
+                allDisplayRegexes: [
+                    DisplayRegex(
+                        id: UUID(),
+                        name: "World → Pyramid",
+                        pattern: "World",
+                        replacement: "Pyramid",
+                        enabled: true
+                    )
+                ],
+                hideTagStripEnabled: true,
+                hideTags: ["System"],
+                markdownEnabled: true
+            )
         ),
         context: RenderEngine.Context(
             isAssistant: true,
@@ -173,12 +238,44 @@ struct RenderInspectorView: View {
 #Preview("Render Inspector - user message (no regex)") {
     RenderInspectorView(
         raw: "用户消息原文",
-        result: RenderEngine.Result(
-            cleanedText: "用户消息原文",
-            markdownEnabled: true
+        result: RenderEngine.render(
+            raw: "用户消息原文",
+            context: RenderEngine.Context(
+                isAssistant: false,
+                presetDisplayRegexIds: [],
+                allDisplayRegexes: [],
+                hideTagStripEnabled: false,
+                hideTags: [],
+                markdownEnabled: true
+            )
         ),
         context: RenderEngine.Context(
             isAssistant: false,
+            presetDisplayRegexIds: [],
+            allDisplayRegexes: [],
+            hideTagStripEnabled: false,
+            hideTags: [],
+            markdownEnabled: true
+        )
+    )
+}
+
+#Preview("Render Inspector - with status block") {
+    RenderInspectorView(
+        raw: "你推开酒馆的木门。\n\n<status>\nHP: 80\n好感度: 65\n</status>\n\n老板抬头看了你一眼。",
+        result: RenderEngine.render(
+            raw: "你推开酒馆的木门。\n\n<status>\nHP: 80\n好感度: 65\n</status>\n\n老板抬头看了你一眼。",
+            context: RenderEngine.Context(
+                isAssistant: true,
+                presetDisplayRegexIds: [],
+                allDisplayRegexes: [],
+                hideTagStripEnabled: false,
+                hideTags: [],
+                markdownEnabled: true
+            )
+        ),
+        context: RenderEngine.Context(
+            isAssistant: true,
             presetDisplayRegexIds: [],
             allDisplayRegexes: [],
             hideTagStripEnabled: false,

@@ -29,6 +29,7 @@ let package = Package(
                 "SillyTavernRegexScriptTests.swift",
                 "MessageRendererChainTests.swift",
                 "RenderEngineTests.swift",
+                "RenderNodeParserTests.swift",
             ]
         ),
     ]
