@@ -211,13 +211,17 @@ enum MarkdownParser {
 /// 清洗后的 String 再交给本视图渲染（不动 `message.content`）。
 struct MarkdownTextView: View {
     let text: String
+    /// 客户端界面整体缩放系数（来自 AppSettings.uiScale.factor）。
+    /// 默认为 1.0；上游（MessageCard）按 `settings.uiScale.factor` 传入。
+    /// 作用于：内层 VStack 间距、块级 padding、标题/正文/行内字体。
+    var uiScale: CGFloat = 1.0
 
     private var blocks: [MarkdownBlock] {
         MarkdownParser.blocks(from: text)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 10 * uiScale) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                 renderBlock(block)
             }
@@ -237,83 +241,91 @@ struct MarkdownTextView: View {
                 .fontWeight(level <= 2 ? .bold : .semibold)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
-                .padding(.top, level <= 2 ? 4 : 2)
+                .padding(.top, (level <= 2 ? 4 : 2) * uiScale)
         case .paragraph(let text):
             Text(parseInline(text))
+                .font(.system(size: 17 * uiScale))
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
         case .codeBlock(let code):
             ScrollView(.horizontal, showsIndicators: true) {
                 Text(code)
-                    .font(.system(.body, design: .monospaced))
+                    .font(.system(size: 17 * uiScale, design: .monospaced))
                     .textSelection(.enabled)
-                    .padding(.vertical, 2)
+                    .padding(.vertical, 2 * uiScale)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(10)
+            .padding(10 * uiScale)
             .background(Color(.systemGray6))
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: 8 * uiScale)
                     .stroke(Color.secondary.opacity(0.25), lineWidth: 0.5)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(RoundedRectangle(cornerRadius: 8 * uiScale))
         case .blockquote(let text):
             HStack(alignment: .top, spacing: 0) {
                 Rectangle()
                     .fill(Color.accentColor.opacity(0.55))
-                    .frame(width: 3)
+                    .frame(width: 3 * uiScale)
                 Text(parseInline(text))
+                    .font(.system(size: 17 * uiScale))
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
                     .foregroundStyle(.secondary)
-                    .padding(.leading, 10)
-                    .padding(.vertical, 2)
+                    .padding(.leading, 10 * uiScale)
+                    .padding(.vertical, 2 * uiScale)
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, 2 * uiScale)
         case .unorderedList(let items):
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 4 * uiScale) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8 * uiScale) {
                         Text("•")
                             .foregroundStyle(.secondary)
-                            .font(.body)
+                            .font(.system(size: 17 * uiScale))
                         Text(parseInline(item))
+                            .font(.system(size: 17 * uiScale))
                             .fixedSize(horizontal: false, vertical: true)
                             .textSelection(.enabled)
                     }
                 }
             }
-            .padding(.leading, 4)
+            .padding(.leading, 4 * uiScale)
         case .orderedList(let items):
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 4 * uiScale) {
                 ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8 * uiScale) {
                         Text("\(idx + 1).")
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
-                            .font(.body)
+                            .font(.system(size: 17 * uiScale))
                         Text(parseInline(item))
+                            .font(.system(size: 17 * uiScale))
                             .fixedSize(horizontal: false, vertical: true)
                             .textSelection(.enabled)
                     }
                 }
             }
-            .padding(.leading, 4)
+            .padding(.leading, 4 * uiScale)
         case .thematicBreak:
             Divider()
-                .padding(.vertical, 6)
+                .padding(.vertical, 6 * uiScale)
         }
     }
 
     private func headingFont(level: Int) -> Font {
+        // 显式按 uiScale 缩放；改用 .system(size:) 而非 .title 等语义样式，
+        // 因为后者走 Dynamic Type，而我们这里要叠加客户端 uiScale。
+        let size: CGFloat
         switch level {
-        case 1: return .title
-        case 2: return .title2
-        case 3: return .title3
-        case 4: return .headline
-        case 5: return .subheadline
-        default: return .body
+        case 1: size = 28
+        case 2: size = 22
+        case 3: size = 20
+        case 4: size = 17
+        case 5: size = 15
+        default: size = 17
         }
+        return .system(size: size * uiScale, weight: .semibold)
     }
 
     /// 行内语法 token 解析器。把 `**bold**` / `*italic*` / `` `code` `` / `~~strike~~`
@@ -332,6 +344,8 @@ struct MarkdownTextView: View {
     private func parseInline(_ string: String) -> AttributedString {
         var result = AttributedString()
         var idx = string.startIndex
+        // 行内语法 token 解析后挂上显式 `.font`（已按 uiScale 缩放）。
+        let bodySize: CGFloat = 17 * uiScale
 
         while idx < string.endIndex {
             let remaining = Substring(string[idx...])
@@ -344,7 +358,7 @@ struct MarkdownTextView: View {
                    closeRange.lowerBound > afterOpen {
                     let content = String(remaining[afterOpen..<closeRange.lowerBound])
                     var seg = AttributedString(content)
-                    seg.font = .body.weight(.bold)
+                    seg.font = .system(size: bodySize, weight: .bold)
                     seg.inlinePresentationIntent = .stronglyEmphasized
                     result.append(seg)
                     idx = advance(idx: idx, by: remaining.distance(from: startOffset, to: closeRange.upperBound), in: string)
@@ -374,7 +388,7 @@ struct MarkdownTextView: View {
                    closeRange.lowerBound > afterOpen {
                     let content = String(remaining[afterOpen..<closeRange.lowerBound])
                     var seg = AttributedString(content)
-                    seg.font = .system(.body, design: .monospaced)
+                    seg.font = .system(size: bodySize, design: .monospaced)
                     seg.backgroundColor = Color.secondary.opacity(0.18)
                     seg.inlinePresentationIntent = .code
                     result.append(seg)
@@ -404,7 +418,7 @@ struct MarkdownTextView: View {
                 if let close = foundClose {
                     let content = String(remaining[afterOpen..<close])
                     var seg = AttributedString(content)
-                    seg.font = .body.italic()
+                    seg.font = .system(size: bodySize).italic()
                     seg.inlinePresentationIntent = .emphasized
                     result.append(seg)
                     idx = advance(idx: idx, by: remaining.distance(from: startOffset, to: remaining.index(after: close)), in: string)

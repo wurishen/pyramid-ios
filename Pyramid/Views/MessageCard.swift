@@ -44,6 +44,9 @@ struct MessageCard: View {
         }()
         let avatarData: Data? = isUser ? userAvatarData : character?.avatarData
         let raw = liveContent ?? message.content
+        // 界面整体缩放档位（来自 AppSettings.uiScale.factor）。
+        // 与「紧凑模式」叠加：先按 scale 调基准，再叠加紧凑模式的间距减项。
+        let scale = settings.uiScale.factor
         // 通过 RenderEngine 加工：raw 永不被修改，每次都从 raw 重新计算。
         // 同一 (raw, context) → 相同 Result；context 改变 → SwiftUI 自动重绘。
         let context = RenderEngine.Context(
@@ -56,16 +59,17 @@ struct MessageCard: View {
         )
         let result = RenderEngine.render(raw: raw, context: context)
 
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 6 * scale) {
             headerRow(
                 isUser: isUser,
                 displayName: displayName,
-                avatarData: avatarData
+                avatarData: avatarData,
+                scale: scale
             )
-            contentCard(isUser: isUser, raw: raw, tree: result.tree)
+            contentCard(isUser: isUser, raw: raw, tree: result.tree, scale: scale)
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 12 * scale)
         .contentShape(Rectangle())
         .onLongPressGesture(minimumDuration: 0.5) {
             showRenderInspector = true
@@ -78,56 +82,56 @@ struct MessageCard: View {
     // MARK: - 头部
 
     @ViewBuilder
-    private func headerRow(isUser: Bool, displayName: String, avatarData: Data?) -> some View {
-        HStack(alignment: .center, spacing: 8) {
+    private func headerRow(isUser: Bool, displayName: String, avatarData: Data?, scale: CGFloat) -> some View {
+        HStack(alignment: .center, spacing: 8 * scale) {
             if isUser {
                 // 用户：时间靠左、楼层靠左、name 靠右；头像在最右
                 Spacer(minLength: 0)
-                metaTrailing(isUser: isUser)
+                metaTrailing(isUser: isUser, scale: scale)
                 Text(displayName)
-                    .font(.caption.weight(.medium))
+                    .font(.system(size: 12 * scale, weight: .medium))
                     .foregroundStyle(Color.accentColor)
                 if showAvatar {
-                    AvatarView(imageData: avatarData, name: displayName, size: 28)
+                    AvatarView(imageData: avatarData, name: displayName, size: 28 * scale)
                 } else {
-                    Spacer().frame(width: 28)
+                    Spacer().frame(width: 28 * scale)
                 }
             } else {
                 // 助手：头像在最左、name 紧随其后，时间 / 楼层靠右
                 if showAvatar {
-                    AvatarView(imageData: avatarData, name: displayName, size: 28)
+                    AvatarView(imageData: avatarData, name: displayName, size: 28 * scale)
                 } else {
-                    Spacer().frame(width: 28)
+                    Spacer().frame(width: 28 * scale)
                 }
                 Text(displayName)
-                    .font(.caption.weight(.medium))
+                    .font(.system(size: 12 * scale, weight: .medium))
                     .foregroundStyle(.primary)
                 Spacer(minLength: 0)
-                metaTrailing(isUser: isUser)
+                metaTrailing(isUser: isUser, scale: scale)
             }
         }
     }
 
     @ViewBuilder
-    private func metaTrailing(isUser: Bool) -> some View {
-        HStack(spacing: 6) {
+    private func metaTrailing(isUser: Bool, scale: CGFloat) -> some View {
+        HStack(spacing: 6 * scale) {
             if !message.isIncluded {
                 Text("已排除")
-                    .font(.caption2)
+                    .font(.system(size: 11 * scale))
                     .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
+                    .padding(.horizontal, 6 * scale)
+                    .padding(.vertical, 2 * scale)
                     .background(Color(.systemGray5), in: Capsule())
                     .overlay(
                         Capsule().stroke(Color(.systemGray3), lineWidth: 0.5)
                     )
             }
             Text("#\(floorNumber)")
-                .font(.caption2.monospacedDigit())
+                .font(.system(size: 11 * scale, design: .monospaced))
                 .foregroundStyle(.tertiary)
             if showTimestamp, let createdAt = message.createdAt {
                 Text(createdAt.formatted(date: .omitted, time: .shortened))
-                    .font(.caption2)
+                    .font(.system(size: 11 * scale))
                     .foregroundStyle(.tertiary)
             }
         }
@@ -136,37 +140,37 @@ struct MessageCard: View {
     // MARK: - 正文卡片
 
     @ViewBuilder
-    private func contentCard(isUser: Bool, raw: String, tree: RenderTree) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            bodyContent(tree: tree, isUser: isUser)
+    private func contentCard(isUser: Bool, raw: String, tree: RenderTree, scale: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 6 * scale) {
+            bodyContent(tree: tree, isUser: isUser, scale: scale)
             if let createdAt = message.createdAt, showTimestamp, isUser {
                 Text(createdAt.formatted(date: .omitted, time: .shortened))
-                    .font(.caption2)
+                    .font(.system(size: 11 * scale))
                     .foregroundStyle(.tertiary)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, compact ? 6 : 10)
+        .padding(.horizontal, 12 * scale)
+        .padding(.vertical, (compact ? 6 : 10) * scale)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(isUser ? Color.accentColor.opacity(0.12) : Color(.systemGray6))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 12 * scale)
                 .stroke(isUser ? Color.accentColor.opacity(0.35) : Color(.systemGray4), lineWidth: 0.5)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .clipShape(RoundedRectangle(cornerRadius: 12 * scale))
         .contextMenu { contextMenuButtons(isUser: isUser) }
     }
 
     @ViewBuilder
-    private func bodyContent(tree: RenderTree, isUser: Bool) -> some View {
+    private func bodyContent(tree: RenderTree, isUser: Bool, scale: CGFloat) -> some View {
         // 渲染前折叠判断：按全部 .text 节点的拼回长度判断，>800 默认折叠。
         // 折叠只影响 .text 节点；.status 节点不受折叠限制。
         let flattened = tree.flattenedText
         let isLong = flattened.count > Self.collapseThreshold
 
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 8 * scale) {
             ForEach(Array(tree.nodes.enumerated()), id: \.offset) { _, node in
-                renderNode(node, isLong: isLong)
+                renderNode(node, isLong: isLong, scale: scale)
             }
         }
 
@@ -174,24 +178,26 @@ struct MessageCard: View {
             Button(expanded ? "收起" : "展开") {
                 withAnimation { expanded.toggle() }
             }
-            .font(.caption)
+            .font(.system(size: 12 * scale))
             .foregroundStyle(Color.accentColor)
         }
     }
 
     @ViewBuilder
-    private func renderNode(_ node: RenderNode, isLong: Bool) -> some View {
+    private func renderNode(_ node: RenderNode, isLong: Bool, scale: CGFloat) -> some View {
         switch node {
         case let .text(text):
-            textNodeView(text, isLong: isLong)
+            textNodeView(text, isLong: isLong, scale: scale)
         case let .status(hp, affection):
             // .status 节点不受折叠影响；视觉上本身是一个紧凑面板。
+            // 单独 .scaleEffect 而不是改内部字面量，让面板整体放大。
             StatusView(hp: hp, affection: affection)
+                .scaleEffect(scale, anchor: .topLeading)
         }
     }
 
     @ViewBuilder
-    private func textNodeView(_ text: String, isLong: Bool) -> some View {
+    private func textNodeView(_ text: String, isLong: Bool, scale: CGFloat) -> some View {
         // 长文折叠时截断 .text 节点；保留所有节点原顺序。
         let visibleText: String = (isLong && !expanded)
             ? String(text.prefix(Self.collapseThreshold)) + "…"
@@ -200,11 +206,12 @@ struct MessageCard: View {
         Group {
             // 三态：预设 nil → 用全局；预设 Bool → 用预设。
             if markdownEnabled(settings: settings, preset: preset) {
-                MarkdownTextView(text: visibleText)
+                MarkdownTextView(text: visibleText, uiScale: scale)
             } else {
                 Text(visibleText)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
+                    .font(.system(size: 17 * scale))
             }
         }
         .foregroundStyle(.primary)

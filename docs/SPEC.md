@@ -1,7 +1,7 @@
 # Pyramid 产品规格文档
 
 > 本文档为 iOS / Android 双端共用的产品规格，描述当前已实现功能与计划功能（TODO）。
-> 最后更新：2026-08-19（v0.7.1 新增 RenderNode 渲染管线 + 原生 StatusView + Render Inspector 调试覆盖层）
+> 最后更新：2026-08-19（v0.7.1 新增 RenderNode 渲染管线 + 原生 StatusView + Render Inspector 调试覆盖层 + 客户端界面缩放 uiScale）
 >
 > **当前版本**：v0.7.1（iOS 端）
 
@@ -362,6 +362,56 @@ ForEach(tree.nodes) { node in
 - 格式：`HH:mm`（当天）/ `MM-dd HH:mm`（非当天）
 - 由 `showTimestamps` 设置控制
 
+### 6.3 客户端界面缩放（uiScale）
+
+**位置**：设置 → **界面** 子页（与「显示头像」「显示时间戳」「紧凑模式」同组，集中放客户端展示类选项）。
+
+**字段**：`AppSettings.uiScale: UIScale`，三档：
+
+| 档位 | `factor` | 显示名 |
+|------|---------|--------|
+| `.small` | 0.85 | 小 |
+| `.medium`（默认） | 1.0 | 中 |
+| `.large` | 1.25 | 大 |
+
+**作用对象**（机械乘 `factor`）：
+
+- **正文字号** — `MarkdownTextView` 内段落、行内（bold / italic / code / link）、标题（heading 1-5）、列表项正文、代码块的等宽字体；统一以「17 × uiScale」为基准，标题按层级字号（28/22/20/17/15）再乘 uiScale
+- **辅助字号** — `MessageCard` 头部 `displayName`（caption/12pt）、楼层号 `#N`、时间戳、「已排除」胶囊（caption2/11pt）
+- **头像尺寸** — `MessageCard` 内 `AvatarView(size:)`（默认 28pt → 28 × scale）
+- **卡片内边距** — 内容卡 `.padding(.horizontal, 12)`、`.padding(.vertical, compact ? 6 : 10)`、外层 `.padding(.horizontal, 12)`、圆角 `cornerRadius = 12`
+- **列表间距** — `ChatView.messageList` 的 `LazyVStack(spacing:)`（紧凑 8 / 普通 14 → × scale）
+- **块级 padding** — MarkdownTextView 内 VStack 间距（10 → × scale）、引用块左 padding（10 → × scale）、代码块 padding（10 → × scale）、列表缩进（4 → × scale）、列表项 HStack 间距（8 → × scale）、分割线上下 padding（6 → × scale）
+- **原生面板** — `StatusView` 通过 `MessageCard` 调用处的 `.scaleEffect(scale, anchor: .topLeading)` 整体缩放（不修改内部字面量，避免污染其它调用点）
+
+**与「紧凑模式」的关系**（叠加，非互斥）：
+
+- 缩放调基准：`spacing = base × uiScale.factor`
+- 紧凑再略减间距：`(compactMode ? 8 : 14) × uiScale.factor`
+- 字号：紧凑模式**不**影响字号，只动间距与 padding；缩放档位独立生效
+
+**约束**：
+
+1. 只作用于客户端展示层，不修改 `message.content`，不影响复制 / 编辑 / 重新生成 / API 发送
+2. 切换档位立即生效（`@AppStorage` → `@ObservedObject` → SwiftUI 自动重绘整棵子树）
+3. 不修改 MarkdownTextView / StatusView 内部字面量之外的设计常量（如颜色、阴影）；只调比例
+
+### 6.4 设置分组归属
+
+设置页的子页划分遵循「同类相聚」原则，**客户端展示相关项集中在「界面」组，渲染管线相关项集中在「渲染」组**：
+
+| 子页 | 归属 | 项 |
+|------|------|----|
+| **界面** | 客户端展示（视觉偏好） | `uiScale` / `showAvatars` / `showTimestamps` / `compactMode` |
+| **渲染** | 渲染管线（内容呈现规则） | `enableMarkdown` / `hideTagStripEnabled` / `hideTagsRaw` / DisplayRegex |
+
+划分依据：
+
+- **界面**：只影响「怎么展示」——卡片多大、间距多宽、头像出不出现、时间戳显不显示；与内容无关
+- **渲染**：影响「内容怎么变成视图」——Markdown 解不解析、隐藏标签剥不剥离、显示用正则是哪几条；规则可由 Preset 覆盖
+
+两者独立，但都对「卡片正文的视觉」有影响；规则互不重叠，没有同一项需要二选一放在哪边的问题。
+
 ---
 
 ## 7. 预设（Preset）
@@ -708,6 +758,7 @@ iOS 和 Android 双端应实现**相同的核心功能集**，包括：
 | `compactMode` | Bool | false | 紧凑模式 |
 | `showTimestamps` | Bool | true | 显示时间戳 |
 | `showAvatars` | Bool | true | 聊天页显示头像（角色栏 + 用户消息） |
+| `uiScale` | enum `UIScale` | `.medium` (1.0) | 客户端界面整体缩放档位（小=0.85 / 中=1.0 / 大=1.25），作用于消息卡片正文字号、楼层/时间辅助字号、头像尺寸、卡片内边距与列表间距 |
 | `userName` | String | `""` | 用户昵称（用户头像占位首字母） |
 | `userAvatarData` | Data | 空 | 用户头像数据（圆形显示，空 = 显示首字母） |
 | `contextTrimMode` | enum | `.byMessages` | 上下文裁剪策略：`.off` / `.byMessages` / `.byCharacters` |

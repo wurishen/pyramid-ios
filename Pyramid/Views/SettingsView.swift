@@ -398,9 +398,16 @@ struct InterfaceSettingsView: View {
     var body: some View {
         Form {
             Section {
+                Picker("界面缩放", selection: $settings.uiScale) {
+                    ForEach(UIScale.allCases) { scale in
+                        Text(scale.displayName).tag(scale)
+                    }
+                }
                 Toggle("显示头像", isOn: $settings.showAvatars)
                 Toggle("显示消息时间戳", isOn: $settings.showTimestamps)
                 Toggle("紧凑模式", isOn: $settings.compactMode)
+            } footer: {
+                Text("缩放作用于消息卡片正文字号、楼层/时间辅助字号、头像尺寸、卡片内边距与列表间距。与「紧凑模式」叠加：先按缩放调基准，再叠加紧凑模式的间距减项。")
             }
         }
         .navigationTitle("界面")

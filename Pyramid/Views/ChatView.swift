@@ -281,7 +281,8 @@ struct ChatView: View {
     private var messageList: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: settings.compactMode ? 8 : 14) {
+                // 间距 = (紧凑?8:14) * uiScale —— 先按 uiScale 调基准，再叠加紧凑模式减项
+                LazyVStack(spacing: (settings.compactMode ? 8 : 14) * settings.uiScale.factor) {
                     if viewModel.messages.isEmpty {
                         Text("还没有消息，打个招呼开始对话吧")
                             .foregroundStyle(.secondary)
