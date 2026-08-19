@@ -95,24 +95,61 @@ enum ImportSupport {
         return try? JSONDecoder().decode([SillyTavernRegexScript].self, from: data)
     }
 
-    /// P1 V3 透传写入：extensions 整块（剥掉 regex_scripts 避免与 typed 字段重复）、
-    /// tavern_helper 便捷指针、character_book 整块。
+    /// P1 V3 透传 + P2 typed lift：
+    /// - extensions 整块（剥掉已 typed 的子键避免与 typed 字段重复）→ extensionsRaw
+    /// - data.extensions.tavern_helper → tavernHelperRaw 便捷指针
+    /// - data.character_book → characterBookRaw 整块
+    /// - data.extensions.talkativeness → character.talkativeness
+    /// - data.extensions.fav → character.isFavorite
+    /// - data.extensions.depth_prompt → character.depthPrompt（失败保留 raw 不动）
     /// 不抛错；解析失败一律留 nil，绝不影响已有字段。
     /// **类型守门**：`character_book` / `extensions` 只接受 dict 类型 —— 数组 / 字符串
     /// 等畸形输入不写入 raw，避免下游"以为有数据"误用。
     private static func applyRawPassthrough(root: [String: Any], into character: inout Character) {
-        // 1) extensionsRaw = data.extensions 减去 regex_scripts；空字典算"无扩展"
+        // 1) extensions 子结构：先 typed lift 再写 raw
         if var extensions = root["extensions"] as? [String: Any] {
+            // 1a) tavernHelperRaw = data.extensions.tavern_helper 便捷指针（任何 JSONValue 都收）
+            character.tavernHelperRaw = JSONValue.from(any: extensions["tavern_helper"])
+
+            // 1b) talkativeness typed lift；NSNumber / Double 都收；clamp 0-1。
+            if let v = extensions["talkativeness"] {
+                let d: Double?
+                if let n = v as? NSNumber { d = n.doubleValue }
+                else if let dd = v as? Double { d = dd }
+                else { d = nil }
+                if let d {
+                    character.talkativeness = min(max(d, 0.0), 1.0)
+                }
+                extensions.removeValue(forKey: "talkativeness")
+            }
+
+            // 1c) fav typed lift；只接 Bool。
+            if let fav = extensions["fav"] as? Bool {
+                character.isFavorite = fav
+                extensions.removeValue(forKey: "fav")
+            }
+
+            // 1d) depth_prompt typed lift；解析失败保留 raw 不动（避免静默丢字段）。
+            if let dpJSON = extensions["depth_prompt"].flatMap({ JSONValue.from(any: $0) }) {
+                if let dp = CharacterDepthPrompt(json: dpJSON) {
+                    character.depthPrompt = dp
+                    extensions.removeValue(forKey: "depth_prompt")
+                }
+                // 解析失败 → 保留在 extensionsRaw 里，下游可手动消费或导出
+            }
+
+            // 1e) regex_scripts 既有剥离（避免与 typed extensionsRegexScripts 字段重复��
             extensions.removeValue(forKey: "regex_scripts")
+
+            // 1f) 剩余 extensions 写 extensionsRaw；空字典算"无扩展"
             if extensions.isEmpty {
                 character.extensionsRaw = nil
             } else {
                 character.extensionsRaw = JSONValue.from(any: extensions)
             }
-            // 2) tavernHelperRaw = data.extensions.tavern_helper 便捷指针（任何 JSONValue 类型都收）
-            character.tavernHelperRaw = JSONValue.from(any: extensions["tavern_helper"])
         }
-        // 3) characterBookRaw = data.character_book 整块；仅接受 dict
+
+        // 2) characterBookRaw = data.character_book 整块；仅接受 dict
         if let book = root["character_book"] as? [String: Any] {
             character.characterBookRaw = JSONValue.from(any: book)
         }

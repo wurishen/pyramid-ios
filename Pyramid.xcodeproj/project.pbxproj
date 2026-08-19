@@ -43,6 +43,7 @@
 		AB000000000000000000020F /* NewSessionWithCharacterSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000214 /* NewSessionWithCharacterSheet.swift */; };
 		AB0000000000000000000215 /* MessageRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000021F /* MessageRenderer.swift */; };
 		AB0000000000000000000301 /* JSONValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000302 /* JSONValue.swift */; };
+		AB0000000000000000000303 /* CharacterDepthPrompt.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000304 /* CharacterDepthPrompt.swift */; };
 		AB0000000000000000000216 /* DisplayRegex.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000220 /* DisplayRegex.swift */; };
 		AB0000000000000000000217 /* MacroExpander.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000221 /* MacroExpander.swift */; };
 		AB0000000000000000000282 /* SillyTavernRegexScript.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000283 /* SillyTavernRegexScript.swift */; };
@@ -98,6 +99,7 @@
 		AB000000000000000000021F /* MessageRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageRenderer.swift; sourceTree = "<group>"; };
 		AB0000000000000000000220 /* DisplayRegex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayRegex.swift; sourceTree = "<group>"; };
 		AB0000000000000000000302 /* JSONValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONValue.swift; sourceTree = "<group>"; };
+		AB0000000000000000000304 /* CharacterDepthPrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharacterDepthPrompt.swift; sourceTree = "<group>"; };
 		AB0000000000000000000283 /* SillyTavernRegexScript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SillyTavernRegexScript.swift; sourceTree = "<group>"; };
 		AB0000000000000000000291 /* MessageRendererCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageRendererCore.swift; sourceTree = "<group>"; };
 		AB0000000000000000000293 /* RenderEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderEngine.swift; sourceTree = "<group>"; };
@@ -166,6 +168,7 @@
 				AB0000000000000000000220 /* DisplayRegex.swift */,
 				AB0000000000000000000283 /* SillyTavernRegexScript.swift */,
 				AB0000000000000000000302 /* JSONValue.swift */,
+				AB0000000000000000000304 /* CharacterDepthPrompt.swift */,
 				AB0000000000000000000291 /* MessageRendererCore.swift */,
 				AB0000000000000000000293 /* RenderEngine.swift */,
 				AB000000000000000000029B /* RenderNode.swift */,
@@ -350,6 +353,7 @@
 				AB0000000000000000000216 /* DisplayRegex.swift in Sources */,
 				AB0000000000000000000282 /* SillyTavernRegexScript.swift in Sources */,
 				AB0000000000000000000301 /* JSONValue.swift in Sources */,
+				AB0000000000000000000303 /* CharacterDepthPrompt.swift in Sources */,
 				AB0000000000000000000290 /* MessageRendererCore.swift in Sources */,
 				AB0000000000000000000292 /* RenderEngine.swift in Sources */,
 				AB0000000000000000000217 /* MacroExpander.swift in Sources */,

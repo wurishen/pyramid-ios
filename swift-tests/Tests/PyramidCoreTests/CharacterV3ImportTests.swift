@@ -57,13 +57,15 @@ final class CharacterV3ImportTests: XCTestCase {
         XCTAssertEqual(character.name, "V2 Char")
         XCTAssertEqual(character.description, "V2 desc")
         XCTAssertNil(character.characterBookRaw)
-        // extensionsRaw 必须保留 talkativeness/fav/world
+        // Phase 2 typed lift：talkativeness / fav → typed；world（非白名单）保留在 extensionsRaw
+        XCTAssertEqual(character.talkativeness, 0.7)
+        XCTAssertEqual(character.isFavorite, false)
         guard case .object(let ext) = character.extensionsRaw else {
             return XCTFail("extensionsRaw 应为 object，实际：\(String(describing: character.extensionsRaw))")
         }
-        XCTAssertNotNil(ext["talkativeness"], "V2 extensions 子键 talkativeness 必须保留")
-        XCTAssertNotNil(ext["fav"], "V2 extensions 子键 fav 必须保留")
-        XCTAssertNotNil(ext["world"], "V2 extensions 子键 world 必须保留")
+        XCTAssertNotNil(ext["world"], "V2 extensions 子键 world（非 lifted）必须保留")
+        XCTAssertNil(ext["talkativeness"], "lifted 键不应重复存于 extensionsRaw")
+        XCTAssertNil(ext["fav"], "lifted 键不应重复存于 extensionsRaw")
     }
 
     // MARK: - V3：核心场景
@@ -93,8 +95,8 @@ final class CharacterV3ImportTests: XCTestCase {
         XCTAssertNotNil(book["entries"], "character_book.entries 必须保留")
     }
 
-    /// V3：`data.extensions` 整块保留（除 regex_scripts）到 `extensionsRaw`。
-    /// 验证 talkativeness / fav / world / depth_prompt 等 V3 引入的子键全部存在。
+    /// V3：`data.extensions` 整块保留到 `extensionsRaw`（除已 typed lift / regex_scripts）。
+    /// Phase 2：talkativeness / fav / depth_prompt → typed；world（非白名单）保留 raw。
     func testV3ExtensionsPreservedExceptRegexScripts() throws {
         let json: [String: Any] = [
             "spec": "chara_card_v3",
@@ -118,14 +120,22 @@ final class CharacterV3ImportTests: XCTestCase {
         let character = ImportSupport.parseSillyTavernCard(json)
         // regex_scripts 走 typed
         XCTAssertEqual(character.extensionsRegexScripts.count, 1)
-        // extensionsRaw 必须保留其它子键；regex_scripts 必须从 extensionsRaw 中剥离
+        // Phase 2 typed lift：3 个 lifted 子键 → typed 字段
+        XCTAssertEqual(character.talkativeness, 0.8)
+        XCTAssertEqual(character.isFavorite, true)
+        XCTAssertNotNil(character.depthPrompt, "depth_prompt 应被 lift 到 typed")
+        XCTAssertEqual(character.depthPrompt?.role, .system)
+        XCTAssertEqual(character.depthPrompt?.depth, 4)
+        XCTAssertEqual(character.depthPrompt?.content, "你是一个温柔的助手")
+        XCTAssertEqual(character.depthPrompt?.position, .inChat)
+        // extensionsRaw 保留未 lifted 键；lifted / regex_scripts 必须剥离
         guard case .object(let ext) = character.extensionsRaw else {
             return XCTFail("extensionsRaw 应为 object")
         }
-        XCTAssertNotNil(ext["talkativeness"])
-        XCTAssertNotNil(ext["fav"])
         XCTAssertNotNil(ext["world"])
-        XCTAssertNotNil(ext["depth_prompt"])
+        XCTAssertNil(ext["talkativeness"], "lifted 键不应重复存于 extensionsRaw")
+        XCTAssertNil(ext["fav"], "lifted 键不应重复存于 extensionsRaw")
+        XCTAssertNil(ext["depth_prompt"], "lifted 键不应重复存于 extensionsRaw")
         XCTAssertNil(ext["regex_scripts"], "regex_scripts 应被剥离到 typed 字段，不应重复存于 extensionsRaw")
     }
 
@@ -254,8 +264,8 @@ final class CharacterV3ImportTests: XCTestCase {
 
     // MARK: - Round-trip：导入 → 编码 → 解码 → 数据完整
 
-    /// V3 角色卡：导入 → JSONEncoder → JSONDecoder → 全部 raw 字段值完整保留。
-    /// 这是 P1 数据保真层的核心保证：持久化路径（UserDefaults / Backup）必须不丢 V3 扩展。
+    /// V3 角色卡：导入 → JSONEncoder → JSONDecoder → 全部 raw + typed 字段值完整保留。
+    /// 这是 P1 数据保真层 + P2 typed lift 的核心保证：持久化路径（UserDefaults / Backup）必须不丢任何字段。
     func testRoundTripPreservesUnknownFields() throws {
         let original: [String: Any] = [
             "spec": "chara_card_v3",
@@ -264,6 +274,8 @@ final class CharacterV3ImportTests: XCTestCase {
                 "description": "keep",
                 "extensions": [
                     "talkativeness": 0.5,
+                    "fav": true,
+                    "depth_prompt": ["role": "user", "depth": 2, "content": "depth!"],
                     "third_party_extension": ["nested": ["deep": ["value": 42]]]
                 ],
                 "character_book": [
@@ -279,14 +291,21 @@ final class CharacterV3ImportTests: XCTestCase {
         let decoded = try JSONDecoder().decode(Character.self, from: data)
         XCTAssertEqual(decoded.name, "Round-trip V3")
         XCTAssertEqual(decoded.description, "keep")
-        XCTAssertNotNil(decoded.extensionsRaw, "extensionsRaw 必须 round-trip 回来")
+        // raw 字段 round-trip
         XCTAssertNotNil(decoded.characterBookRaw, "characterBookRaw 必须 round-trip 回来")
-        // 语义等值：再 encode extensionsRaw 一次，结果应与原始 extensions JSON 近似
+        // typed lift 字段 round-trip
+        XCTAssertEqual(decoded.talkativeness, 0.5)
+        XCTAssertEqual(decoded.isFavorite, true)
+        XCTAssertEqual(decoded.depthPrompt?.role, .user)
+        XCTAssertEqual(decoded.depthPrompt?.depth, 2)
+        XCTAssertEqual(decoded.depthPrompt?.content, "depth!")
+        // 未 lifted 键仍保留在 extensionsRaw
         guard case .object(let ext) = decoded.extensionsRaw else {
             return XCTFail("extensionsRaw 解码后应为 object")
         }
-        XCTAssertNotNil(ext["talkativeness"])
         XCTAssertNotNil(ext["third_party_extension"])
+        XCTAssertNil(ext["talkativeness"], "lifted 键不应在 extensionsRaw")
+        XCTAssertNil(ext["depth_prompt"], "lifted 键不应在 extensionsRaw")
     }
 
     /// 旧 Pyramid 角色卡 JSON（无 raw 字段）能正常 decode，raw 全部 nil。
@@ -337,17 +356,15 @@ final class CharacterV3ImportTests: XCTestCase {
             ]
         ]
         let character = ImportSupport.parseSillyTavernCard(json)
-        // typed 字段
+        // typed 字段：regex_scripts + Phase 2 lifted talkativeness
         XCTAssertEqual(character.extensionsRegexScripts.count, 2)
         XCTAssertEqual(character.extensionsRegexScripts[0].regex, "World")
         XCTAssertEqual(character.extensionsRegexScripts[1].regex, "Hello")
         XCTAssertEqual(character.extensionsRegexScripts[1].enabled, false)
-        // regex_scripts 不能同时出现在 extensionsRaw 里
-        guard case .object(let ext) = character.extensionsRaw else {
-            return XCTFail("extensionsRaw 应为 object，实际：\(String(describing: character.extensionsRaw))")
-        }
-        XCTAssertNotNil(ext["talkativeness"], "其它 extensions 子键必须保留")
-        XCTAssertNil(ext["regex_scripts"], "regex_scripts 必须从 extensionsRaw 剥离以避免与 typed 字段重复")
+        XCTAssertEqual(character.talkativeness, 0.7)
+        // extensionsRaw 现在 nil：所有子键都被剥离（regex_scripts → typed，talkativeness → typed）
+        XCTAssertNil(character.extensionsRaw,
+                     "所有 extensions 子键都被 lift/strip 后 extensionsRaw 应为 nil")
         // 走 SillyTavernScriptImporter 仍能转换为 DisplayRegex
         let converted = character.extensionsRegexScripts
             .compactMap { SillyTavernScriptImporter.convert($0) }

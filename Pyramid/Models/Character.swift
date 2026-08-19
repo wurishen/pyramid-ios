@@ -46,6 +46,19 @@ struct Character: Codable, Identifiable, Equatable {
     /// 旧数据无此字段 → nil。
     var characterBookRaw: JSONValue?
 
+    // MARK: - Phase 2：从 extensionsRaw 提 typed
+
+    /// `data.extensions.talkativeness` (Double 0.0-1.0) —— ST 角色发言频率抽样。
+    /// 旧数据 / Pyramid 原生角色卡无此字段 → nil。
+    var talkativeness: Double?
+    /// `data.extensions.fav` (Bool) —— ST "收藏" 标记。
+    /// 旧数据 / Pyramid 原生角色卡无此字段 → nil。
+    var isFavorite: Bool?
+    /// `data.extensions.depth_prompt` —— ST 深度 system / user 提示。
+    /// 解析失败时保留在 `extensionsRaw["depth_prompt"]` 不动（避免静默丢字段）。
+    /// 旧数据 / Pyramid 原生角色卡无此字段 → nil。
+    var depthPrompt: CharacterDepthPrompt?
+
     init(
         id: UUID = UUID(),
         name: String = "",
@@ -67,7 +80,10 @@ struct Character: Codable, Identifiable, Equatable {
         extensionsRegexScripts: [SillyTavernRegexScript] = [],
         extensionsRaw: JSONValue? = nil,
         tavernHelperRaw: JSONValue? = nil,
-        characterBookRaw: JSONValue? = nil
+        characterBookRaw: JSONValue? = nil,
+        talkativeness: Double? = nil,
+        isFavorite: Bool? = nil,
+        depthPrompt: CharacterDepthPrompt? = nil
     ) {
         self.id = id
         self.name = name
@@ -90,6 +106,9 @@ struct Character: Codable, Identifiable, Equatable {
         self.extensionsRaw = extensionsRaw
         self.tavernHelperRaw = tavernHelperRaw
         self.characterBookRaw = characterBookRaw
+        self.talkativeness = talkativeness
+        self.isFavorite = isFavorite
+        self.depthPrompt = depthPrompt
     }
 
     // MARK: - Codable：旧角色卡没有这些字段时全部 decodeIfPresent 给默认值。
@@ -107,6 +126,9 @@ struct Character: Codable, Identifiable, Equatable {
         case extensionsRaw = "extensionsRaw"
         case tavernHelperRaw = "tavernHelperRaw"
         case characterBookRaw = "characterBookRaw"
+        case talkativeness = "talkativeness"
+        case isFavorite = "fav"
+        case depthPrompt = "depthPrompt"
     }
 
     init(from decoder: Decoder) throws {
@@ -133,6 +155,10 @@ struct Character: Codable, Identifiable, Equatable {
         self.extensionsRaw = try? c.decodeIfPresent(JSONValue.self, forKey: .extensionsRaw)
         self.tavernHelperRaw = try? c.decodeIfPresent(JSONValue.self, forKey: .tavernHelperRaw)
         self.characterBookRaw = try? c.decodeIfPresent(JSONValue.self, forKey: .characterBookRaw)
+        // Phase 2 V3 typed lift：旧数据 / Pyramid 原生角色卡无此字段 → nil。
+        self.talkativeness = try? c.decodeIfPresent(Double.self, forKey: .talkativeness)
+        self.isFavorite = try? c.decodeIfPresent(Bool.self, forKey: .isFavorite)
+        self.depthPrompt = try? c.decodeIfPresent(CharacterDepthPrompt.self, forKey: .depthPrompt)
     }
 
     func systemPromptText() -> String {
