@@ -33,6 +33,7 @@ struct MessageCard: View {
 
     private static let collapseThreshold = 800
     @State private var expanded = false
+    @State private var showRenderInspector = false
 
     var body: some View {
         let isUser = message.role == .user
@@ -42,6 +43,19 @@ struct MessageCard: View {
             return "助手"
         }()
         let avatarData: Data? = isUser ? userAvatarData : character?.avatarData
+        let raw = liveContent ?? message.content
+        // 通过 RenderEngine 加工：raw 永不被修改，每次都从 raw 重新计算。
+        // 同一 (raw, context) → 相同 Result；context 改变 → SwiftUI 自动重绘。
+        let context = RenderEngine.Context(
+            isAssistant: message.role == .assistant,
+            presetDisplayRegexIds: preset?.displayRegexIds ?? [],
+            allDisplayRegexes: displayRegexes,
+            hideTagStripEnabled: settings.hideTagStripEnabled,
+            hideTags: settings.hideTags,
+            markdownEnabled: preset?.enableMarkdown ?? settings.enableMarkdown
+        )
+        let result = RenderEngine.render(raw: raw, context: context)
+        let cleaned = result.cleanedText
 
         VStack(alignment: .leading, spacing: 6) {
             headerRow(
@@ -49,10 +63,17 @@ struct MessageCard: View {
                 displayName: displayName,
                 avatarData: avatarData
             )
-            contentCard(isUser: isUser)
+            contentCard(isUser: isUser, raw: raw, cleaned: cleaned)
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
         .padding(.horizontal, 12)
+        .contentShape(Rectangle())
+        .onLongPressGesture(minimumDuration: 0.5) {
+            showRenderInspector = true
+        }
+        .sheet(isPresented: $showRenderInspector) {
+            RenderInspectorView(raw: raw, result: result, context: context)
+        }
     }
 
     // MARK: - 头部
@@ -116,20 +137,7 @@ struct MessageCard: View {
     // MARK: - 正文卡片
 
     @ViewBuilder
-    private func contentCard(isUser: Bool) -> some View {
-        let raw = liveContent ?? message.content
-        // 通过 RenderEngine 加工：raw 永不被修改，每次都从 raw 重新计算。
-        // 同一 (raw, context) → 相同 Result；context 改变 → SwiftUI 自动重绘。
-        let context = RenderEngine.Context(
-            isAssistant: message.role == .assistant,
-            presetDisplayRegexIds: preset?.displayRegexIds ?? [],
-            allDisplayRegexes: displayRegexes,
-            hideTagStripEnabled: settings.hideTagStripEnabled,
-            hideTags: settings.hideTags,
-            markdownEnabled: preset?.enableMarkdown ?? settings.enableMarkdown
-        )
-        let cleaned = RenderEngine.render(raw: raw, context: context).cleanedText
-
+    private func contentCard(isUser: Bool, raw: String, cleaned: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             bodyContent(cleaned: cleaned, isUser: isUser)
             if let createdAt = message.createdAt, showTimestamp, isUser {

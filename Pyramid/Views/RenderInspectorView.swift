@@ -1,0 +1,189 @@
+import SwiftUI
+
+/// RenderEngine 调试覆盖层：长按消息卡片时弹出，展示 raw → cleaned 的转换细节。
+///
+/// 设计原则：
+/// - **只读展示**：不修改 raw / context / Result，只是把已经算好的信息可视化。
+/// - **Dev-only**：不暴露 inspect API 给普通用户；通过长按手势进入，避免误触。
+/// - **不依赖 Xcode**：开发机 / 真机都能用，不需要挂 lldb / view debugger。
+struct RenderInspectorView: View {
+    let raw: String
+    let result: RenderEngine.Result
+    let context: RenderEngine.Context
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    statsSection
+                    section("原文 (raw)", text: raw, copyable: true)
+                    section("处理后 (cleaned)", text: result.cleanedText, copyable: true)
+                    regexSection
+                    hideTagsSection
+                }
+                .padding()
+            }
+            .navigationTitle("Render Inspector")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
+    }
+
+    // MARK: - 统计
+
+    private var statsSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("统计").font(.caption).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("原文长度: \(raw.count) 字符")
+                Text("处理后长度: \(result.cleanedText.count) 字符")
+                Text("差异: \(raw.count - result.cleanedText.count) 字符")
+                Text("Markdown: \(result.markdownEnabled ? "启用" : "禁用")")
+                Text("作用对象: \(context.isAssistant ? "助手消息" : "用户消息")")
+            }
+            .font(.system(.body, design: .monospaced))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+    }
+
+    // MARK: - 文本段
+
+    private func section(_ title: String, text: String, copyable: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            Text(text.isEmpty ? "(空)" : text)
+                .font(.system(.body, design: .monospaced))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
+                .background(Color(.systemGray6))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+    }
+
+    // MARK: - 命中的 regex
+
+    private var matchedRegexes: [DisplayRegex] {
+        guard context.isAssistant else { return [] }
+        let ordered = MessageRendererCore.orderedRegexes(
+            presetDisplayRegexIds: context.presetDisplayRegexIds,
+            all: context.allDisplayRegexes
+        )
+        return ordered.filter { regex in
+            guard let compiled = try? NSRegularExpression(
+                pattern: regex.pattern,
+                options: [.dotMatchesLineSeparators]
+            ) else { return false }
+            let range = NSRange(raw.startIndex..., in: raw)
+            let replaced = compiled.stringByReplacingMatches(
+                in: raw, options: [], range: range, withTemplate: regex.replacement
+            )
+            return replaced != raw
+        }
+    }
+
+    private var regexSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("命中的 DisplayRegex（\(matchedRegexes.count) 条）").font(.caption).foregroundStyle(.secondary)
+            if matchedRegexes.isEmpty {
+                Text("(无)")
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .background(Color(.systemGray6))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(matchedRegexes) { regex in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(regex.name).font(.body.weight(.medium))
+                            Text("pattern: \(regex.pattern)")
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                            Text("replacement: \(regex.replacement.isEmpty ? "(空)" : regex.replacement)")
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                        .background(Color(.systemGray6))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - 隐藏标签
+
+    private var hideTagsSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("隐藏标签剥离").font(.caption).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("启用: \(context.hideTagStripEnabled ? "是" : "否")")
+                Text("标签列表: \(context.hideTags.isEmpty ? "(空)" : context.hideTags.joined(separator: ", "))")
+            }
+            .font(.system(.body, design: .monospaced))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+    }
+}
+
+// MARK: - SwiftUI Preview
+
+#Preview("Render Inspector - with regex + hide tags") {
+    RenderInspectorView(
+        raw: "Hello <System>World</System>{{hello}} **bold**",
+        result: RenderEngine.Result(
+            cleanedText: "Hello World **bold**",
+            markdownEnabled: true
+        ),
+        context: RenderEngine.Context(
+            isAssistant: true,
+            presetDisplayRegexIds: [UUID()],
+            allDisplayRegexes: [
+                DisplayRegex(
+                    id: UUID(),
+                    name: "World → Pyramid",
+                    pattern: "World",
+                    replacement: "Pyramid",
+                    enabled: true
+                )
+            ],
+            hideTagStripEnabled: true,
+            hideTags: ["System"],
+            markdownEnabled: true
+        )
+    )
+}
+
+#Preview("Render Inspector - user message (no regex)") {
+    RenderInspectorView(
+        raw: "用户消息原文",
+        result: RenderEngine.Result(
+            cleanedText: "用户消息原文",
+            markdownEnabled: true
+        ),
+        context: RenderEngine.Context(
+            isAssistant: false,
+            presetDisplayRegexIds: [],
+            allDisplayRegexes: [],
+            hideTagStripEnabled: false,
+            hideTags: [],
+            markdownEnabled: true
+        )
+    )
+}
