@@ -12,32 +12,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Select Xcode 16.2
+        # 锁定 macOS-14 上预装的 Xcode 16.2（默认 15.4 在加载带 Testable 的
+        # scheme 时会崩 -[__NSArrayM setScheme:]: unrecognized selector）。
+        run: |
+          XCODE_PATH="/Applications/Xcode_16.2.app"
+          if [ ! -d "$XCODE_PATH" ]; then
+            echo "::error::Xcode 16.2 not found at $XCODE_PATH"
+            xcodebuild -version
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
+          xcodebuild -version
+          # 把 Xcode 版本写到 cache key，避免不同 Xcode 之间的 DerivedData 串味。
+          echo "XCODE_VERSION=16.2" >> "$GITHUB_ENV"
+
       - name: Cache DerivedData + SwiftPM build
         uses: actions/cache@v4
         with:
           path: |
             ~/Library/Developer/Xcode/DerivedData
             swift-tests/.build
-          key: ${{ runner.os }}-xcode-${{ hashFiles('Pyramid/**/*.swift', 'swift-tests/**/*.swift', 'Pyramid.xcodeproj/**') }}
+          key: ${{ runner.os }}-xcode${{ env.XCODE_VERSION }}-${{ hashFiles('Pyramid/**/*.swift', 'swift-tests/**/*.swift', 'Pyramid.xcodeproj/**') }}
           restore-keys: |
-            ${{ runner.os }}-xcode-
-
-      - name: Select Xcode 16.2
-        # macOS-14 默认是 Xcode 15.4，会在加载带 Testable 的 scheme 时崩
-        # （-[__NSArrayM setScheme:]: unrecognized selector）。
-        # Xcode 16.2 修了，直接切过去。
-        run: |
-          XCODE_PATH="/Applications/Xcode_16.2.app"
-          if [ ! -d "$XCODE_PATH" ]; then
-            echo "Xcode 16.2 not found at $XCODE_PATH"
-            xcodebuild -version
-            exit 1
-          fi
-          sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
-          xcodebuild -version
-
-      - name: Xcode version
-        run: xcodebuild -version
+            ${{ runner.os }}-xcode${{ env.XCODE_VERSION }}-
 
       - name: SillyTavern compat layer tests (Swift Package)
         run: |
