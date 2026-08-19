@@ -320,8 +320,12 @@ final class WorldBookStore: ObservableObject {
             entry.scanDepth = scanDepth.intValue
         }
 
-        // 酒馆 position：0=角色定义前、1-2=角色定义/示例后、3-6=深度/历史处
+        // 酒馆 position：0=角色定义前、1=角色定义后、2=示例对话后、
+        // 3=聊天历史前、4=聊天历史后、5/6=作者笔记深度位。
+        // Phase 2：保留 `positionRaw` 用于 round-trip；运行时 `insertionPosition`
+        // 仍是 3 值枚举（beforeSystem / afterSystem / afterHistory），5、6 折叠到 afterHistory。
         if let position = raw["position"] as? NSNumber {
+            entry.positionRaw = position.intValue
             switch position.intValue {
             case 0:
                 entry.insertionPosition = .beforeSystem
@@ -331,6 +335,33 @@ final class WorldBookStore: ObservableObject {
                 entry.insertionPosition = .afterSystem
             }
         }
+
+        // MARK: - V3 字段读取（透传，不影响运行时）
+        // uid：ST 允许 Int 或 String，统一尝试两种类型后取 Int。
+        if let uidInt = raw["uid"] as? NSNumber {
+            entry.externalId = uidInt.intValue
+        } else if let uidStr = raw["uid"] as? String, let parsed = Int(uidStr) {
+            entry.externalId = parsed
+        }
+        entry.groupKey = raw["group"] as? String
+        entry.groupWeight = (raw["group_weight"] as? NSNumber)?.doubleValue
+        entry.weight = (raw["weight"] as? NSNumber)?.doubleValue
+        entry.decay = (raw["decay"] as? NSNumber)?.doubleValue
+        entry.caseSensitive = raw["case_sensitive"] as? Bool
+        entry.useGroupScoring = raw["useGroupScoring"] as? Bool
+        entry.automationId = raw["automationId"] as? String
+        entry.roleRaw = (raw["role"] as? NSNumber)?.intValue
+        entry.vectorized = raw["vectorized"] as? Bool
+        entry.sticky = (raw["sticky"] as? NSNumber)?.intValue
+        entry.cooldown = (raw["cooldown"] as? NSNumber)?.intValue
+        entry.delay = (raw["delay"] as? NSNumber)?.intValue
+        entry.displayIndex = (raw["displayIndex"] as? NSNumber)?.intValue
+        if let triggers = raw["triggers"] as? [String] { entry.triggers = triggers }
+        entry.outletName = raw["outletName"] as? String
+        if let excludes = raw["excludes"] as? [String] { entry.excludes = excludes }
+        entry.selectiveLogicRaw = (raw["selectiveLogic"] as? NSNumber)?.intValue
+        // per-entry extensions → JSONValue 透传；非 dict 也照样收（与 characterBookRaw 行为对齐）
+        if let ext = raw["extensions"] { entry.extensionsRaw = JSONValue.from(any: ext) }
 
         return entry
     }
