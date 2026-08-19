@@ -3,7 +3,7 @@ import Foundation
 /// SillyTavern `depth_prompt` 运行时注入器（Pyramid Phase 2）。
 ///
 /// ST depth_prompt 含义：在聊天历史的指定深度插入一条消息，或拼到 system / history 段尾。
-/// - `.inChat`：把 prompt 消息插入 history 副本的 `clamp(depth, 0, history.count)` 位置
+/// - `.inChat`：把 prompt 消息插入 history 副本的 `count - clamp(depth, 0, count)` 位置
 ///   （depth=0 → 末条之后；depth=history.count → 首条之前；越界 clamp 到 [0, count]）。
 ///   **仅当 `prompt.role != .system` 才有意义** —— system 角色消息不进 history，由 caller
 ///   改走 `systemAppendage(prompt:)`。
@@ -28,7 +28,9 @@ enum DepthPromptInjector {
         }
         let clamped = max(0, min(prompt.depth, history.count))
         let message = ChatMessage(role: chatRole, content: prompt.content)
-        history.insert(message, at: clamped)
+        // ST 约定：depth=0 → 末条之后（tail）；depth=count → 首条之前（head）。
+        // index = count - clamped：clamped=0 → insert(at: count) 末位；clamped=count → insert(at: 0) 首位。
+        history.insert(message, at: history.count - clamped)
     }
 
     /// `.before` / `.after` / (`.inChat` + role=.system) 三种共用：返回非空 system 段拼��。

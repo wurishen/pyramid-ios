@@ -31,6 +31,9 @@ let package = Package(
                 "RenderEngineTests.swift",
                 "RenderNodeParserTests.swift",
                 "CharacterV3ImportTests.swift",
+                "V3WorldBookEntryTests.swift",
+                "CharacterExtensionsLiftTests.swift",
+                "DepthPromptInjectionTests.swift",
             ]
         ),
     ]
