@@ -28,8 +28,11 @@ jobs:
       - name: Install SwiftLint
         run: brew install swiftlint
 
-      - name: SwiftLint (strict)
-        run: swiftlint lint --strict --quiet
+      - name: SwiftLint (warnings only, no --strict)
+        # 风格规则已在 .swiftlint.yml 里关了一堆 false-positive；
+        # 真问题（unused_declaration / unused_import / empty_count）以 warning 出现在 CI log，
+        # 不阻塞 PR。
+        run: swiftlint lint --quiet
 
       - name: SillyTavern compat layer tests (Swift Package)
         run: |

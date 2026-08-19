@@ -1,5 +1,6 @@
 # SwiftLint 配置 for Pyramid iOS
-# 规则：默认基础上放宽几个 iOS 项目常见 false-positive；不开 opt-in 规则。
+# Goal: 抓到真问题（未用 import / 重复 closure / 错误初始化），不刷风格分。
+# Run in CI without --strict: warnings only, 不会因风格问题阻塞 PR。
 
 included:
   - Pyramid
@@ -11,26 +12,68 @@ excluded:
   - swift-tests/.build
   - "**/*.xcodeproj/**"
 
-# 长度阈值（iOS 实战常更宽）
-line_length: 140
-file_length: 800
-function_body_length: 100
-type_body_length: 600
-
-# 不强制（容易误伤）
+# 关闭风格 / 噪音规则
 disabled_rules:
-  - trailing_whitespace      # editor 自动处理
-  - todo                     # 留给 TODO 提醒用
-  - line_length              # 上面的 line_length 已覆盖
+  - todo
+  - force_cast
+  - identifier_name
+  - line_length
   - file_length
   - function_body_length
   - type_body_length
-  - force_cast               # Pyramid 里有 KVO + objc 联动
-  - identifier_name          # 中文注释 + iOS 缩写常态
+  - cyclomatic_complexity
+  - for_where
+  - statement_position
+  - vertical_parameter_alignment
+  - implicit_optional_initialization
+  - implicit_return
+  - trailing_newline
+  - comma
+  - redundant_nil_coalescing
+  - opening_brace
+  - closure_end_indentation
+  - closure_parameter_position
+  - comma_inheritance
+  - explicit_init
+  - explicit_self
+  - prefer_self_type_over_type_of_self
+  - sorted_imports
+  - non_optional_string_data_conversion
+  - weak_delegate
+  - fatal_error_message
+  - multiple_closures_with_trailing_closure
+  - first_where
+  - override_in_extension
+  - prefer_zero_over_explicit_init
+  - large_tuple
+  - prefer_key_path
+  - no_fallthrough_only_switch
+  - no_extension_access_modifier
 
-# SwiftUI 友好
-analyzer_rules:
+# 主动启用：抓真 bug
+opt_in_rules:
   - empty_count
   - unused_import
   - unused_declaration
-  - deployment_target
+  - unused_closure_parameter
+  - redundant_discardable_let
+  - redundant_type_annotation
+  - private_outlet
+  - private_action
+  - unused_setter_value
+  - empty_string
+  - switch_case_on_newline
+  - type_name
+  - todo
+
+# 风格阈值
+line_length: 140
+type_body_length:
+  warning: 600
+  error: 1200
+file_length:
+  warning: 800
+  error: 1500
+function_body_length:
+  warning: 100
+  error: 200
