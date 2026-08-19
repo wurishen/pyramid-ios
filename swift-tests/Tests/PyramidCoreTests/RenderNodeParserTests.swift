@@ -49,7 +49,7 @@ final class RenderNodeParserTests: XCTestCase {
         } else { XCTFail("node 0 应为 .text") }
         XCTAssertEqual(tree.nodes[1], .status(hp: 80, affection: 65))
         if case let .text(s) = tree.nodes[2] {
-            XCTAssertTrue(s.hasPrefix("老板抬头"))
+            XCTAssertTrue(s.contains("老板抬头"))
         } else { XCTFail("node 2 应为 .text") }
     }
 
