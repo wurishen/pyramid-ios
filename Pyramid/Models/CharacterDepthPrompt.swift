@@ -9,7 +9,7 @@ import Foundation
 ///
 /// 仅做字段承载；运行时注入由 `DepthPromptInjector` 在 ChatViewModel.request 路径上完成。
 /// Codable round-trip 完整保留 role / depth / content / position；旧 Pyramid 角色卡无此字段 → nil。
-struct CharacterDepthPrompt: Codable, Equatable {
+struct CharacterDepthPrompt: Codable, Equatable, Hashable {
     enum Role: String, Codable {
         case system
         case user

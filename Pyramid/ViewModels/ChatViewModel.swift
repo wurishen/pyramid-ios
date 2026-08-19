@@ -282,7 +282,7 @@ final class ChatViewModel: ObservableObject {
         // 应用上下文裁剪（不写入 API 正文，仅裁剪历史；楼层号 / 时间 / 注入指示仍为纯 UI）。
         let trimmedHistory = applyContextTrim(rawHistory, userMessageID: userMessageID)
         // 宏展开：仅作用于送入 API 的消息文本，不修改存储 / 显示。
-        let apiHistory = expandMacros(in: trimmedHistory)
+        var apiHistory = expandMacros(in: trimmedHistory)
         // 酒馆 post_history_instructions：作为最末 system 块拼到「历史之后」。
         // 与同位置的 world book 条目合并，world book 在前、角色 PHI 在后。
         var afterHistory = WorldBookService.injectionText(for: grouped[.afterHistory] ?? [])
@@ -294,6 +294,37 @@ final class ChatViewModel: ObservableObject {
                 afterHistory = phi.trimmingCharacters(in: .whitespacesAndNewlines)
             }
         }
+        // Phase 2：ST V3 depth_prompt 运行时注入。
+        // - position=.inChat 且 role∈{user, assistant} → 插到 apiHistory 指定深度
+        // - position=.inChat 且 role=.system                → 拼到 afterSystemText
+        // - position=.before                              → 拼到 afterSystemText
+        // - position=.after                               → 拼到 afterHistoryText
+        // content 为空时不注入；system role 不走 inChat（见 DepthPromptInjector 注释）。
+        var afterSystemText = WorldBookService.injectionText(for: grouped[.afterSystem] ?? [])
+        if let dp = character?.depthPrompt,
+           !dp.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            switch (dp.role, dp.position) {
+            case (_, .inChat):
+                if dp.role == .system {
+                    let appendage = DepthPromptInjector.systemAppendage(prompt: dp)
+                    if !appendage.isEmpty {
+                        afterSystemText += afterSystemText.isEmpty ? appendage : "\n\n" + appendage
+                    }
+                } else {
+                    DepthPromptInjector.injectInChat(history: &apiHistory, prompt: dp)
+                }
+            case (_, .before):
+                let appendage = DepthPromptInjector.systemAppendage(prompt: dp)
+                if !appendage.isEmpty {
+                    afterSystemText += afterSystemText.isEmpty ? appendage : "\n\n" + appendage
+                }
+            case (_, .after):
+                let appendage = DepthPromptInjector.systemAppendage(prompt: dp)
+                if !appendage.isEmpty {
+                    afterHistory += afterHistory.isEmpty ? appendage : "\n\n" + appendage
+                }
+            }
+        }
         let client = OpenAIClient(
             baseURL: settings.baseURL,
             apiKey: settings.apiKey,
@@ -301,7 +332,7 @@ final class ChatViewModel: ObservableObject {
             systemPrompt: effectiveSystemPrompt,
             userPersonaText: userPersonaText,
             beforeSystemText: WorldBookService.injectionText(for: grouped[.beforeSystem] ?? []),
-            afterSystemText: WorldBookService.injectionText(for: grouped[.afterSystem] ?? []),
+            afterSystemText: afterSystemText,
             afterHistoryText: afterHistory,
             temperature: preset?.temperature,
             topP: preset?.topP,
@@ -565,6 +596,12 @@ final class ChatViewModel: ObservableObject {
                 hasher.combine(entry.matchMode)
                 hasher.combine(entry.insertionPosition)
             }
+        }
+        // Phase 2：V3 lifted character fields 影响 depth_prompt 注入，须纳入指纹。
+        if let character = characters.character(for: session?.characterId) {
+            hasher.combine(character.talkativeness)
+            hasher.combine(character.isFavorite)
+            hasher.combine(character.depthPrompt)
         }
         hasher.combine(rawInput)
         return hasher.finalize()
