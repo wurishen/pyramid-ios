@@ -4,9 +4,41 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+# 三个并行 job：
+#   lint      - SwiftLint + SPM tests（最快，fail fast）
+#   build     - xcodebuild simulator build + iOS tests
+#   release   - archive + IPA + GitHub Release（独立，慢但不阻塞 build）
+# 总时长从 ~9 min 串行降到 ~4-5 min wall-clock。
+
 jobs:
+  lint:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 16.2
+        run: |
+          XCODE_PATH="/Applications/Xcode_16.2.app"
+          if [ ! -d "$XCODE_PATH" ]; then
+            echo "::error::Xcode 16.2 not found at $XCODE_PATH"
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
+
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
+      - name: SwiftLint (strict)
+        run: swiftlint lint --strict --quiet
+
+      - name: SillyTavern compat layer tests (Swift Package)
+        run: |
+          cd swift-tests
+          swift test
+
   build:
     runs-on: macos-14
+    needs: lint
     permissions:
       contents: write
     steps:
@@ -37,12 +69,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-xcode${{ env.XCODE_VERSION }}-
 
-      - name: SillyTavern compat layer tests (Swift Package)
-        run: |
-          cd swift-tests
-          swift test
-
-      - name: Simulator build (always)
+      - name: Simulator build
         run: |
           xcodebuild -project Pyramid.xcodeproj -scheme Pyramid \
             -destination 'generic/platform=iOS Simulator' \
@@ -51,7 +78,6 @@ jobs:
             build
 
       - name: Simulator tests (only if PyramidTests target exists)
-        id: ios-tests
         run: |
           # 直接 grep pbxproj，避免 xcodebuild -list 在 macOS-14 + Xcode 16 上偶发的
           # `-[__NSArrayM setScheme:]: unrecognized selector` 崩溃。
@@ -66,6 +92,32 @@ jobs:
             echo "To enable: trigger the 'Bootstrap iOS test target' workflow once."
             exit 0
           fi
+
+  release:
+    runs-on: macos-14
+    needs: build
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 16.2
+        run: |
+          XCODE_PATH="/Applications/Xcode_16.2.app"
+          if [ ! -d "$XCODE_PATH" ]; then
+            echo "::error::Xcode 16.2 not found at $XCODE_PATH"
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
+          echo "XCODE_VERSION=16.2" >> "$GITHUB_ENV"
+
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Developer/Xcode/DerivedData
+          key: ${{ runner.os }}-xcode${{ env.XCODE_VERSION }}-${{ hashFiles('Pyramid/**/*.swift', 'Pyramid.xcodeproj/**') }}
+          restore-keys: |
+            ${{ runner.os }}-xcode${{ env.XCODE_VERSION }}-
 
       - name: Archive for device (unsigned)
         run: |

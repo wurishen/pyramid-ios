@@ -1,0 +1,36 @@
+# SwiftLint 配置 for Pyramid iOS
+# 规则：默认基础上放宽几个 iOS 项目常见 false-positive；不开 opt-in 规则。
+
+included:
+  - Pyramid
+  - swift-tests
+
+excluded:
+  - Pyramid/Resources
+  - Pyramid/Pods
+  - swift-tests/.build
+  - "**/*.xcodeproj/**"
+
+# 长度阈值（iOS 实战常更宽）
+line_length: 140
+file_length: 800
+function_body_length: 100
+type_body_length: 600
+
+# 不强制（容易误伤）
+disabled_rules:
+  - trailing_whitespace      # editor 自动处理
+  - todo                     # 留给 TODO 提醒用
+  - line_length              # 上面的 line_length 已覆盖
+  - file_length
+  - function_body_length
+  - type_body_length
+  - force_cast               # Pyramid 里有 KVO + objc 联动
+  - identifier_name          # 中文注释 + iOS 缩写常态
+
+# SwiftUI 友好
+analyzer_rules:
+  - empty_count
+  - unused_import
+  - unused_declaration
+  - deployment_target
