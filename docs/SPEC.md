@@ -1,7 +1,9 @@
 # Pyramid 产品规格文档
 
 > 本文档为 iOS / Android 双端共用的产品规格，描述当前已实现功能与计划功能（TODO）。
-> 最后更新：2026-08-17（新增渲染管线 / 隐藏标签 / 显示用正则 / 宏 / 预设扩展字段）
+> 最后更新：2026-08-19（v0.7.1 新增 RenderNode 渲染管线 + 原生 StatusView + Render Inspector 调试覆盖层）
+>
+> **当前版本**：v0.7.1（iOS 端）
 
 ---
 
@@ -58,11 +60,75 @@ TabView
 
 渲染管线（仅作用于展示层，**不动 `message.content`**）：
 
-1. `MessageRenderer.preprocess(...)` — 显示用正则 → 隐藏标签剥离；任一阶段失败回退原文
-2. `MarkdownTextView(text:)` — 块级 Markdown 排版（段落 / 围栏代码块 / 列表）
+1. `RenderEngine.render(raw:context:)` — 显示用正则 → 隐藏标签剥离 → **RenderNode 解析**（识别 `<status>` 块等结构化标签）→ `RenderTree`
+2. `MessageCard` 遍历 `RenderTree.nodes`，按节点类型分发：`.text` → `MarkdownTextView`（块级 Markdown 排版：段落 / 围栏代码块 / 列表）/ `Text`（纯文本）；`.status` → 原生 `StatusView` 面板
 3. 三态 Markdown 开关：预设 `enableMarkdown: Bool?` 三态 > 全局 `AppSettings.enableMarkdown`
 
 > 流式期间仅 `streamingMessageID` 对应的卡片接收 `liveContent`，其余卡片不重绘。
+
+### 2.1.2 RenderNode 渲染架构（v0.7.1）
+
+**目标**：让模型原始输出里的结构化标签（如 `<status>`）能转为**原生 SwiftUI 视图**，而不是被当作普通 Markdown 文本渲染。
+
+**数据模型**（`Models/RenderNode.swift`，纯 enum，Equatable + Sendable，无 SwiftUI 依赖）：
+
+```swift
+enum RenderNode: Equatable, Sendable {
+    case text(String)                 // 普通段落，走 Markdown / 纯文本
+    case status(hp: Int, affection: Int)  // 角色状态面板
+}
+
+struct RenderTree: Equatable, Sendable {
+    var nodes: [RenderNode]
+    var flattenedText: String { … }   // 仅拼接 .text，用于折叠长度判断
+}
+```
+
+**渲染管线**：
+
+```
+Raw Message → DisplayRegex → HideTags → RenderNodeParser → RenderTree → MessageCard
+                                                                                         ├─ .text  → MarkdownTextView / Text
+                                                                                         └─ .status → StatusView（原生）
+```
+
+**StatusView**（`Views/StatusView.swift`，v0.7.1 新增）：
+
+- 输入：`hp: Int`、`affection: Int`
+- 视觉：紧凑面板（圆角 + 浅灰底 + 半透明描边），HP 数值带颜色梯度（≥60 绿 / 30-60 橙 / <30 红），好感度用强调色
+- **不可交互**（v0.7.1 范围）；后续如需点击 / 滑入可单独迭代
+- 纯展示组件：不持有状态、不查 store、不调网络
+
+**RenderNodeParser**（`Models/RenderNodeParser.swift`）：
+
+- 单遍扫描：`NSRegularExpression` 匹配 `<status>...</status>` 块（`(?is)` + `.dotMatchesLineSeparators`，允许跨行）
+- 块内解析：识别 `HP: <int>` 与 `好感度: <int>`（支持中文全角冒号 `：`）；**任一缺失 / 非整数 → 整块降级为 `.text`**，保证不丢内容
+- 多次重渲染同 raw → 相同 RenderTree（无副作用 / 无缓存）
+
+**MessageCard 集成**（`Views/MessageCard.swift`）：
+
+```swift
+ForEach(tree.nodes) { node in
+    switch node {
+    case let .text(text):    textNodeView(text, isLong: isLong)
+    case let .status(hp, a): StatusView(hp: hp, affection: a)   // 不受折叠影响
+    }
+}
+```
+
+**约束**：
+
+1. **Raw Message 不被修改**——`RenderTree` 只在展示层计算，每次从 raw 重新算；流式期间 `liveContent` 覆盖 `message.content`，渲染管线不变
+2. **Markdown / DisplayRegex 行为保持**——`<status>` 块先经正则替换与剥离，再解析为 `.status` 节点；不在 RenderNodeParser 里复刻正则逻辑
+3. **不新增 Tavern 标签**——只识别 `<status>` 一种；其它结构化标签后续按需扩展
+4. **不缓存 RenderNode**——`RenderTree` 每次重算；`RenderNode` 是 Equatable，SwiftUI diff 直接走结构相等
+
+**Render Inspector**（`Views/RenderInspectorView.swift`，v0.7.1 新增，开发用）：
+
+- **触发**：长按消息卡片 0.5s 弹出 Sheet
+- **展示**：原文（raw）/ 处理后（cleanedText）/ RenderNode 树（逐节点类型 + 内容预览）/ 命中的 DisplayRegex / 隐藏标签剥离状态
+- **只读**：不修改 raw / context / Result，不暴露 API 给普通用户
+- **替代挂 lldb / view debugger** 的开发辅助：开发机 / 真机都能用
 
 ### 2.2 导航逻辑
 

@@ -9,11 +9,13 @@ Pyramid 的最小原生 iOS 应用 —— 纯 SwiftUI，不依赖 WKWebView / �
 3. 选择 `Pyramid` scheme 与任意 iOS Simulator，⌘R 运行即可。
 4. 首次打开若提示 scheme，选 **Pyramid**（工程内已共享 scheme，正常应直接可用）。
 
-## 使用（v0.7）
+## 使用（v0.7.1）
 
 应用为两 Tab 结构：**聊天** 与 **设置**。设置项以二级页面组织（点设置里任意行进入子页，导航栏「<」返回）。
 
 > **v0.7 形态变更**：聊天页消息列表从 iMessage 风格左右气泡改为**酒馆式「回复视窗」**——每条消息是一张完整卡片（头部行 = 头像 + 名字 + 楼层号 `#N` + 时间戳；正文 = 圆角卡片），用户 / 助手靠「头像位置 + 背景色 + 描边 + 名字色」区分。Markdown 渲染改走块级 `MarkdownTextView`（段落 / 围栏代码块 / 列表）。底部 Tab 按钮不再带文字标签。
+>
+> **v0.7.1 新增**：渲染管线升级为 **RenderNode 架构**——`Raw → DisplayRegex → HideTags → RenderNodeParser → RenderTree → MessageCard`。模型原始输出里的 `<status>HP: 80\n好感度: 65</status>` 块会被解析成原生 SwiftUI `StatusView`（HP + 好感度面板，含 HP 颜色梯度：≥60 绿 / 30-60 橙 / <30 红），不再显示原始标签或纯文本。**长按消息卡片** 0.5s 弹出 **Render Inspector** 调试覆盖层（仅展示，不修改 raw）：原文 / 处理后 / RenderNode 树 / 命中的 DisplayRegex / 隐藏标签剥离状态。解析失败的 status 块自动降级为普通文本，不会丢内容。
 
 ### 设置
 
@@ -61,7 +63,7 @@ Pyramid 的最小原生 iOS 应用 —— 纯 SwiftUI，不依赖 WKWebView / �
 - 预设：模型 / 系统提示词 / 世界书绑定 / 启用 Markdown / 显示用正则 ID 一键应用到会话。
 - 会话：多会话本地持久化、置顶、重命名、按角色 1:N 绑定、长按头像删除。
 - 消息操作：长按菜单（复制 / 编辑 / 重新生成 / 删除 / **包含在上下文切换**）+ 流式停止 + 错误重试；排除消息在 UI 显示但不进 API。
-- 显示管线：原始 → 显示用正则（仅助手）→ 隐藏标签剥离 → Markdown 渲染（仅作用于卡片，`MarkdownTextView` 块级排版）。
+- 显示管线：原始 → 显示用正则（仅助手）→ 隐藏标签剥离 → **RenderNode 解析**（`<status>` 块转原生 `StatusView`）→ Markdown / 原生面板渲染（仅作用于卡片，`MarkdownTextView` 块级排版 + `StatusView` 原生面板）。
 - 宏：`{{user}}` / `{{User}}` / `{{char}}` / `{{Char}}`，仅作用于发送给 API 的文本。
 - 不含：云同步、第三方渲染（WKWebView / SFSafariViewController）、正则脚本热更新。
 - **数据兼容**：所有「v0.6 新增字段」（Character 的 8 个 ST 字段 + ChatMessage.isIncluded）走 `init(from:) decodeIfPresent` 给默认值，旧 v0.5 JSON / UserDefaults 数据 load 时自动补齐，**无需主动迁移、不会丢任何旧数据**。
@@ -76,7 +78,8 @@ Pyramid/
   AppSettings.swift    API 配置（@AppStorage 本地持久化）
   Models/              ChatMessage（含 isIncluded）、ChatSession、ChatCompletionRequest/Response、
                        Character（含 SillyTavern 兼容字段）、WorldBook/Entry、Preset、
-                       DisplayRegex、ContextTrimMode
+                       DisplayRegex、ContextTrimMode、
+                       RenderNode / RenderNodeParser / RenderEngine（v0.7.1 渲染管线）
   Services/            OpenAIClient、WorldBookService（关键词匹配与注入）、
                        ImportSupport（原生 + SillyTavern JSON/PNG 解析）、Markdown 渲染
   Stores/              ChatStore、WorldBookStore、CharacterStore、PresetStore、DisplayRegexStore
@@ -84,7 +87,8 @@ Pyramid/
   Views/               ChatView、SettingsView、SessionListView、SessionDetailView、
                        CharacterListView、CharacterGreetingSheet、NewSessionWithCharacterSheet、
                        WorldBookView、WorldBookEditView、PresetListView、
-                       DisplayRegexListView、MarkdownTextView、MessageCard（酒馆式回复视窗）、…
+                       DisplayRegexListView、MarkdownTextView、MessageCard（酒馆式回复视窗）、
+                       StatusView（v0.7.1 原生面板）、RenderInspectorView（v0.7.1 长按调试覆盖层）、…
   Assets.xcassets/     图标与颜色资源
 .github/workflows/    GitHub Actions（编译检查 + archive/IPA 产物打包）
 ```
