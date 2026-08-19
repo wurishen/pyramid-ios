@@ -1,0 +1,22 @@
+// Release.xcconfig — Release-only 构建设置（继承 Shared.xcconfig）。
+// 包含 #include "Shared.xcconfig" 之前的所有设置都会覆盖 Shared。
+
+#include "Shared.xcconfig"
+
+// Release 不需要保留调试符号的多副本
+COPY_PHASE_STRIP = NO
+
+// 优化后的 dSYM 调试符号
+DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"
+
+// Release 关闭 NSAssert
+ENABLE_NS_ASSERTIONS = NO
+
+// Release 不在 Metal 着色器里塞调试信息
+MTL_ENABLE_DEBUG_INFO = NO
+
+// Swift 整模块编译：更快但慢优化
+SWIFT_COMPILATION_MODE = wholemodule
+
+// 校验产物
+VALIDATE_PRODUCT = YES

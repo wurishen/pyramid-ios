@@ -1,0 +1,25 @@
+// Debug.xcconfig — Debug-only 构建设置（继承 Shared.xcconfig）。
+// 包含 #include "Shared.xcconfig" 之前的所有设置都会覆盖 Shared。
+
+#include "Shared.xcconfig"
+
+// 调试构建特有的优化 / 断言设置
+DEBUG_INFORMATION_FORMAT = dwarf
+ENABLE_TESTABILITY = YES
+GCC_DYNAMIC_NO_PIC = NO
+GCC_OPTIMIZATION_LEVEL = 0
+
+// DEBUG 宏可用
+GCC_PREPROCESSOR_DEFINITIONS = (
+    "DEBUG=1",
+    "$(inherited)",
+)
+
+MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE
+
+// 仅构建当前连接的设备架构，加快本地编译
+ONLY_ACTIVE_ARCH = YES
+
+// Swift 调试
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)"
+SWIFT_OPTIMIZATION_LEVEL = "-Onone"
