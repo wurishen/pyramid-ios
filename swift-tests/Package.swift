@@ -34,6 +34,7 @@ let package = Package(
                 "V3WorldBookEntryTests.swift",
                 "CharacterExtensionsLiftTests.swift",
                 "DepthPromptInjectionTests.swift",
+                "EmbeddedWorldBookToggleTests.swift",
             ]
         ),
     ]

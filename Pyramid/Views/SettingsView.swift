@@ -21,7 +21,7 @@ struct SettingsView: View {
                         Label("用户", systemImage: "person.crop.circle")
                     }
                     NavigationLink {
-                        CharacterListView(store: characters, worldBook: worldBook, displayRegexes: displayRegexes)
+                        CharacterListView(store: characters, worldBook: worldBook, displayRegexes: displayRegexes, settings: settings)
                     } label: {
                         Label("角色卡", systemImage: "person.crop.rectangle.stack")
                     }

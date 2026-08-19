@@ -276,6 +276,7 @@ ForEach(tree.nodes) { node in
 | `systemPrompt` | String | 角色专属系统提示词 |
 | `worldBookId` | UUID? | 绑定的世界书（可选） |
 | `embeddedWorldBookId` | UUID? | ST V3 内嵌 `data.character_book` 自动建的书 ID（见 §4.8）；非全局，参与注入但不出现在全局世界书列表 |
+| `isEmbeddedWorldBookEnabled` | Bool | 该角色本次聊天是否注入「`embeddedWorldBookId`」对应内嵌书（per-character 开关，默认 true；旧数据 decodeIfPresent 兜底 true，见 §4.7） |
 | `extensionsRegexScripts` | `[SillyTavernRegexScript]` | 酒馆角色卡内嵌的 Regex Script（来自 `data.extensions.regex_scripts`）；导入时自动转成 DisplayRegex（见 §4.6） |
 | `talkativeness` | Double? | ST `data.extensions.talkativeness`（0.0–1.0；导入时 clamp） |
 | `isFavorite` | Bool? | ST `data.extensions.fav` |
@@ -373,6 +374,19 @@ V3 角色卡可在 `data.character_book` 内嵌一本世界书（条目数 / 标
 4. 会话额外启用的世界书（`session.extraWorldBookIds`）
 
 embedded 排在「manual 绑定」之前，让用户 override 优先级；同 ID 重复出现只保留首个。
+
+**Per-character 启用开关**（`isEmbeddedWorldBookEnabled`）：
+
+- 默认 `true`（导入 V3 卡自动开启；旧数据 decodeIfPresent 兜底 `true`，避免老用户升级后行为突变）。
+- 用户在「设置 → 角色卡 → 编辑 → 世界书绑定」Section 里看到一个「启用内嵌世界书」Toggle + 「打开「xxx 内嵌世界书」」按钮（仅当 `embeddedWorldBookId != nil` 时显示）。Toggle 切到 `false` → `WorldBookStore.activeBooks` 在 embedded 分支直接跳过该书。
+- 按钮触发一个 Sheet，宿主 `WorldBookView(store:settings:characters:initialBookID:)` —— 直接落到该内嵌书页，用户可逐条开关 / 改内容 / 删条目 / 重命名（与普通书同权限；删除由 `WorldBookView` 现有 `deleteBook` 守住 `count > 1`）。
+- 「Toggle / 打开按钮 / 字段写入」三个动作都走 `CharacterEditView` 的保存路径，`onSave → store.upsert`，无绕过。
+
+**WorldBookView UX 调整**：
+
+- Picker 标签：内嵌书的标题后面追加「·内嵌·<角色名>」次级小角标，用户一眼能看出哪些书是从角色卡自动建的。
+- 「全局启用」Toggle 对内嵌书**隐藏**（embedded 永远非全局，无需暴露误导开关）。
+- 作用域描述（`scopeDescription`）优先匹配内嵌书：显示「内嵌于「<角色名>」已启用 / 已停用」+「启用 / 停用开关在「设置 → 角色卡 → 编辑 → 世界书绑定」」；然后才回退到「全局启用 / 角色绑定 / 未启用」三态。
 
 **删除角色清理**：`CharacterListView.deleteCharacters` 在 `store.delete(id)` 之前调 `worldBook.deleteBook(bookID)`（已守住 `books.count > 1`，最后一本书不会被删）。
 

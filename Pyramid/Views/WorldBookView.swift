@@ -51,6 +51,16 @@ struct WorldBookView: View {
         _viewingBookID = State(initialValue: store.globalBook.id)
     }
 
+    /// Phase 2：可指定初始展示的内嵌世界书 —— 角色卡编辑页「打开内嵌书」入口用。
+    /// 找不到（用户删了书）→ 退回全局世界书。
+    init(store: WorldBookStore, settings: AppSettings, characters: CharacterStore, initialBookID: UUID) {
+        self.store = store
+        self.settings = settings
+        self.characters = characters
+        let resolved = store.books.first(where: { $0.id == initialBookID })?.id ?? store.globalBook.id
+        _viewingBookID = State(initialValue: resolved)
+    }
+
     private var currentBook: WorldBook {
         store.book(for: viewingBookID)
     }
@@ -73,7 +83,17 @@ struct WorldBookView: View {
                 HStack(spacing: 8) {
                     Picker("世界书", selection: $viewingBookID) {
                         ForEach(store.books) { book in
-                            Text(book.title).tag(book.id)
+                            // V3 内嵌世界书：在 Picker 上挂「内嵌于 X」小角标，
+                            // 用户一眼能看出哪些书是从角色卡自动建出来的。
+                            HStack(spacing: 4) {
+                                Text(book.title)
+                                if let owner = embeddedOwnerName(for: book.id) {
+                                    Text("·内嵌·\(owner)")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .tag(book.id)
                         }
                     }
                     if store.books.count > 1 {
@@ -101,7 +121,11 @@ struct WorldBookView: View {
                         .accessibilityLabel("删除当前世界书")
                     }
                 }
-                Toggle("全局启用", isOn: globalEnabledBinding)
+                // 内嵌世界书永远非全局启用（adoptEmbeddedWorldBook 创建时 isGloballyEnabled=false）。
+                // Picker 这里不展示「全局启用」开关，避免误导用户；改用说明文案告知角色专属开关在哪。
+                if !isCurrentBookEmbedded {
+                    Toggle("全局启用", isOn: globalEnabledBinding)
+                }
                 Text(scopeDescription)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -397,6 +421,11 @@ struct WorldBookView: View {
     }
 
     private var scopeDescription: String {
+        if isCurrentBookEmbedded, let owner = embeddedOwnerName(for: viewingBookID) {
+            let enabled = embeddedOwner(for: viewingBookID)?.isEmbeddedWorldBookEnabled ?? false
+            let state = enabled ? "已启用" : "已停用"
+            return "当前作用域：内嵌于「\(owner)」\(state)。该书仅在该角色聊天时注入；启用 / 停用开关在「设置 → 角色卡 → 编辑 → 世界书绑定」里。"
+        }
         if currentBook.isGloballyEnabled {
             return "当前作用域：全局启用，进入会话时自动随匹配注入。"
         }
@@ -404,6 +433,21 @@ struct WorldBookView: View {
             return "当前作用域：仅与「\(char.name.isEmpty ? "未命名" : char.name)」绑定。仅在选用该角色时注入。"
         }
         return "当前作用域：未启用。需要在 Picker 之外的会话中手动选择或上方设开关启用。"
+    }
+
+    /// 当前选中的书是否被某角色通过 `embeddedWorldBookId` 引用。
+    private var isCurrentBookEmbedded: Bool {
+        characters.characters.contains { $0.embeddedWorldBookId == viewingBookID }
+    }
+
+    /// 找到把当前 book 作为内嵌书引用的角色，返回其可读名。
+    private func embeddedOwnerName(for bookID: UUID) -> String? {
+        guard let owner = embeddedOwner(for: bookID) else { return nil }
+        return owner.name.isEmpty ? "未命名" : owner.name
+    }
+
+    private func embeddedOwner(for bookID: UUID) -> Character? {
+        characters.characters.first { $0.embeddedWorldBookId == bookID }
     }
 
     private var importErrorBinding: Binding<Bool> {

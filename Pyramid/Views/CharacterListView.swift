@@ -5,6 +5,7 @@ struct CharacterListView: View {
     @ObservedObject var store: CharacterStore
     @ObservedObject var worldBook: WorldBookStore
     @ObservedObject var displayRegexes: DisplayRegexStore
+    @ObservedObject var settings: AppSettings
     @State private var editingCharacter: Character?
     @State private var showDocumentPicker = false
     @State private var importError: String?
@@ -76,7 +77,12 @@ struct CharacterListView: View {
             Text(importSuccess ?? "")
         }
         .sheet(item: $editingCharacter) { character in
-            CharacterEditView(character: character, worldBook: worldBook) { updated in
+            CharacterEditView(
+                character: character,
+                worldBook: worldBook,
+                settings: settings,
+                characters: store
+            ) { updated in
                 store.upsert(updated)
             }
         }
@@ -112,6 +118,8 @@ struct CharacterListView: View {
                         // 二次导入同一角色按 `externalId == uid` 合并，不重复创建。
                         if let id = worldBook.adoptEmbeddedWorldBook(for: character) {
                             character.embeddedWorldBookId = id
+                            // 内嵌世界书默认启用；用户在 CharacterEditView 可单独关。
+                            character.isEmbeddedWorldBookEnabled = true
                         }
                         // 自动发现 `character.extensionsRegexScripts`（ST 角色卡内嵌的
                         // `data.extensions.regex_scripts`）→ 转成 DisplayRegex → 入库。
@@ -180,6 +188,8 @@ struct CharacterListView: View {
 struct CharacterEditView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var worldBook: WorldBookStore
+    @ObservedObject var settings: AppSettings
+    @ObservedObject var characters: CharacterStore
     private let character: Character
     private let onSave: (Character) -> Void
 
@@ -191,6 +201,11 @@ struct CharacterEditView: View {
     @State private var worldBookId: UUID?
     @State private var avatarData: Data?
     @State private var showAvatarPicker = false
+    /// 内嵌世界书启用开关（V3 角色卡导入时自动建书）。
+    /// 旧角色 / Pyramid 原生角色卡无 `embeddedWorldBookId` → UI 隐藏整段。
+    @State private var isEmbeddedWorldBookEnabled: Bool
+    /// 弹窗：把当前内嵌世界书直接打开到 WorldBookView（用户可逐条开关 / 改内容）。
+    @State private var openEmbeddedBookID: UUID?
 
     // SillyTavern 兼容字段（默认折叠，避免普通用户看到一屏技术字段）。
     @State private var firstMes: String
@@ -203,9 +218,17 @@ struct CharacterEditView: View {
     @State private var characterVersion: String
     @State private var showSillyTavernFields = false
 
-    init(character: Character, worldBook: WorldBookStore, onSave: @escaping (Character) -> Void) {
+    init(
+        character: Character,
+        worldBook: WorldBookStore,
+        settings: AppSettings,
+        characters: CharacterStore,
+        onSave: @escaping (Character) -> Void
+    ) {
         self.character = character
         self.worldBook = worldBook
+        self.settings = settings
+        self.characters = characters
         self.onSave = onSave
         _name = State(initialValue: character.name)
         _descriptionText = State(initialValue: character.description)
@@ -214,6 +237,7 @@ struct CharacterEditView: View {
         _systemPrompt = State(initialValue: character.systemPrompt)
         _worldBookId = State(initialValue: character.worldBookId)
         _avatarData = State(initialValue: character.avatarData)
+        _isEmbeddedWorldBookEnabled = State(initialValue: character.isEmbeddedWorldBookEnabled)
         _firstMes = State(initialValue: character.firstMes)
         // 把数组转成「按行一条」的纯文本，方便用户直接编辑（也兼容酒馆 v1 字符串情况）。
         _alternateGreetingsText = State(initialValue: character.alternateGreetings.joined(separator: "\n"))
@@ -255,6 +279,26 @@ struct CharacterEditView: View {
                         Text("不绑定").tag(Optional<UUID>.none)
                         ForEach(worldBook.books) { book in
                             Text(book.title).tag(Optional(book.id))
+                        }
+                    }
+                    // V3 内嵌世界书：从 `data.character_book` 自动构建，绑定到该角色。
+                    // 显示该角色专属的「启用开关」+「直接打开」入口 —— 旧数据无
+                    // `embeddedWorldBookId`（原生 / Pyramid 角色卡）→ 整段隐藏。
+                    if let embeddedID = character.embeddedWorldBookId {
+                        Toggle("启用内嵌世界书", isOn: $isEmbeddedWorldBookEnabled)
+                        if let book = worldBook.books.first(where: { $0.id == embeddedID }) {
+                            Button {
+                                openEmbeddedBookID = embeddedID
+                            } label: {
+                                HStack {
+                                    Text("打开「\(book.title)」")
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.footnote)
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
                         }
                     }
                 }
@@ -325,6 +369,7 @@ struct CharacterEditView: View {
                         updated.systemPrompt = systemPrompt
                         updated.worldBookId = worldBookId
                         updated.avatarData = avatarData
+                        updated.isEmbeddedWorldBookEnabled = isEmbeddedWorldBookEnabled
                         updated.firstMes = firstMes
                         // 备用开场白按行切分，丢掉空行
                         updated.alternateGreetings = alternateGreetingsText
@@ -349,8 +394,29 @@ struct CharacterEditView: View {
             .sheet(isPresented: $showAvatarPicker) {
                 AvatarPickerSheet(data: $avatarData)
             }
+            // 「打开内嵌世界书」 → 弹一个聚焦到该书的 WorldBookView Sheet。
+            // 用户可直接逐条开关 / 改内容，不必先保存角色卡。
+            // 该书被删掉 → WorldBookView init 已退回 globalBook，不会崩。
+            .sheet(item: Binding(
+                get: { openEmbeddedBookID.map { EmbeddedBookRef(id: $0) } },
+                set: { openEmbeddedBookID = $0?.id }
+            )) { ref in
+                NavigationStack {
+                    WorldBookView(
+                        store: worldBook,
+                        settings: settings,
+                        characters: characters,
+                        initialBookID: ref.id
+                    )
+                }
+            }
         }
     }
+}
+
+/// `sheet(item:)` 需要 `Identifiable`；UUID 不直接 Identifiable，套一层。
+private struct EmbeddedBookRef: Identifiable {
+    let id: UUID
 }
 
 struct AvatarPickerSheet: View {
@@ -451,6 +517,11 @@ private extension UIImage {
 
 #Preview {
     NavigationStack {
-        CharacterListView(store: CharacterStore(), worldBook: WorldBookStore(), displayRegexes: DisplayRegexStore())
+        CharacterListView(
+            store: CharacterStore(),
+            worldBook: WorldBookStore(),
+            displayRegexes: DisplayRegexStore(),
+            settings: AppSettings()
+        )
     }
 }

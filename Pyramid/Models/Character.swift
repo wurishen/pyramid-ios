@@ -15,6 +15,12 @@ struct Character: Codable, Identifiable, Equatable {
     /// 与用户的 `worldBookId`（手动绑定）正交；优先级：全局 < embedded < manual < session extras。
     /// 旧数据无此字段 → nil。
     var embeddedWorldBookId: UUID?
+    /// 内嵌世界书启用开关。导入 V3 角色卡时默认 true（旧数据 nil → init 给 true，
+    /// 避免老用户升级后突然「关闭内嵌世界书」导致行为变化）。
+    /// 用户在角色编辑页可关闭 → `WorldBookStore.activeBooks` 跳过该书。
+    /// 与「全局启用」无关：embedded 书永远不全局启用；此处只是「该角色本次聊天是否注入」的开关。
+    /// 旧数据无此字段 → default true（decodeIfPresent 兜底）。
+    var isEmbeddedWorldBookEnabled: Bool
 
     // SillyTavern 兼容字段（均为可选，新字段；旧数据 decode 时由 init(from:) 给默认值）。
     var firstMes: String
@@ -69,6 +75,7 @@ struct Character: Codable, Identifiable, Equatable {
         systemPrompt: String = "",
         worldBookId: UUID? = nil,
         embeddedWorldBookId: UUID? = nil,
+        isEmbeddedWorldBookEnabled: Bool = true,
         firstMes: String = "",
         alternateGreetings: [String] = [],
         mesExample: String = "",
@@ -94,6 +101,7 @@ struct Character: Codable, Identifiable, Equatable {
         self.systemPrompt = systemPrompt
         self.worldBookId = worldBookId
         self.embeddedWorldBookId = embeddedWorldBookId
+        self.isEmbeddedWorldBookEnabled = isEmbeddedWorldBookEnabled
         self.firstMes = firstMes
         self.alternateGreetings = alternateGreetings
         self.mesExample = mesExample
@@ -114,7 +122,7 @@ struct Character: Codable, Identifiable, Equatable {
     // MARK: - Codable：旧角色卡没有这些字段时全部 decodeIfPresent 给默认值。
     private enum CodingKeys: String, CodingKey {
         case id, name, avatarData, description, personality, scenario, systemPrompt, worldBookId
-        case embeddedWorldBookId
+        case embeddedWorldBookId, isEmbeddedWorldBookEnabled
         case firstMes = "first_mes"
         case alternateGreetings = "alternate_greetings"
         case mesExample = "mes_example"
@@ -142,6 +150,9 @@ struct Character: Codable, Identifiable, Equatable {
         self.systemPrompt = (try? c.decode(String.self, forKey: .systemPrompt)) ?? ""
         self.worldBookId = try? c.decodeIfPresent(UUID.self, forKey: .worldBookId)
         self.embeddedWorldBookId = try? c.decodeIfPresent(UUID.self, forKey: .embeddedWorldBookId)
+        // 旧数据无此字段 → 默认 true（保持「内嵌世界书默认启用」的行为，避免老用户升级突变）。
+        self.isEmbeddedWorldBookEnabled =
+            (try? c.decodeIfPresent(Bool.self, forKey: .isEmbeddedWorldBookEnabled)) ?? true
         self.firstMes = (try? c.decode(String.self, forKey: .firstMes)) ?? ""
         self.alternateGreetings = (try? c.decode([String].self, forKey: .alternateGreetings)) ?? []
         self.mesExample = (try? c.decode(String.self, forKey: .mesExample)) ?? ""

@@ -44,7 +44,9 @@ final class WorldBookStore: ObservableObject {
         }
         // V3 内嵌 character_book：紧跟在 manual 绑定之前；embedded 书与 manual 绑定同时存在时，
         // manual 绑定靠后注入以让用户 override 优先级；两者 ID 不同时独立加入。
-        if let char = character, let id = char.embeddedWorldBookId,
+        // `isEmbeddedWorldBookEnabled == false` → 该角色本次聊天不注入（per-character 开关）。
+        if let char = character, char.isEmbeddedWorldBookEnabled,
+           let id = char.embeddedWorldBookId,
            let book = books.first(where: { $0.id == id }),
            seen.insert(book.id).inserted {
             result.append(book)
