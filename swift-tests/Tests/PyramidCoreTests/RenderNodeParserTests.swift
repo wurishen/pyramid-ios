@@ -59,7 +59,7 @@ final class RenderNodeParserTests: XCTestCase {
         let tree = RenderNodeParser.parse(input)
         XCTAssertEqual(tree.nodes.count, 3)
         XCTAssertEqual(tree.nodes[0], .status(hp: 80, affection: 65))
-        if case let .text(s) = tree.nodes[1] { XCTAssertTrue(s.contains("mid")) } else { XCTFail() }
+        if case let .text(s) = tree.nodes[1] { XCTAssertTrue(s.contains("mid")) } else { XCTFail("node 1 应为 .text") }
         XCTAssertEqual(tree.nodes[2], .status(hp: 50, affection: 30))
     }
 
@@ -179,8 +179,8 @@ final class RenderNodeParserTests: XCTestCase {
     func test19_renderNodeEquatable() {
         XCTAssertEqual(RenderNode.text("a"), RenderNode.text("a"))
         XCTAssertNotEqual(RenderNode.text("a"), RenderNode.text("b"))
-        XCTAssertEqual(.status(hp: 1, affection: 2), .status(hp: 1, affection: 2))
-        XCTAssertNotEqual(.status(hp: 1, affection: 2), .status(hp: 3, affection: 4))
+        XCTAssertEqual(RenderNode.status(hp: 1, affection: 2), RenderNode.status(hp: 1, affection: 2))
+        XCTAssertNotEqual(RenderNode.status(hp: 1, affection: 2), RenderNode.status(hp: 3, affection: 4))
     }
 
     // MARK: - 端到端：RenderEngine 集成
