@@ -42,10 +42,16 @@ enum ImportSupport {
         throw CharacterImportError.invalidData
     }
 
-    /// ST v1 字段在根层；ST v2 (chara_card_v2) 字段在 `data` 子对象。
+    /// ST v1 字段在根层；ST v2 (chara_card_v2) 与 V3 (chara_card_v3) 字段在 `data` 子对象。
     /// 映射：name/description/personality/scenario/system_prompt/first_mes/alternate_greetings/
     ///      mes_example/creator_notes/post_history_instructions/tags/creator/character_version。
     /// 同时从 `data.extensions.regex_scripts` 读出 ST 角色内嵌的 Regex Script（保留原字段）。
+    ///
+    /// Phase 1（P1 数据保真层）：另外把以下 V3 字段整块写入 raw 通道，保证未知子结构零丢失：
+    /// - `data.extensions`（除 `regex_scripts` 已单独消费） → `extensionsRaw`
+    /// - `data.extensions.tavern_helper` → `tavernHelperRaw`（冗余存于 extensionsRaw）
+    /// - `data.character_book` → `characterBookRaw`
+    ///
     /// `internal`（非 private）以便 `@testable import PyramidCore` 的 SPM 测试访问。
     static func parseSillyTavernCard(_ json: [String: Any]) -> Character {
         let root = (json["data"] as? [String: Any]) ?? json
@@ -72,6 +78,9 @@ enum ImportSupport {
         if let scripts = parseExtensionsRegexScripts(root: root) {
             character.extensionsRegexScripts = scripts
         }
+        // P1 数据保真：把 V3 未知子结构整块写入 raw 通道。
+        // 失败 / 缺失 → 字段留 nil（与 typed `extensionsRegexScripts` 行为一致：不阻塞入库）。
+        applyRawPassthrough(root: root, into: &character)
         return character
     }
 
@@ -84,6 +93,29 @@ enum ImportSupport {
         if raw is NSNull { return nil }
         guard let data = try? JSONSerialization.data(withJSONObject: raw, options: []) else { return nil }
         return try? JSONDecoder().decode([SillyTavernRegexScript].self, from: data)
+    }
+
+    /// P1 V3 透传写入：extensions 整块（剥掉 regex_scripts 避免与 typed 字段重复）、
+    /// tavern_helper 便捷指针、character_book 整块。
+    /// 不抛错；解析失败一律留 nil，绝不影响已有字段。
+    /// **类型守门**：`character_book` / `extensions` 只接受 dict 类型 —— 数组 / 字符串
+    /// 等畸形输入不写入 raw，避免下游"以为有数据"误用。
+    private static func applyRawPassthrough(root: [String: Any], into character: inout Character) {
+        // 1) extensionsRaw = data.extensions 减去 regex_scripts；空字典算"无扩展"
+        if var extensions = root["extensions"] as? [String: Any] {
+            extensions.removeValue(forKey: "regex_scripts")
+            if extensions.isEmpty {
+                character.extensionsRaw = nil
+            } else {
+                character.extensionsRaw = JSONValue.from(any: extensions)
+            }
+            // 2) tavernHelperRaw = data.extensions.tavern_helper 便捷指针（任何 JSONValue 类型都收）
+            character.tavernHelperRaw = JSONValue.from(any: extensions["tavern_helper"])
+        }
+        // 3) characterBookRaw = data.character_book 整块；仅接受 dict
+        if let book = root["character_book"] as? [String: Any] {
+            character.characterBookRaw = JSONValue.from(any: book)
+        }
     }
 
     /// SillyTavern 角色卡常以 PNG 分发，角色数据存在 tEXt chunk 的 `chara` 关键字中。

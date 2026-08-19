@@ -30,6 +30,7 @@ let package = Package(
                 "MessageRendererChainTests.swift",
                 "RenderEngineTests.swift",
                 "RenderNodeParserTests.swift",
+                "CharacterV3ImportTests.swift",
             ]
         ),
     ]
