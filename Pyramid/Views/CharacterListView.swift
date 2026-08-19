@@ -85,6 +85,10 @@ struct CharacterListView: View {
     private func deleteCharacters(at offsets: IndexSet) {
         let ids = offsets.map { store.characters[$0].id }
         for id in ids {
+            // Phase 2：先清掉该角色自动构建的 V3 内嵌世界书（若存在且非最后一本）。
+            if let ch = store.character(for: id), let bookID = ch.embeddedWorldBookId {
+                worldBook.deleteBook(bookID)
+            }
             store.delete(id)
             // 同步清掉该角色内嵌 ST Regex Script 自动转出的 DisplayRegex。
             displayRegexes.removeCharacterScopedScripts(characterId: id)
@@ -103,7 +107,12 @@ struct CharacterListView: View {
                 do {
                     let data = try ImportSupport.readImportedData(from: url)
                     let characters = try ImportSupport.parseCharacters(from: data)
-                    for character in characters {
+                    for var character in characters {
+                        // Phase 2：V3 内嵌 `character_book` → 自动建世界书并绑定。
+                        // 二次导入同一角色按 `externalId == uid` 合并，不重复创建。
+                        if let id = worldBook.adoptEmbeddedWorldBook(for: character) {
+                            character.embeddedWorldBookId = id
+                        }
                         // 自动发现 `character.extensionsRegexScripts`（ST 角色卡内嵌的
                         // `data.extensions.regex_scripts`）→ 转成 DisplayRegex → 入库。
                         // **同一会话自动生效**：RenderEngine.Context.allDisplayRegexes 直接

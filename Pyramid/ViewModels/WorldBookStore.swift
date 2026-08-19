@@ -42,6 +42,13 @@ final class WorldBookStore: ObservableObject {
            seen.insert(book.id).inserted {
             result.append(book)
         }
+        // V3 内嵌 character_book：紧跟在 manual 绑定之前；embedded 书与 manual 绑定同时存在时，
+        // manual 绑定靠后注入以让用户 override 优先级；两者 ID 不同时独立加入。
+        if let char = character, let id = char.embeddedWorldBookId,
+           let book = books.first(where: { $0.id == id }),
+           seen.insert(book.id).inserted {
+            result.append(book)
+        }
         if let session {
             for id in session.extraWorldBookIds {
                 if let book = books.first(where: { $0.id == id }),
@@ -183,6 +190,63 @@ final class WorldBookStore: ObservableObject {
         books.append(book)
         save()
         return book
+    }
+
+    /// 从 `Character.characterBookRaw` 构建 V3 内嵌世界书，自动入库。
+    /// 行为：
+    ///  - `characterBookRaw` nil 或非 `.object` → no-op，返回 nil。
+    ///  - 优先复用 `character.embeddedWorldBookId` 对应的现有书；nil 则
+    ///    `createBook(title:isGloballyEnabled:false)` 新建（embedded 永不全局）。
+    ///  - 书名：`raw["name"]`（String）→ 否则 `"\(character.name) 内嵌世界书"`。
+    ///  - entries：接受 array / dict-of-int-keys（ST 两种都有）→ 逐个
+    ///    `parseSillyTavernEntry`（已扩 V3 字段）。
+    ///  - 合并策略：按 `externalId == uid` 匹配替换旧条目；否则追加。
+    ///  - 幂等：同一角色二次导入复用同一本书，不重复创建。
+    /// 返回书的 UUID；调用方写入 `character.embeddedWorldBookId`。
+    @discardableResult
+    func adoptEmbeddedWorldBook(for character: Character) -> UUID? {
+        guard case .object(let raw) = character.characterBookRaw else { return nil }
+
+        // 1) 解析条目（array / dict-of-int-keys 两种形态）
+        let entryDicts: [[String: Any]]
+        if let arr = raw["entries"] as? [Any] {
+            entryDicts = arr.compactMap { $0 as? [String: Any] }
+        } else if let dict = raw["entries"] as? [String: Any] {
+            // ST legacy：数字键字典，按 key 排序保持稳定顺序
+            entryDicts = dict.keys.sorted { (a, b) in
+                (Int(a) ?? 0) < (Int(b) ?? 0)
+            }.compactMap { dict[$0] as? [String: Any] }
+        } else {
+            entryDicts = []
+        }
+        let parsed = entryDicts.map { Self.parseSillyTavernEntry($0) }
+
+        // 2) 书名
+        let rawName = (raw["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let bookTitle = (rawName?.isEmpty == false ? rawName! : "\(character.name) 内嵌世界书")
+
+        // 3) 复用旧书 or 新建
+        let bookID: UUID
+        if let existingID = character.embeddedWorldBookId,
+           let index = books.firstIndex(where: { $0.id == existingID }) {
+            bookID = existingID
+            // 更新标题（命名变化时跟随）
+            books[index].title = bookTitle
+            // 按 uid 合并 entries：匹配替换，否则追加
+            for entry in parsed {
+                if let uid = entry.externalId,
+                   let matchIndex = books[index].entries.firstIndex(where: { $0.externalId == uid }) {
+                    books[index].entries[matchIndex] = entry
+                } else {
+                    books[index].entries.append(entry)
+                }
+            }
+            save()
+        } else {
+            let newBook = createBook(title: bookTitle, entries: parsed, isGloballyEnabled: false)
+            bookID = newBook.id
+        }
+        return bookID
     }
 
     func setGloballyEnabled(_ enabled: Bool, for bookID: UUID) {
