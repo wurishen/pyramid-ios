@@ -4,8 +4,10 @@ import Foundation
 ///
 /// 支持的块（解析顺序：先 P3 新增，再 P1 的 `<status>`）：
 /// 1. `<StatusPlaceHolderImpl/>` —— `.statusPlaceholder(snapshot)`，snapshot 来自 VariableStore。
-/// 2. `<<UpdateVariable>>[…JSON Patch…]<</UpdateVariable>>` —— 应用 patch 写入 VariableStore，
-///    然后输出 `.variableUpdate(summary)`；解析失败降级为 `.text(整段含标签)`。
+/// 2. `<UpdateVariable>…</UpdateVariable>`（canonical 拼写：单 `<`，酒馆 / MVU 源码一致）
+///    —— 应用 patch 写入 VariableStore，然后输出 `.variableUpdate(summary)`；
+///    解析失败降级为 `.text(整段含标签)`。`<<UpdateVariable>>…<</UpdateVariable>>` 是历史遗留拼写，
+///    作为 fallback 兼容旧数据（参见 `docs/ST_SOURCE_CONCLUSIONS.md` / `docs/ST_OPEN_QUESTIONS.md` 附录）。
 /// 3. `<status>...</status>` —— `.status(hp:affection:)`，与 P1 同。
 ///
 /// **容错策略**（与 P1 同：「不能导致整条消息消失」）：
@@ -83,8 +85,12 @@ enum RenderNodeParser {
         applyPatches: ([JSONPatchOperation]) throws -> Int
     ) -> RenderTree {
         let placeholderPattern = "(?is)<StatusPlaceHolderImpl\\s*/?>"
-        // 闭合标签必须把尾部 `>>` 一并吃掉，避免外层把 `>` 切成游离 .text 节点。
-        let updatePattern = "(?is)<<UpdateVariable[^>]*>>[\\s\\S]*?<</UpdateVariable>>"
+        // canonical：单 `<UpdateVariable>`（酒馆 / MVU 源码一致）；
+        // fallback：双 `<<UpdateVariable>>` 是早期 Pyramid 代码遗留的拼写，兼容旧数据。
+        // 闭合标签同样两种都吃，避免外层把 `>` 切成游离 .text 节点。
+        let updatePattern =
+            "(?is)<UpdateVariable\\b[^>]*>[\\s\\S]*?</UpdateVariable>" +
+            "|<<UpdateVariable[^>]*>>[\\s\\S]*?<</UpdateVariable>>"
 
         guard let placeholderRegex = try? NSRegularExpression(pattern: placeholderPattern),
               let updateRegex = try? NSRegularExpression(pattern: updatePattern) else {
@@ -217,7 +223,8 @@ enum RenderNodeParser {
 
     // MARK: - UpdateVariable
 
-    /// `<<UpdateVariable>>[…JSON…]<</UpdateVariable>>` —— 解析 JSON Patch → 写 VariableStore → 摘要节点。
+    /// `<UpdateVariable>…</UpdateVariable>` —— 解析 JSON Patch → 写 VariableStore → 摘要节点。
+    /// 同时兼容历史遗留的 `<<UpdateVariable>>…<</UpdateVariable>>` 双尖括号拼写。
     /// 解析失败（JSON 畸形 / patch 全失败）→ 降级为 `.text(整段含标签)`，不丢内容。
     private static func parseUpdateVariableBlock(
         _ raw: String,
@@ -243,11 +250,22 @@ enum RenderNodeParser {
     }
 
     private static func stripUpdateVariableBody(_ raw: String) -> String? {
-        // 同上：闭合标签吃到底，避免误把尾部 `>>` 算进 group 1。
-        let pattern = "(?is)<<UpdateVariable[^>]*>>([\\s\\S]*?)<</UpdateVariable>>"
+        // canonical（单 `<`，group 1 是 body）；legacy 双 `<` 兜底，body 落在 group 2。
+        let pattern =
+            "(?is)<UpdateVariable\\b[^>]*>([\\s\\S]*?)</UpdateVariable>" +
+            "|<<UpdateVariable[^>]*>>([\\s\\S]*?)<</UpdateVariable>>"
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
         let ns = raw as NSString
         guard let m = regex.firstMatch(in: raw, range: NSRange(location: 0, length: ns.length)) else { return nil }
-        return ns.substring(with: m.range(at: 1))
+        // 命中 canonical → group 1；命中 legacy → group 2；group(0) 总非 -1，取实际非空的那一个。
+        let g1 = m.range(at: 1)
+        let g2 = m.range(at: 2)
+        if g1.location != NSNotFound {
+            return ns.substring(with: g1)
+        }
+        if g2.location != NSNotFound {
+            return ns.substring(with: g2)
+        }
+        return nil
     }
 }

@@ -36,7 +36,7 @@ let package = Package(
                 "DepthPromptInjectionTests.swift",
                 "EmbeddedWorldBookToggleTests.swift",
                 "JSONPatchTests.swift",
-                "NativeTranspileFixtureTests.swift",
+                "P3TranspileProtocolTests.swift",
             ]
         ),
     ]

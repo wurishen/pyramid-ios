@@ -12,8 +12,9 @@ import Foundation
 /// - `.status(hp:affection:)`：酒馆式角色状态面板，由 StatusView 渲染。
 /// - `.statusPlaceholder(snapshot)`：P3 native transpile —— `<StatusPlaceHolderImpl/>` 节点，
 ///   数据来自 VariableStore；UI 列所有变量，空时显示「状态（等待变量）」。
-/// - `.variableUpdate(summary)`：P3 native transpile —— `<<UpdateVariable>>[…JSON Patch…]<</UpdateVariable>>`
-///   块解析后写入 VariableStore 后产出的可折叠摘要节点。
+/// - `.variableUpdate(summary)`：P3 native transpile —— `<UpdateVariable>…</UpdateVariable>`
+///   （canonical 单 `<`）块解析后写入 VariableStore 后产出的可折叠摘要节点；旧数据里
+///   `<<UpdateVariable>>…<</UpdateVariable>>` 双尖括号拼写由 `RenderNodeParser` 兼容处理。
 enum RenderNode: Equatable, Sendable {
     /// 普通文本，可能含 Markdown；具体渲染由 SwiftUI 视图层决定。
     case text(String)

@@ -204,7 +204,7 @@ struct MessageCard: View {
             // snapshot 空 → 显示「状态（等待变量）」，与 fixture ios_render_boundary 对齐。
             StatusPlaceholderView(snapshot: snapshot, scale: scale)
         case let .variableUpdate(summary):
-            // P3 native transpile：`<<UpdateVariable>>` 块 → 可折叠摘要。
+            // P3 native transpile：`<UpdateVariable>…</UpdateVariable>` 块 → 可折叠摘要。
             VariableUpdateView(summary: summary, scale: scale)
         }
     }
@@ -530,7 +530,7 @@ private struct StatusPlaceholderGroupView: View {
     }
 }
 
-/// `<<UpdateVariable>>` → 可折叠摘要节点：本次 apply 的 op 数 + 受影响的 path 列表。
+/// `<UpdateVariable>…</UpdateVariable>` → 可折叠摘要节点：本次 apply 的 op 数 + 受影响的 path 列表。
 struct VariableUpdateView: View {
     let summary: RenderNode.VariableUpdateSummary
     let scale: CGFloat

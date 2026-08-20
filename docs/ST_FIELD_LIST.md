@@ -308,7 +308,7 @@ native 端必须**完全跳过**这些皮肤脚本，**自己**从 `stat_data` �
 | `first_mes` | D | ✅ 渲染 |
 | `sample_messages[].content` | D | ✅ 渲染 |
 | `sample_messages[]` 含 `<StatusPlaceHolderImpl/>` | D | ✅ 跳过对应文本，转 `.statusPlaceholder` |
-| `sample_messages[]` 含 `<<UpdateVariable>>` | D | ✅ 剥 block，应用 JSON Patch，emit `.variableUpdate` |
+| `sample_messages[]` 含 `<UpdateVariable>…</UpdateVariable>`（canonical 单 `<`，旧数据双 `<` 兼容） | D | ✅ 剥 block，应用 JSON Patch，emit `.variableUpdate` |
 | `regex_scripts[i]` D 项 | D | ✅ 解析进 DisplayRegex |
 | `regex_scripts[i]` 含 `<script>` / `.load(` / `<details>` / `<style>` / `<object>` / `<iframe` 跳过规则 | 触发跳过 | ✅ `MessageRendererCore.isHtmlBeautify` 过滤 |
 | `regex_scripts[i]` `promptOnly == true` | D | ✅ 显示管线过滤 |

@@ -903,7 +903,7 @@ iOS 和 Android 双端应实现**相同的核心功能集**，包括：
 1. `DisplayRegex.promptOnly == true` → 不进显示链（仅 outgoing prompt 阶段剥离）。
 2. `MessageRendererCore.isHtmlBeautify(replacement)` → `replacement` 含 `<script` / `.load(` / `<object` / `<iframe` / `<details` / `<style` / `<div` 任一 → 不进显示链。
 
-跳过规则的 fixture（`swift-tests/Fixtures/native_transpile_fixture.json`）覆盖 7 条酒馆正则（4 条 beautify 跳过、3 条 promptOnly），由 `NativeTranspileFixtureTests` 与 `JSONPatchTests` 在 Linux SPM 上端到端验证。
+跳过规则的协议层覆盖由 `swift-tests/Tests/PyramidCoreTests/P3TranspileProtocolTests.swift`（`HTML beautify` 跳过、`promptOnly` 过滤、`UpdateVariable` / `StatusPlaceHolderImpl` 块识别、`message.content` 永不被改写）配合 `JSONPatchTests.swift`（RFC 6902 词汇表、JSON Pointer 解析、`_` 前缀 skip）在 Linux SPM 上驱动；不含角色名 / 卡面路径 / 脚本名的卡味夹具已移除，详见 `swift-tests/Fixtures/README.md`。
 
 **硬边界**（与 §13 已知限制并列）：
 - `message.content` 原文永不被改写；`RenderNodeParser` 只读，复制 / 编辑 / 重新生成 / 发送 API 始终拿原文。
