@@ -584,9 +584,10 @@ private func loadFixture() throws -> NativeTranspileFixture {
 /// Fixture 的 sample_messages[*].content 是 JSON 字符串，作者在闭合标签前手写了
 /// 反斜杠（`<\\/UpdateVariable>>`），JSON 解码后变成实字符串 `<\/UpdateVariable>>`。
 /// 这只是 fixture JSON 转义层的偶发形态 —— **不改生产 Parser**，也不改 fixture 协议；
-/// 在喂给 RenderNodeParser 之前归一化 `\/` → `/`，让 `<</UpdateVariable>>` 命中。
+/// 在喂给 RenderNodeParser 之前归一化 `\/` → `</`，让 `<</UpdateVariable>>` 命中
+/// 生产 Parser 的闭合标签 pattern。
 private func normalizeForParser(_ s: String) -> String {
-    s.replacingOccurrences(of: "\\/", with: "/")
+    s.replacingOccurrences(of: "\\/", with: "</")
 }
 
 /// Fixture `init_stat_data` 的 key 是 JSON Pointer 形式（`/时间`、`/玩家/当前所在地`），
