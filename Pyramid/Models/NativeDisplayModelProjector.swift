@@ -65,7 +65,9 @@ enum NativeDisplayModelProjector {
     static func project(entries: [VariableEntry]) -> NativeDisplayModel {
         guard !entries.isEmpty else {
             return NativeDisplayModel(
-                blocks: [.text("[\(rootTitle) 等待变量]")]
+                version: 1,
+                blocks: [wrapRootGroup(blocks: [])],
+                residual: []
             )
         }
         let fields = entries

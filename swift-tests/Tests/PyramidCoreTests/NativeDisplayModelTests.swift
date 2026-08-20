@@ -206,28 +206,26 @@ final class NativeDisplayModelTests: XCTestCase {
     }
 
     /// depth > maxDepth → 整棵 subtree 落入 residual，**不丢原文**。
+    /// 构造方式：depth 4 的数组里嵌 object 元素 → 元素进 projectValue 时 depth=5 > maxDepth=4。
+    /// 文档依据：`ST_TO_NATIVE_MAPPING.md` §4.3 —— depth ≥ 5 residual。
     func testDepthBeyondMaxGoesToResidual() {
-        // 构造 depth 5：a/b/c/d/e 之外再嵌 f
-        let deeperTree: JSONValue = .object([
+        // 树：a/b/c/d = [obj{x:string "too deep"}]；d 是 array at depth 4，
+        // 元素 obj 又嵌入时进 depth 5 → residual。
+        let deepTree: JSONValue = .object([
             "a": .object([
                 "b": .object([
                     "c": .object([
-                        "d": .object([
-                            "e": .object([
-                                "f": .string("too deep")
-                            ])
+                        "d": .array([
+                            .object(["x": .string("too deep")])
                         ])
                     ])
                 ])
             ])
         ])
-        let model = NativeDisplayModelProjector.project(statData: deeperTree)
-        // 'a' 在 depth 1 进入 group；b/c/d 一直到 depth 4 (== maxDepth) 走 text；
-        // d 内部已经有 e，但 e 又嵌套 → 触发 depth 5+ residual。
-        // 验证：有 residual 出现且 reason 包含 "depth"；原文也保留。
+        let model = NativeDisplayModelProjector.project(statData: deepTree)
         XCTAssertFalse(model.residual.isEmpty, "深度 > 4 必须有 residual")
         let reasons = model.residual.compactMap(\.reason)
-        XCTAssertTrue(reasons.contains(where: { $0.contains("depth") }))
+        XCTAssertTrue(reasons.contains(where: { $0.contains("depth") }), "reason 必须说明 depth 触发")
         let rawTexts = model.residual.map(\.rawText)
         XCTAssertTrue(rawTexts.contains(where: { $0.contains("too deep") }), "原文必须保留")
     }
