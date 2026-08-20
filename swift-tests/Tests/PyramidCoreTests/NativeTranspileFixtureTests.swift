@@ -88,6 +88,99 @@ final class NativeTranspileFixtureTests: XCTestCase {
         XCTAssertEqual(ordered.map(\.name), ["safe"])
     }
 
+    // MARK: - 真机 bug 兜底：旧版存量数据缺 promptOnly 字段
+
+    /// 真机 bug 复现：用户用酒馆角色卡导入时，「对 AI 隐藏状态栏」规则（pattern 含
+    /// `<StatusPlaceHolderImpl\\s*/?>`、replacement 空串）在旧版本导入的存量
+    /// DisplayRegex JSON 里 `promptOnly` 字段缺失 → `decodeIfPresent ?? false` 兜底为
+    /// false → 命中显示链把 `<StatusPlaceHolderImpl/>` 替换成空串 → 开场白只剩 `.text("")`
+    /// 整张空白。
+    ///
+    /// 修复后：`MessageRendererCore.touchesNativeTranspile(pattern:)` 命中
+    /// `StatusPlaceHolderImpl` / `UpdateVariable` 的规则一律不进显示链 —— 不管
+    /// `promptOnly` 字段有没有。
+    func testLegacyDataMissingPromptOnlyStillFiltered() {
+        // 模拟「旧版本导入的存量 DisplayRegex」：promptOnly 字段缺失（default false）。
+        let legacyRule = DisplayRegex(
+            name: "对 AI 隐藏状态栏",
+            pattern: "<StatusPlaceHolderImpl\\s*/?>",
+            replacement: "",
+            enabled: true
+            // promptOnly 缺省 → false（这就是 bug 现场）
+        )
+        XCTAssertFalse(legacyRule.promptOnly, "构造时缺省值就是 false（还原 bug 现场）")
+        XCTAssertTrue(MessageRendererCore.touchesNativeTranspile(pattern: legacyRule.pattern),
+                      "pattern 命中 StatusPlaceHolderImpl 应当触发兜底过滤")
+
+        let ordered = MessageRendererCore.orderedRegexes(
+            presetDisplayRegexIds: [],
+            all: [legacyRule]
+        )
+        XCTAssertTrue(ordered.isEmpty,
+                      "旧版存量规则（无 promptOnly 字段）也必须不进显示链，绝不让它吃掉占位符")
+    }
+
+    /// 同上，针对 UpdateVariable 块的兜底。
+    func testLegacyDataTargetingUpdateVariableStillFiltered() {
+        let legacyRule = DisplayRegex(
+            name: "只发送最新3楼的变量更新",
+            pattern: "<<UpdateVariable[^>]*>>[\\s\\S]*?<\\/UpdateVariable>",
+            replacement: "",
+            enabled: true
+        )
+        let ordered = MessageRendererCore.orderedRegexes(
+            presetDisplayRegexIds: [],
+            all: [legacyRule]
+        )
+        XCTAssertTrue(ordered.isEmpty, "命中 UpdateVariable 的旧版规则也必须不进显示链")
+    }
+
+    /// 端到端回归：raw = "<StatusPlaceHolderImpl/>" + 旧版无 promptOnly 字段的「对 AI 隐藏状态栏」规则 →
+    /// cleaned 不为空 + Parser 仍能看到占位符 → 节点含 `.statusPlaceholder`。
+    ///
+    /// 验证 RenderEngine 整条链路：
+    ///   raw `<StatusPlaceHolderImpl/>` → MessageRendererCore.apply 不剥（规则被过滤）
+    ///   → RenderNodeParser 看到 `<StatusPlaceHolderImpl/>` → `.statusPlaceholder(snapshot)`
+    ///   → raw 原文不变。
+    func testFullPipelineWithLegacyPromptOnlyRegex() {
+        let legacyRule = DisplayRegex(
+            name: "对 AI 隐藏状态栏",
+            pattern: "<StatusPlaceHolderImpl\\s*/?>",
+            replacement: "",
+            enabled: true
+        )
+        // orderedRegexes 应当把这条过滤掉。
+        let ordered = MessageRendererCore.orderedRegexes(
+            presetDisplayRegexIds: [],
+            all: [legacyRule]
+        )
+        XCTAssertTrue(ordered.isEmpty)
+
+        // 即便 ordered 为空，apply 也只是 no-op —— 原文保留。
+        let raw = "<StatusPlaceHolderImpl/>"
+        let cleaned = MessageRendererCore.apply(
+            text: raw,
+            isAssistant: true,
+            presetDisplayRegexIds: [],
+            all: [legacyRule]
+        )
+        XCTAssertEqual(cleaned, raw, "显示链过滤掉规则后，cleaned == raw（不再被剥成空串）")
+
+        // 接下来 Parser 看到原始占位符 → 输出 .statusPlaceholder。
+        let store = SessionStore()
+        let tree = RenderNodeParser.parse(
+            cleaned,
+            snapshot: { store.snapshot() },
+            applyPatches: { ops in try store.apply(ops) }
+        )
+        XCTAssertEqual(tree.nodes.count, 1, "开场白仅占位符 → 单 .statusPlaceholder 节点")
+        guard case let .statusPlaceholder(snapshot) = tree.nodes[0] else {
+            XCTFail("节点 0 应是 .statusPlaceholder，实为 \(tree.nodes[0])")
+            return
+        }
+        XCTAssertEqual(snapshot, [], "未 seed 时 snapshot 为空 → 卡片显示「状态（等待变量）」")
+    }
+
     // MARK: - 样例 1：StatusPlaceHolderImpl
 
     /// fixture sample 1：原文 `<StatusPlaceHolderImpl/>你好，欢迎回来。` →

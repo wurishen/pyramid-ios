@@ -30,8 +30,44 @@ enum MessageRendererCore {
         htmlBeautifyTokens.contains { replacement.contains($0) }
     }
 
+    /// 真机 bug 兜底：pattern 命中 Pyramid 原生 transpile token 的规则一律不进显示链。
+    ///
+    /// 背景：酒馆的 `promptOnly` 字段（ST `prompt_only`）在 Pyramid 路径上被解析为
+    /// `DisplayRegex.promptOnly`。`SillyTavernScriptImporter.convert` 已经在导入时
+    /// 把 `promptOnly=true` 的脚本过滤掉。但**旧版本导入的存量 DisplayRegex**（UserDefaults
+    /// 里的 JSON 没有 `promptOnly` 字段，`decodeIfPresent ?? false` 兜底为 false）
+    /// 会绕过这一关，直接命中显示链、把 `<StatusPlaceHolderImpl/>` 替换成空串，
+    /// 导致开场白卡片只剩 `.text("")` 整张空白。
+    ///
+    /// 兜底策略：只要规则的 pattern 命中以下任意原生 token，都视为「该规则只想用于 prompt 构造」
+    /// —— 绝不让它在显示链执行。这样不管 `promptOnly` 字段有没有，规则都不会吃占位符。
+    ///
+    /// 命中判定用 NSRegularExpression 在 pattern 上做子串搜索（不要求 pattern 整体编译，
+    /// 失败也按命中算 —— pattern 失败本就该被过滤）。
+    static let nativeTranspileAnchors: [String] = [
+        "StatusPlaceHolderImpl",
+        "UpdateVariable"
+    ]
+
+    /// 给一条 pattern 字符串判定是否触碰原生 transpile token（用于显示链兜底过滤）。
+    static func touchesNativeTranspile(pattern: String) -> Bool {
+        for anchor in nativeTranspileAnchors {
+            // 不试图编译 pattern（pattern 可能是合法的也可能是无效的 —— 任何情况下
+            // 触碰 anchor 的规则都该被显示链拒掉）。
+            guard let regex = try? NSRegularExpression(pattern: NSRegularExpression.escapedPattern(for: anchor)) else {
+                continue
+            }
+            let range = NSRange(pattern.startIndex..., in: pattern)
+            if regex.firstMatch(in: pattern, options: [], range: range) != nil {
+                return true
+            }
+        }
+        return false
+    }
+
     /// 把 `[DisplayRegex]` 按预设优先级排序 + 去重 + 过滤，返回最终执行序列。
-    /// 过滤条件：`enabled` 且非 `promptOnly` 且 `!isHtmlBeautify(replacement)`。
+    /// 过滤条件：`enabled` 且非 `promptOnly` 且 `!isHtmlBeautify(replacement)` 且
+    /// `!touchesNativeTranspile(pattern)`（兜底防 promptOnly 规则误伤显示链）。
     static func orderedRegexes(
         presetDisplayRegexIds: [UUID],
         all: [DisplayRegex]
@@ -50,10 +86,15 @@ enum MessageRendererCore {
         return ordered
     }
 
-    /// 显示链过滤门：enabled + !promptOnly + replacement 不含 HTML beautify token。
+    /// 显示链过滤门：
+    /// 1. enabled + !promptOnly（promptOnly 规则只在 API 构造时执行）
+    /// 2. replacement 不含 HTML beautify token（防远程 JS / iframe 注入）
+    /// 3. pattern 不触碰原生 transpile token（兜底：旧版导入数据缺 promptOnly 字段也安全）
     private static func shouldRunOnDisplay(_ r: DisplayRegex) -> Bool {
         guard r.enabled, !r.promptOnly else { return false }
-        return !isHtmlBeautify(replacement: r.replacement)
+        guard !isHtmlBeautify(replacement: r.replacement) else { return false }
+        guard !touchesNativeTranspile(pattern: r.pattern) else { return false }
+        return true
     }
 
     /// 对一段文本应用「预设过滤后的 DisplayRegex 序列」。非助手消息直接返回原文。
