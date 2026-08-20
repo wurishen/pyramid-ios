@@ -51,21 +51,27 @@ jobs:
         run: swiftlint lint --quiet
 
       - name: SillyTavern compat layer tests (Swift Package)
+        # 调试期：不带 set -e，确保 swift test 失败时 summary 仍能写出真实错误。
+        # check-run output API 不需要 admin 即可读取，原始 log API 要 admin（拿不到）。
         run: |
-          set -euxo pipefail
           cd swift-tests
-          # 把 swift test 的真实输出 dump 到 step summary（check-run API 能拿到，
-          # 不需要 admin 权限即可读 raw log）。
           LOG=$(mktemp)
-          if swift test 2>&1 | tee "$LOG"; then
-            echo "## swift test ✅" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "## swift test ❌ — last 200 lines:" >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            tail -200 "$LOG" >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
+          swift test > "$LOG" 2>&1
+          RC=$?
+          {
+            echo "## swift test (exit $RC)"
+            echo
+            echo '```'
+            head -200 "$LOG"
+            if [ "$(wc -l < "$LOG")" -gt 200 ]; then
+              echo
+              echo "... ($(wc -l < "$LOG") total lines, truncated) ..."
+              echo
+              tail -50 "$LOG"
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $RC
 
   build:
     runs-on: macos-14
