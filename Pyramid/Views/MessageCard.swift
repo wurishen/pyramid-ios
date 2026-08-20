@@ -452,82 +452,97 @@ struct StatusPlaceholderView: View {
 
     // MARK: - 原语分派
 
-    @ViewBuilder
-    private func renderBlock(_ block: DisplayBlock) -> some View {
+    /// 用 `AnyView` 而非 `some View`，因为递归分派（group / section 内再调用
+    /// `renderBlock`）会让 Swift 类型检查器把 opaque type 推成 `_ConditionalContent<...>` 自指，
+    /// 报 "defines the opaque type in terms of itself" 编译错。
+    /// 这是 SwiftUI 处理"按枚举值返回任意一种视图"的标准做法 —— 视觉无差别。
+    private func renderBlock(_ block: DisplayBlock) -> AnyView {
         switch block {
         case let .text(s):
-            Text(s)
-                .font(.system(size: 13 * scale))
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
+            return AnyView(
+                Text(s)
+                    .font(.system(size: 13 * scale))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            )
         case let .number(value, label):
-            HStack(alignment: .firstTextBaseline, spacing: 8 * scale) {
-                if let label {
+            return AnyView(
+                HStack(alignment: .firstTextBaseline, spacing: 8 * scale) {
+                    if let label {
+                        Text(label)
+                            .font(.system(size: 12 * scale, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 8 * scale)
+                    Text(format(value))
+                        .font(.system(size: 14 * scale, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Color.accentColor)
+                        .lineLimit(1)
+                }
+            )
+        case let .bar(label, value, max, kind):
+            return AnyView(barRow(label: label, value: value, max: max, kind: kind))
+        case let .tag(label, value):
+            return AnyView(
+                HStack(spacing: 4 * scale) {
+                    Text(label)
+                        .font(.system(size: 12 * scale, weight: .medium))
+                        .foregroundStyle(.primary)
+                    if let value {
+                        Text(value)
+                            .font(.system(size: 11 * scale, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, 8 * scale)
+                .padding(.vertical, 3 * scale)
+                .background(Color(.systemGray5), in: Capsule())
+                .overlay(Capsule().stroke(Color(.systemGray3), lineWidth: 0.5))
+            )
+        case let .field(label, value):
+            return AnyView(
+                HStack(alignment: .firstTextBaseline, spacing: 8 * scale) {
                     Text(label)
                         .font(.system(size: 12 * scale, design: .monospaced))
                         .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 8 * scale)
-                Text(format(value))
-                    .font(.system(size: 14 * scale, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(Color.accentColor)
-                    .lineLimit(1)
-            }
-        case let .bar(label, value, max, kind):
-            barRow(label: label, value: value, max: max, kind: kind)
-        case let .tag(label, value):
-            HStack(spacing: 4 * scale) {
-                Text(label)
-                    .font(.system(size: 12 * scale, weight: .medium))
-                    .foregroundStyle(.primary)
-                if let value {
+                    Spacer(minLength: 8 * scale)
                     Text(value)
-                        .font(.system(size: 11 * scale, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 13 * scale))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.trailing)
                 }
-            }
-            .padding(.horizontal, 8 * scale)
-            .padding(.vertical, 3 * scale)
-            .background(Color(.systemGray5), in: Capsule())
-            .overlay(Capsule().stroke(Color(.systemGray3), lineWidth: 0.5))
-        case let .field(label, value):
-            HStack(alignment: .firstTextBaseline, spacing: 8 * scale) {
-                Text(label)
-                    .font(.system(size: 12 * scale, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 8 * scale)
-                Text(value)
-                    .font(.system(size: 13 * scale))
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.trailing)
-            }
+            )
         case let .section(label, content):
-            VStack(alignment: .leading, spacing: 4 * scale) {
-                Text(label)
-                    .font(.system(size: 11 * scale, weight: .medium))
-                    .foregroundStyle(.tertiary)
-                    .padding(.bottom, 1 * scale)
-                HStack(alignment: .center, spacing: 6 * scale) {
-                    ForEach(Array(content.enumerated()), id: \.offset) { _, child in
-                        renderBlock(child)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        case let .group(title, children):
-            VStack(alignment: .leading, spacing: 4 * scale) {
-                Text(title)
-                    .font(.system(size: 11 * scale, weight: .medium))
-                    .foregroundStyle(.tertiary)
-                    .padding(.bottom, 1 * scale)
+            return AnyView(
                 VStack(alignment: .leading, spacing: 4 * scale) {
-                    ForEach(Array(children.enumerated()), id: \.offset) { _, child in
-                        renderBlock(child)
+                    Text(label)
+                        .font(.system(size: 11 * scale, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                        .padding(.bottom, 1 * scale)
+                    HStack(alignment: .center, spacing: 6 * scale) {
+                        ForEach(Array(content.enumerated()), id: \.offset) { _, child in
+                            renderBlock(child)
+                        }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.leading, 6 * scale)
-            }
+            )
+        case let .group(title, children):
+            return AnyView(
+                VStack(alignment: .leading, spacing: 4 * scale) {
+                    Text(title)
+                        .font(.system(size: 11 * scale, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                        .padding(.bottom, 1 * scale)
+                    VStack(alignment: .leading, spacing: 4 * scale) {
+                        ForEach(Array(children.enumerated()), id: \.offset) { _, child in
+                            renderBlock(child)
+                        }
+                    }
+                    .padding(.leading, 6 * scale)
+                }
+            )
         }
     }
 
