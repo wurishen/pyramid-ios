@@ -305,6 +305,8 @@ struct ChatView: View {
                             preset: currentPreset,
                             settings: settings,
                             displayRegexes: displayRegexes.regexes,
+                            variableStore: store.variableStore,
+                            sessionId: viewModel.currentSessionID,
                             onCopy: { UIPasteboard.general.string = message.content },
                             onEdit: { editingMessage = message },
                             onRegenerate: { regenerateMessage = message },

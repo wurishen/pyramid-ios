@@ -25,6 +25,10 @@ struct MessageCard: View {
     var preset: Preset? = nil
     var settings: AppSettings
     var displayRegexes: [DisplayRegex] = []
+    /// P3 native transpile：会话级 MVU 变量存储 + sessionId，二者必须同时给出。
+    /// nil 表示纯渲染（fixture / 单测场景）。
+    var variableStore: VariableStore? = nil
+    var sessionId: UUID? = nil
     var onCopy: () -> Void = {}
     var onEdit: () -> Void = {}
     var onRegenerate: () -> Void = {}
@@ -55,7 +59,9 @@ struct MessageCard: View {
             allDisplayRegexes: displayRegexes,
             hideTagStripEnabled: settings.hideTagStripEnabled,
             hideTags: settings.hideTags,
-            markdownEnabled: preset?.enableMarkdown ?? settings.enableMarkdown
+            markdownEnabled: preset?.enableMarkdown ?? settings.enableMarkdown,
+            variableStore: variableStore,
+            sessionId: sessionId
         )
         let result = RenderEngine.render(raw: raw, context: context)
 
@@ -193,6 +199,13 @@ struct MessageCard: View {
             // 单独 .scaleEffect 而不是改内部字面量，让面板整体放大。
             StatusView(hp: hp, affection: affection)
                 .scaleEffect(scale, anchor: .topLeading)
+        case let .statusPlaceholder(snapshot):
+            // P3 native transpile：`<StatusPlaceHolderImpl/>` → 列当前会话所有变量。
+            // snapshot 空 → 显示「状态（等待变量）」，与 fixture ios_render_boundary 对齐。
+            StatusPlaceholderView(snapshot: snapshot, scale: scale)
+        case let .variableUpdate(summary):
+            // P3 native transpile：`<<UpdateVariable>>` 块 → 可折叠摘要。
+            VariableUpdateView(summary: summary, scale: scale)
         }
     }
 
@@ -373,4 +386,84 @@ struct MessageCard: View {
         displayRegexes: []
     )
     .padding()
+}
+
+// MARK: - P3 native transpile 节点视图
+
+/// `<StatusPlaceHolderImpl/>` → 状态占位面板：列出会话所有变量；空时显示「状态（等待变量）」。
+struct StatusPlaceholderView: View {
+    let snapshot: [VariableEntry]
+    let scale: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6 * scale) {
+            HStack(spacing: 6 * scale) {
+                Image(systemName: "person.text.rectangle")
+                    .font(.system(size: 13 * scale))
+                Text("状态")
+                    .font(.system(size: 13 * scale, weight: .semibold))
+            }
+            .foregroundStyle(.secondary)
+
+            if snapshot.isEmpty {
+                Text("状态（等待变量）")
+                    .font(.system(size: 13 * scale))
+                    .foregroundStyle(.tertiary)
+                    .padding(.vertical, 4 * scale)
+            } else {
+                ForEach(snapshot) { entry in
+                    HStack(alignment: .firstTextBaseline, spacing: 6 * scale) {
+                        Text(entry.path)
+                            .font(.system(size: 12 * scale, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                        Spacer(minLength: 8 * scale)
+                        Text(entry.displayValue)
+                            .font(.system(size: 13 * scale))
+                            .foregroundStyle(.primary)
+                    }
+                }
+            }
+        }
+        .padding(10 * scale)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10 * scale))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10 * scale)
+                .stroke(Color(.systemGray4), lineWidth: 0.5)
+        )
+    }
+}
+
+/// `<<UpdateVariable>>` → 可折叠摘要节点：本次 apply 的 op 数 + 受影响的 path 列表。
+struct VariableUpdateView: View {
+    let summary: RenderNode.VariableUpdateSummary
+    let scale: CGFloat
+    @State private var expanded = false
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $expanded) {
+            if summary.affectedPaths.isEmpty {
+                Text("无路径变更")
+                    .font(.system(size: 12 * scale))
+                    .foregroundStyle(.tertiary)
+                    .padding(.vertical, 2 * scale)
+            } else {
+                ForEach(Array(summary.affectedPaths.enumerated()), id: \.offset) { _, path in
+                    Text(path)
+                        .font(.system(size: 12 * scale, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } label: {
+            HStack(spacing: 6 * scale) {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 12 * scale))
+                Text("变量更新（\(summary.appliedCount) 条）")
+                    .font(.system(size: 12 * scale, weight: .medium))
+            }
+            .foregroundStyle(Color.accentColor)
+        }
+        .padding(8 * scale)
+        .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 8 * scale))
+    }
 }

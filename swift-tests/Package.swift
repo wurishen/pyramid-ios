@@ -35,6 +35,8 @@ let package = Package(
                 "CharacterExtensionsLiftTests.swift",
                 "DepthPromptInjectionTests.swift",
                 "EmbeddedWorldBookToggleTests.swift",
+                "JSONPatchTests.swift",
+                "NativeTranspileFixtureTests.swift",
             ]
         ),
     ]

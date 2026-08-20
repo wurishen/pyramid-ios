@@ -17,6 +17,10 @@ struct DisplayRegex: Codable, Identifiable, Equatable {
     var enabled: Bool
     /// 占位字段，固定为 `assistantDisplayPre`，写入时强制为该值；保留为后续扩展留口。
     var scope: Scope = .assistantDisplayPre
+    /// P3 native transpile：true = 仅 outgoing prompt 阶段生效（剥离酒馆思维链 / 状态栏等），
+    /// 不在 iOS 显示链执行（与 fixture「只发送最新3楼的变量更新」「仅格式思维链」「对 AI 隐藏状态栏」对齐）。
+    /// 旧数据无此字段 → decodeIfPresent false（不破坏历史行为）。
+    var promptOnly: Bool = false
     /// 来源角色 ID。非 nil = 由该角色卡内嵌的 SillyTavern Regex Script 自动转出；
     /// 删除该角色时 DisplayRegexStore 会同步清掉这些条目（生命周期绑定）。
     /// nil = 用户手动创建。
@@ -30,7 +34,8 @@ struct DisplayRegex: Codable, Identifiable, Equatable {
         replacement: String,
         enabled: Bool = true,
         scope: Scope = .assistantDisplayPre,
-        sourceCharacterId: UUID? = nil
+        sourceCharacterId: UUID? = nil,
+        promptOnly: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -39,6 +44,7 @@ struct DisplayRegex: Codable, Identifiable, Equatable {
         self.enabled = enabled
         self.scope = scope
         self.sourceCharacterId = sourceCharacterId
+        self.promptOnly = promptOnly
     }
 
     /// 用 NSRegularExpression 校验 pattern 是否能编译。UI 保存前调用以避免崩溃。
@@ -62,6 +68,7 @@ struct DisplayRegex: Codable, Identifiable, Equatable {
         let raw = (try? c.decodeIfPresent(String.self, forKey: .scope)) ?? Scope.assistantDisplayPre.rawValue
         scope = Scope(rawValue: raw) ?? .assistantDisplayPre
         sourceCharacterId = try? c.decodeIfPresent(UUID.self, forKey: .sourceCharacterId)
+        promptOnly = (try? c.decodeIfPresent(Bool.self, forKey: .promptOnly)) ?? false
     }
 }
 

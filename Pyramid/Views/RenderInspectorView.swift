@@ -173,6 +173,32 @@ struct RenderInspectorView: View {
             .padding(8)
             .background(Color(.systemGray6))
             .clipShape(RoundedRectangle(cornerRadius: 6))
+        case let .statusPlaceholder(snapshot):
+            VStack(alignment: .leading, spacing: 2) {
+                Text("[\(idx)] .statusPlaceholder (\(snapshot.count) 变量)").font(.caption.weight(.medium))
+                if snapshot.isEmpty {
+                    Text("(空 — 等待变量)").font(.caption).foregroundStyle(.tertiary)
+                } else {
+                    Text(snapshot.map { "\($0.path)=\($0.displayValue)" }.joined(separator: ", "))
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        case let .variableUpdate(summary):
+            VStack(alignment: .leading, spacing: 2) {
+                Text("[\(idx)] .variableUpdate (\(summary.appliedCount) 条)").font(.caption.weight(.medium))
+                Text(summary.affectedPaths.isEmpty ? "(无 path 变更)" : summary.affectedPaths.joined(separator: ", "))
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
         }
     }
 

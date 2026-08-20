@@ -16,7 +16,22 @@ import Foundation
 /// - 模式直接喂给 `NSRegularExpression`，inline flag group（如 `(?i)`）由
 ///   `SillyTavernFlagMapper` 在导入阶段注入；这里不做 flags 翻译。
 enum MessageRendererCore {
+    /// P3 native transpile：replacement 含以下任意 token → 不在 iOS 显示链执行。
+    /// 与 fixture `ios_display_skip_rule.skip_when_replacement_contains_any_of` 对齐：
+    /// 远程脚本 / `.load(` / `<object` / `<iframe` / `<details` / `<style` / `<div` 一律跳过。
+    /// 同时 `promptOnly == true` 的规则（酒馆 `prompt_only` 字段）也不走显示链 —— 它
+    /// 只在 outgoing prompt 阶段剥离（参见 ChatViewModel）。
+    static let htmlBeautifyTokens: [String] = [
+        "<script", ".load(", "<object", "<iframe", "<details", "<style", "<div"
+    ]
+
+    /// 给一条 replacement 字符串判定是否触发跳过规则。
+    static func isHtmlBeautify(replacement: String) -> Bool {
+        htmlBeautifyTokens.contains { replacement.contains($0) }
+    }
+
     /// 把 `[DisplayRegex]` 按预设优先级排序 + 去重 + 过滤，返回最终执行序列。
+    /// 过滤条件：`enabled` 且非 `promptOnly` 且 `!isHtmlBeautify(replacement)`。
     static func orderedRegexes(
         presetDisplayRegexIds: [UUID],
         all: [DisplayRegex]
@@ -25,14 +40,20 @@ enum MessageRendererCore {
         var ordered: [DisplayRegex] = []
         var seen = Set<UUID>()
         for id in presetDisplayRegexIds {
-            if let r = byID[id], r.enabled, !seen.contains(id) {
+            if let r = byID[id], shouldRunOnDisplay(r), !seen.contains(id) {
                 ordered.append(r); seen.insert(id)
             }
         }
-        for r in all where r.enabled && !seen.contains(r.id) {
+        for r in all where shouldRunOnDisplay(r) && !seen.contains(r.id) {
             ordered.append(r); seen.insert(r.id)
         }
         return ordered
+    }
+
+    /// 显示链过滤门：enabled + !promptOnly + replacement 不含 HTML beautify token。
+    private static func shouldRunOnDisplay(_ r: DisplayRegex) -> Bool {
+        guard r.enabled, !r.promptOnly else { return false }
+        return !isHtmlBeautify(replacement: r.replacement)
     }
 
     /// 对一段文本应用「预设过滤后的 DisplayRegex 序列」。非助手消息直接返回原文。

@@ -2,78 +2,189 @@ import Foundation
 
 /// 把 RenderEngine 处理后的 cleanedText 切成 RenderTree。
 ///
-/// 第一阶段只识别 `<status>...</status>` 块，解析其内部的 `HP: <整数>` 与
-/// `好感度: <整数>` 两行；其余文本保持为 `.text` 节点。
+/// 支持的块（解析顺序：先 P3 新增，再 P1 的 `<status>`）：
+/// 1. `<StatusPlaceHolderImpl/>` —— `.statusPlaceholder(snapshot)`，snapshot 来自 VariableStore。
+/// 2. `<<UpdateVariable>>[…JSON Patch…]<</UpdateVariable>>` —— 应用 patch 写入 VariableStore，
+///    然后输出 `.variableUpdate(summary)`；解析失败降级为 `.text(整段含标签)`。
+/// 3. `<status>...</status>` —— `.status(hp:affection:)`，与 P1 同。
 ///
-/// **容错策略**（必须满足"不能导致整条消息消失"）：
-/// 1. 单个 `<status>` 块解析失败（HP 缺 / 非整数 / 好感度缺 / 块为空）→ 该块降级为 `.text(<原文>)`，
-///    其余块正常处理。
-/// 2. 整体结构错乱（如正则本身编译失败）→ 整个 input 作为单个 `.text` 节点返回。
-/// 3. **永不抛错**：任何异常路径都返回有效 RenderTree，最坏情况是 `[.text(input)]`。
+/// **容错策略**（与 P1 同：「不能导致整条消息消失」）：
+/// 1. 单块解析失败 → 该块降级为 `.text(原文)`，其余块正常处理。
+/// 2. 整体结构错乱 → 整个 input 作为单 `.text` 节点返回。
+/// 3. **永不抛错**：任何异常路径都返回有效 RenderTree，最坏 `[.text(input)]`。
+///
+/// **测试策略**：核心用 closure-based `parse(_:snapshot:applyPatches:)` —— 仅依赖 Foundation，
+/// 可在 Linux SPM 上驱动。生产 `parse(_:variableStore:sessionId:)` 把 VariableStore 转译成两个闭包，
+/// 走 SwiftUI / UserDefaults 持久化路径。
 enum RenderNodeParser {
 
+    // MARK: - 生产入口
+
     /// 解析输入字符串为 RenderTree。
-    /// - Parameter input: 已经过 DisplayRegex / HideTags 处理的文本。
+    /// - Parameters:
+    ///   - input: 已过 DisplayRegex / HideTags 的文本。
+    ///   - variableStore: 可选；提供时本解析器会把 UpdateVariable 块 apply 到该 session。
+    ///   - sessionId: 与 variableStore 配合使用；nil → UpdateVariable 块降级为 `.text`。
     /// - Returns: 永不 nil（构造失败也降级为单节点）。
-    static func parse(_ input: String) -> RenderTree {
-        // 1. 整体正则找 <status>...</status> 块（非贪婪、跨行匹配）
-        // 2. 块之间文本 → .text
-        // 3. 块内容 → 尝试解析为 .status；失败则降级为 .text(整段含标签)
-        let pattern = "(?is)<status\\b[^>]*>(.*?)</status\\s*>"
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
+    static func parse(
+        _ input: String,
+        variableStore: VariableStore? = nil,
+        sessionId: UUID? = nil
+    ) -> RenderTree {
+        if let store = variableStore, let sid = sessionId {
+            return parse(
+                input,
+                snapshot: { store.snapshot(sessionId: sid) },
+                applyPatches: { ops in try store.apply(ops, to: sid) }
+            )
+        }
+        return parse(
+            input,
+            snapshot: { [] },
+            applyPatches: { _ in throw NSError(domain: "RenderNodeParser", code: 0) }
+        )
+    }
+
+    // MARK: - 测试入口（closure-based）
+
+    /// 纯 Foundation 解析入口。让 SPM / Linux 单测不依赖 SwiftUI ObservableObject 也能驱动。
+    /// - Parameters:
+    ///   - input: 已过 DisplayRegex / HideTags 的文本。
+    ///   - snapshot: 返回当前会话的扁平化变量快照（用于 statusPlaceholder 节点）。
+    ///   - applyPatches: 把 JSON Patch ops 应用到当前会话，返回 applied 计数。
+    ///     抛错时该块降级为 `.text`（不丢内容）。
+    static func parse(
+        _ input: String,
+        snapshot: () -> [VariableEntry],
+        applyPatches: ([JSONPatchOperation]) throws -> Int
+    ) -> RenderTree {
+        // 第一遍：识别 P3 新增块（StatusPlaceHolderImpl / UpdateVariable），按位置插入节点。
+        // 第二遍：在剩余的 `.text` 节点里识别 P1 `<status>` 块，递归切分。
+        // 这种 pass 设计避免用一个 union 正则同时匹配三类块带来的 group index 混乱。
+        let firstPass = parseP3Blocks(input, snapshot: snapshot, applyPatches: applyPatches)
+        // 第二遍：对每个 .text 节点再走 P1 的 status 解析
+        let finalNodes = firstPass.nodes.flatMap { node -> [RenderNode] in
+            if case let .text(s) = node {
+                return parseStatusBlocks(in: s)
+            }
+            return [node]
+        }
+        if finalNodes.isEmpty {
             return RenderTree(nodes: [.text(input)])
         }
+        return RenderTree(nodes: finalNodes)
+    }
+
+    // MARK: - 第一遍：P3 新增块
+
+    private static func parseP3Blocks(
+        _ input: String,
+        snapshot: () -> [VariableEntry],
+        applyPatches: ([JSONPatchOperation]) throws -> Int
+    ) -> RenderTree {
+        let placeholderPattern = "(?is)<StatusPlaceHolderImpl\\s*/?>"
+        // 闭合标签必须把尾部 `>>` 一并吃掉，避免外层把 `>` 切成游离 .text 节点。
+        let updatePattern = "(?is)<<UpdateVariable[^>]*>>[\\s\\S]*?<</UpdateVariable>>"
+
+        guard let placeholderRegex = try? NSRegularExpression(pattern: placeholderPattern),
+              let updateRegex = try? NSRegularExpression(pattern: updatePattern) else {
+            return RenderTree(nodes: [.text(input)])
+        }
+
         let nsInput = input as NSString
         let fullRange = NSRange(location: 0, length: nsInput.length)
-        let matches = regex.matches(in: input, options: [], range: fullRange)
 
-        // 没有任何 status 块 → 整个 input 作为单 .text 节点
-        if matches.isEmpty {
+        // 收集所有匹配（带类型标记）并按位置排序
+        struct Hit {
+            var range: NSRange
+            var kind: Kind
+            enum Kind { case placeholder, update }
+        }
+        var hits: [Hit] = []
+        for m in placeholderRegex.matches(in: input, options: [], range: fullRange) {
+            hits.append(Hit(range: m.range, kind: .placeholder))
+        }
+        for m in updateRegex.matches(in: input, options: [], range: fullRange) {
+            hits.append(Hit(range: m.range, kind: .update))
+        }
+        hits.sort { $0.range.location < $1.range.location }
+
+        if hits.isEmpty {
             return RenderTree(nodes: [.text(input)])
         }
 
         var nodes: [RenderNode] = []
-        var cursor = 0  // 字节偏移（NSString 语义）
-
-        for match in matches {
-            // 块前的文本
-            if match.range.location > cursor {
-                let prefixRange = NSRange(location: cursor, length: match.range.location - cursor)
+        var cursor = 0
+        for hit in hits {
+            if hit.range.location > cursor {
+                let prefixRange = NSRange(location: cursor, length: hit.range.location - cursor)
                 let prefix = nsInput.substring(with: prefixRange)
                 if !prefix.isEmpty {
                     nodes.append(.text(prefix))
                 }
             }
-
-            // 块本身
-            let rawBlock = "<status>" + nsInput.substring(with: match.range(at: 1)) + "</status>"
-            if let status = parseStatusBlock(nsInput.substring(with: match.range(at: 1))) {
-                nodes.append(.status(hp: status.hp, affection: status.affection))
-            } else {
-                // 块解析失败 → 降级为 .text（含标签的原始块）
-                nodes.append(.text(rawBlock))
+            let rawBlock = nsInput.substring(with: hit.range)
+            switch hit.kind {
+            case .placeholder:
+                nodes.append(.statusPlaceholder(snapshot: snapshot()))
+            case .update:
+                nodes.append(parseUpdateVariableBlock(rawBlock, applyPatches: applyPatches))
             }
-
-            cursor = match.range.location + match.range.length
+            cursor = hit.range.location + hit.range.length
         }
-
-        // 最后一块之后的尾巴
         if cursor < nsInput.length {
             let tail = nsInput.substring(from: cursor)
             if !tail.isEmpty {
                 nodes.append(.text(tail))
             }
         }
-
-        // 极端情况：所有节点都被降级（不太可能，但稳妥起见）→ 整体降级
-        if nodes.isEmpty {
-            return RenderTree(nodes: [.text(input)])
-        }
         return RenderTree(nodes: nodes)
     }
 
+    // MARK: - 第二遍：P1 <status>
+
+    /// P1 的 status 解析：从一段 plain text 中切出 `<status>...</status>` 块。
+    private static func parseStatusBlocks(in text: String) -> [RenderNode] {
+        let pattern = "(?is)<status\\b[^>]*>(.*?)</status\\s*>"
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
+            return [.text(text)]
+        }
+        let nsText = text as NSString
+        let fullRange = NSRange(location: 0, length: nsText.length)
+        let matches = regex.matches(in: text, options: [], range: fullRange)
+        if matches.isEmpty {
+            return [.text(text)]
+        }
+
+        var nodes: [RenderNode] = []
+        var cursor = 0
+        for match in matches {
+            if match.range.location > cursor {
+                let prefixRange = NSRange(location: cursor, length: match.range.location - cursor)
+                let prefix = nsText.substring(with: prefixRange)
+                if !prefix.isEmpty {
+                    nodes.append(.text(prefix))
+                }
+            }
+            let rawBlock = nsText.substring(with: match.range)
+            let inner = nsText.substring(with: match.range(at: 1))
+            if let status = parseStatusBlock(inner) {
+                nodes.append(.status(hp: status.hp, affection: status.affection))
+            } else {
+                nodes.append(.text(rawBlock))
+            }
+            cursor = match.range.location + match.range.length
+        }
+        if cursor < nsText.length {
+            let tail = nsText.substring(from: cursor)
+            if !tail.isEmpty {
+                nodes.append(.text(tail))
+            }
+        }
+        return nodes.isEmpty ? [.text(text)] : nodes
+    }
+
     /// 解析 `<status>` 块内的 `HP: <整数>` + `好感度: <整数>` 两行。
-    /// - Returns: 成功返回 (hp, affection)；任一缺失 / 非整数 / 解析错误 → nil。
     static func parseStatusBlock(_ block: String) -> (hp: Int, affection: Int)? {
         let lines = block
             .components(separatedBy: .newlines)
@@ -84,7 +195,6 @@ enum RenderNodeParser {
         var affection: Int?
 
         for line in lines {
-            // 匹配 "<key>: <value>"，key 是 HP 或 好感度（中文冒号也兼容）
             guard let colon = line.firstIndex(where: { $0 == ":" || $0 == "：" }) else {
                 continue
             }
@@ -103,5 +213,41 @@ enum RenderNodeParser {
 
         guard let h = hp, let a = affection else { return nil }
         return (hp: h, affection: a)
+    }
+
+    // MARK: - UpdateVariable
+
+    /// `<<UpdateVariable>>[…JSON…]<</UpdateVariable>>` —— 解析 JSON Patch → 写 VariableStore → 摘要节点。
+    /// 解析失败（JSON 畸形 / patch 全失败）→ 降级为 `.text(整段含标签)`，不丢内容。
+    private static func parseUpdateVariableBlock(
+        _ raw: String,
+        applyPatches: ([JSONPatchOperation]) throws -> Int
+    ) -> RenderNode {
+        guard let inner = stripUpdateVariableBody(raw) else {
+            return .text(raw)
+        }
+        guard let data = inner.data(using: .utf8),
+              let ops = try? JSONDecoder().decode([JSONPatchOperation].self, from: data) else {
+            return .text(raw)
+        }
+        do {
+            let applied = try applyPatches(ops)
+            let paths = ops.filter { !$0.isPrivatePath }.map(\.path)
+            return .variableUpdate(summary: .init(
+                appliedCount: applied,
+                affectedPaths: paths
+            ))
+        } catch {
+            return .text(raw)
+        }
+    }
+
+    private static func stripUpdateVariableBody(_ raw: String) -> String? {
+        // 同上：闭合标签吃到底，避免误把尾部 `>>` 算进 group 1。
+        let pattern = "(?is)<<UpdateVariable[^>]*>>([\\s\\S]*?)<</UpdateVariable>>"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let ns = raw as NSString
+        guard let m = regex.firstMatch(in: raw, range: NSRange(location: 0, length: ns.length)) else { return nil }
+        return ns.substring(with: m.range(at: 1))
     }
 }

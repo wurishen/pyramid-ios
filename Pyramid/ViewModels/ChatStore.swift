@@ -4,6 +4,10 @@ import SwiftUI
 final class ChatStore: ObservableObject {
     @Published var sessions: [ChatSession] = []
     @Published var currentSessionID: UUID?
+    /// P3 native transpile：每会话一份的 MVU 变量存储。
+    /// `createSession(character:)` 用角色的 `initStatData` 种子一次；`delete(_:)` 同步清理。
+    /// 不暴露给视图层写入；视图只通过 `RenderEngine.Context.variableStore` 间接消费。
+    let variableStore = VariableStore()
 
     var currentSession: ChatSession? {
         session(for: currentSessionID)
@@ -59,6 +63,8 @@ final class ChatStore: ObservableObject {
         currentSessionID = session.id
         sessionsVersion &+= 1
         save()
+        // P3：空白会话也建一棵空 VariableStore，后续可手动灌入。
+        variableStore.seedIfEmpty(sessionId: session.id, initData: nil)
         return session
     }
 
@@ -81,6 +87,9 @@ final class ChatStore: ObservableObject {
         currentSessionID = session.id
         sessionsVersion &+= 1
         save()
+        // P3：用角色的 init_stat_data 给该会话的 VariableStore 种子一次。
+        // 已有值 → 不覆盖（避免 patch 后续被 init 冲掉）。
+        variableStore.seedIfEmpty(sessionId: session.id, initData: character.initStatData)
         return session
     }
 
@@ -109,6 +118,7 @@ final class ChatStore: ObservableObject {
 
     func clearAllSessions() {
         sessions.removeAll()
+        variableStore.removeAll()
         currentSessionID = nil
         sessionsVersion &+= 1
         _ = createSession()
@@ -123,6 +133,8 @@ final class ChatStore: ObservableObject {
                 return
             }
         }
+        // P3：会话删除 → VariableStore 同步清理。
+        variableStore.removeSession(id)
         sessionsVersion &+= 1
         save()
     }

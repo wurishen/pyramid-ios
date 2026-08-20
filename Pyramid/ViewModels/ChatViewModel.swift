@@ -26,6 +26,11 @@ final class ChatViewModel: ObservableObject {
     @Published var streamingContent: String = ""
 
     let store: ChatStore
+
+    /// 便捷转发：让视图层不必同时持有 ChatStore 与 ChatViewModel。
+    /// P3 native transpile：MessageCard 用它 + `store.variableStore` 注入 RenderEngine.Context。
+    var currentSessionID: UUID? { store.currentSessionID }
+
     private let settings: AppSettings
     private let worldBook: WorldBookStore
     private let characters: CharacterStore

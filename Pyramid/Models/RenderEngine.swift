@@ -11,13 +11,19 @@ import Foundation
 /// 流水线：raw → 显示用正则（仅助手） → 隐藏标签剥离 → 特殊节点解析（RenderNodeParser）
 /// → `Result.tree`。
 enum RenderEngine {
-    struct Context: Equatable, Sendable {
+    struct Context {
         let isAssistant: Bool
         let presetDisplayRegexIds: [UUID]
         let allDisplayRegexes: [DisplayRegex]
         let hideTagStripEnabled: Bool
         let hideTags: [String]
         let markdownEnabled: Bool
+        /// P3 native transpile：可选 VariableStore + sessionId，用于在解析阶段
+        /// 把 `<<UpdateVariable>>` 块的 JSON Patch 写入会话级变量存储，
+        /// 并把 `<StatusPlaceHolderImpl/>` 转译为带 snapshot 的 `statusPlaceholder` 节点。
+        /// 二者必须同时提供；nil 表示纯渲染（fixture / 单测场景）。
+        var variableStore: VariableStore? = nil
+        var sessionId: UUID? = nil
     }
 
     struct Result: Equatable, Sendable {
@@ -43,7 +49,11 @@ enum RenderEngine {
             enabled: context.hideTagStripEnabled,
             tags: context.hideTags
         )
-        let tree = RenderNodeParser.parse(afterHideTags)
+        let tree = RenderNodeParser.parse(
+            afterHideTags,
+            variableStore: context.variableStore,
+            sessionId: context.sessionId
+        )
         return Result(
             tree: tree,
             markdownEnabled: context.markdownEnabled

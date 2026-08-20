@@ -888,7 +888,31 @@ iOS 和 Android 双端应实现**相同的核心功能集**，包括：
 
 ---
 
-## 14. 上下文裁剪
+## 14. 原生 Transpile 流水线（v0.8）
+
+助手消息的渲染走纯原生 iOS 路径，不引入 JavaScript / WebView / HTML 渲染层。酒馆侧 `<StatusPlaceHolderImpl/>` 与 `<<UpdateVariable>>[…JSON…]<</UpdateVariable>>` 标记在 Pyramid 内部被原生节点取代：
+
+| 酒馆标记 | 原生渲染节点 | 副作用 |
+|---------|------------|--------|
+| `<StatusPlaceHolderImpl/>` | `.statusPlaceholder(snapshot)` — 列出当前会话 `VariableStore` 拍扁后的所有变量；空时显示「状态（等待变量）」 | 仅读取 |
+| `<<UpdateVariable>>[…JSON Patch…]<</UpdateVariable>>` | `.variableUpdate(summary)` — 可折叠摘要：applied 计数 + 受影响 path 列表；同时把 ops 应用到 `VariableStore` | 写 `VariableStore`（每会话一份，`UserDefaults` 持久化） |
+
+**MVU 契约**：RFC 6902 JSON Patch，仅消费 `replace | add | remove`；以 `_` 开头的 path（私有视图态）协议层静默 skip，不写入也不进 affectedPaths。
+
+**跳过规则（HTML beautify 防滥用）**：渲染前的显示用正则按 `MessageRendererCore.orderedRegexes` 排序时，再叠加两道过滤门：
+1. `DisplayRegex.promptOnly == true` → 不进显示链（仅 outgoing prompt 阶段剥离）。
+2. `MessageRendererCore.isHtmlBeautify(replacement)` → `replacement` 含 `<script` / `.load(` / `<object` / `<iframe` / `<details` / `<style` / `<div` 任一 → 不进显示链。
+
+跳过规则的 fixture（`swift-tests/Fixtures/native_transpile_fixture.json`）覆盖 7 条酒馆正则（4 条 beautify 跳过、3 条 promptOnly），由 `NativeTranspileFixtureTests` 与 `JSONPatchTests` 在 Linux SPM 上端到端验证。
+
+**硬边界**（与 §13 已知限制并列）：
+- `message.content` 原文永不被改写；`RenderNodeParser` 只读，复制 / 编辑 / 重新生成 / 发送 API 始终拿原文。
+- `VariableStore` 仅在客户端持有，不上传任何数据；写入仅由当前会话的 UpdateVariable 块触发。
+- 不引入 WKWebView / UIWebView / SFSafariViewController；不解析任何远程 `<script>` / `<object>` / `$('body').load(...)`。
+
+---
+
+## 15. 上下文裁剪
 
 发送请求前可按设置裁剪历史，节省 token 与避免超出上下文窗口：
 

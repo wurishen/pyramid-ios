@@ -64,6 +64,10 @@ struct Character: Codable, Identifiable, Equatable {
     /// 解析失败时保留在 `extensionsRaw["depth_prompt"]` 不动（避免静默丢字段）。
     /// 旧数据 / Pyramid 原生角色卡无此字段 → nil。
     var depthPrompt: CharacterDepthPrompt?
+    /// P3 native transpile：会话初始 MVU 变量（fixture `init_stat_data`）。
+    /// 新建会话时由 `ChatStore.createSession(character:)` 调用 `VariableStore.seedIfEmpty` 灌入。
+    /// 旧数据 / Pyramid 原生角色卡无此字段 → nil。
+    var initStatData: [String: JSONValue]?
 
     init(
         id: UUID = UUID(),
@@ -90,7 +94,8 @@ struct Character: Codable, Identifiable, Equatable {
         characterBookRaw: JSONValue? = nil,
         talkativeness: Double? = nil,
         isFavorite: Bool? = nil,
-        depthPrompt: CharacterDepthPrompt? = nil
+        depthPrompt: CharacterDepthPrompt? = nil,
+        initStatData: [String: JSONValue]? = nil
     ) {
         self.id = id
         self.name = name
@@ -117,6 +122,7 @@ struct Character: Codable, Identifiable, Equatable {
         self.talkativeness = talkativeness
         self.isFavorite = isFavorite
         self.depthPrompt = depthPrompt
+        self.initStatData = initStatData
     }
 
     // MARK: - Codable：旧角色卡没有这些字段时全部 decodeIfPresent 给默认值。
@@ -137,6 +143,7 @@ struct Character: Codable, Identifiable, Equatable {
         case talkativeness = "talkativeness"
         case isFavorite = "fav"
         case depthPrompt = "depthPrompt"
+        case initStatData = "initStatData"
     }
 
     init(from decoder: Decoder) throws {
@@ -170,6 +177,7 @@ struct Character: Codable, Identifiable, Equatable {
         self.talkativeness = try? c.decodeIfPresent(Double.self, forKey: .talkativeness)
         self.isFavorite = try? c.decodeIfPresent(Bool.self, forKey: .isFavorite)
         self.depthPrompt = try? c.decodeIfPresent(CharacterDepthPrompt.self, forKey: .depthPrompt)
+        self.initStatData = try? c.decodeIfPresent([String: JSONValue].self, forKey: .initStatData)
     }
 
     func systemPromptText() -> String {

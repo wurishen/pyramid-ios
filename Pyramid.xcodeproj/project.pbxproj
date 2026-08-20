@@ -53,6 +53,8 @@
 		AB0000000000000000000294 /* RenderInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000295 /* RenderInspectorView.swift */; };
 		AB000000000000000000029A /* RenderNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000029B /* RenderNode.swift */; };
 		AB000000000000000000029C /* RenderNodeParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000029D /* RenderNodeParser.swift */; };
+		AB0000000000000000000311 /* JSONPatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000310 /* JSONPatch.swift */; };
+		AB0000000000000000000313 /* VariableStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000312 /* VariableStore.swift */; };
 		AB000000000000000000029E /* StatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000029F /* StatusView.swift */; };
 		AB0000000000000000000280 /* AvatarImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000281 /* AvatarImageCache.swift */; };
 		AB0000000000000000000218 /* DisplayRegexListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000222 /* DisplayRegexListView.swift */; };
@@ -108,6 +110,8 @@
 		AB0000000000000000000295 /* RenderInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderInspectorView.swift; sourceTree = "<group>"; };
 		AB000000000000000000029B /* RenderNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderNode.swift; sourceTree = "<group>"; };
 		AB000000000000000000029D /* RenderNodeParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderNodeParser.swift; sourceTree = "<group>"; };
+		AB0000000000000000000310 /* JSONPatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONPatch.swift; sourceTree = "<group>"; };
+		AB0000000000000000000312 /* VariableStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VariableStore.swift; sourceTree = "<group>"; };
 		AB000000000000000000029F /* StatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusView.swift; sourceTree = "<group>"; };
 		AB0000000000000000000296 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
 		AB0000000000000000000298 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
@@ -175,6 +179,8 @@
 				AB0000000000000000000293 /* RenderEngine.swift */,
 				AB000000000000000000029B /* RenderNode.swift */,
 				AB000000000000000000029D /* RenderNodeParser.swift */,
+				AB0000000000000000000310 /* JSONPatch.swift */,
+				AB0000000000000000000312 /* VariableStore.swift */,
 				AB0000000000000000000221 /* MacroExpander.swift */,
 			);
 			path = Models;
@@ -368,6 +374,8 @@
 				AB0000000000000000000294 /* RenderInspectorView.swift in Sources */,
 				AB000000000000000000029A /* RenderNode.swift in Sources */,
 				AB000000000000000000029C /* RenderNodeParser.swift in Sources */,
+				AB0000000000000000000311 /* JSONPatch.swift in Sources */,
+				AB0000000000000000000313 /* VariableStore.swift in Sources */,
 				AB000000000000000000029E /* StatusView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
