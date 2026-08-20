@@ -435,7 +435,14 @@ final class NativeTranspileFixtureTests: XCTestCase {
             XCTAssertTrue(summary.affectedPaths.isEmpty,
                           "_ 路径不进 affectedPaths（UI 不显示私有字段）")
         }
-        XCTAssertTrue(store.snapshot().isEmpty, "_ 路径不写入 store")
+        // _ 路径不写入 store —— snapshot 里**不应该**出现以 /_ 开头的 path。
+        // 注意：init_stat_data 仍在 store 里（/时间、/玩家/当前所在地），所以这里
+        // 不断言 isEmpty，只断言没有 _ 前缀 path 漏进 snapshot。
+        let snapshotPaths = store.snapshot().map(\.path)
+        XCTAssertFalse(
+            snapshotPaths.contains { $0.hasPrefix("/_") },
+            "_ 路径不应出现在 snapshot 里；实际 path 列表: \(snapshotPaths)"
+        )
     }
 
     /// Sample 1（仅占位符）：seed 后立刻能看到变量 —— 节点含 statusPlaceholder。
@@ -502,8 +509,10 @@ final class NativeTranspileFixtureTests: XCTestCase {
 final class SessionStore {
     private var root: JSONValue = .object([:])
 
+    /// 与生产 `VariableStore.seedIfEmpty` 等价：merge 进现有 root，
+    /// **不覆盖**已存在的 key（避免 reload 时 init 冲掉 patch 后的状态）。
     func seed(_ data: [String: JSONValue]) {
-        root = .object(data)
+        mergeSeed(data, into: &root)
     }
 
     @discardableResult
@@ -513,6 +522,40 @@ final class SessionStore {
 
     func snapshot() -> [VariableEntry] {
         VariableStoreFlattener.snapshot(root: root)
+    }
+
+    private func mergeSeed(_ data: [String: JSONValue], into root: inout JSONValue) {
+        guard case .object(var existing) = root else { root = .object(data); return }
+        for (key, value) in data {
+            if case .object(let newNested) = value {
+                if case .object(let existingNested) = existing[key] {
+                    var merged = existingNested
+                    mergeNested(newNested, into: &merged)
+                    existing[key] = .object(merged)
+                } else {
+                    existing[key] = .object(newNested)
+                }
+            } else if existing[key] == nil {
+                existing[key] = value
+            }
+        }
+        root = .object(existing)
+    }
+
+    private func mergeNested(_ src: [String: JSONValue], into dst: inout [String: JSONValue]) {
+        for (key, value) in src {
+            if case .object(let newNested) = value {
+                if case .object(let existingNested) = dst[key] {
+                    var merged = existingNested
+                    mergeNested(newNested, into: &merged)
+                    dst[key] = .object(merged)
+                } else {
+                    dst[key] = .object(newNested)
+                }
+            } else if dst[key] == nil {
+                dst[key] = value
+            }
+        }
     }
 }
 
