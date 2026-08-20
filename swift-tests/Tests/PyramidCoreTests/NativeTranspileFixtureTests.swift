@@ -359,6 +359,140 @@ final class NativeTranspileFixtureTests: XCTestCase {
         }
         XCTAssertEqual(summary.appliedCount, 1)
     }
+
+    // MARK: - 端到端：frozen fixture 驱动 seed → patch → snapshot
+
+    /// 端到端：load `native_transpile_fixture.json` → 用 `init_stat_data` seed →
+    /// 跑 sample_messages[1] 的 UpdateVariable 块 → 验证 Store snapshot 与 fixture
+    /// `mvu_output_contract.applied_examples` 一致 + raw `message.content` 不变 + `_` path
+    /// 仍被协议层丢弃。
+    ///
+    /// 测试只准用 frozen fixture（commit 326d3ae）—— 不重新发明样例。
+    func testFixtureEndToEndSeedThenPatch() throws {
+        let fixture = try loadFixture()
+        let initNested = try unflatten(initStatData: fixture.initStatData)
+
+        let store = SessionStore()
+        // 1. 新建会话：用 fixture 的 init_stat_data 种子一次（与 ChatStore.createSession 等价）。
+        store.seed(initNested)
+
+        // 种子后立刻能列出变量（StatusPlaceHolderImpl → 通用状态面板读 Store）。
+        let seeded = Set(store.snapshot().map(\.path))
+        XCTAssertEqual(seeded, Set(fixture.initStatData.keys),
+                      "seed 后 snapshot 列出 fixture init_stat_data 的全部 path")
+
+        // 2. 跑 sample_messages[1]：UpdateVariable JSON Patch → 写 Store。
+        let sample = fixture.sampleMessages[1]
+        let tree = RenderNodeParser.parse(
+            sample.content,
+            snapshot: { store.snapshot() },
+            applyPatches: { ops in try store.apply(ops) }
+        )
+        XCTAssertEqual(tree.nodes.count, 2)
+        guard case let .text(lead) = tree.nodes[0] else {
+            XCTFail("节点 0 应是 text")
+            return
+        }
+        XCTAssertEqual(lead, "她转身离开。")
+        guard case let .variableUpdate(summary) = tree.nodes[1] else {
+            XCTFail("节点 1 应是 variableUpdate")
+            return
+        }
+
+        // 3. fixture `mvu_output_contract.applied_examples` 是契约：applied op 与 path。
+        let expectedPaths = fixture.mvuOutputContract.appliedExamples.map(\.path)
+        XCTAssertEqual(summary.appliedCount, expectedPaths.count)
+        XCTAssertEqual(Set(summary.affectedPaths), Set(expectedPaths))
+
+        // 4. patch 写完之后，snapshot 应当反映新的值（replacement 「傍晚」/「集市」）。
+        let after = store.snapshot()
+        let byPath = Dictionary(uniqueKeysWithValues: after.map { ($0.path, $0.displayValue) })
+        for example in fixture.mvuOutputContract.appliedExamples {
+            guard case .string(let s) = example.value else {
+                XCTFail("applied_examples 的 value 应是 string")
+                continue
+            }
+            XCTAssertEqual(byPath[example.path], s,
+                          "patch 后 snapshot[\(example.path)] 应当 = \(s)")
+        }
+
+        // 5. raw message.content 永不变。
+        XCTAssertTrue(sample.content.contains("<<UpdateVariable>>"),
+                      "原文标签保留 —— 协议层不写回 message.content")
+    }
+
+    /// `_` 前缀 path 在 fixture `mvu_output_contract.ignored_examples` 中点名：
+    /// 协议层不写入，summary.affectedPaths 也不进。
+    func testFixtureIgnoredPrivatePathIsDropped() throws {
+        let fixture = try loadFixture()
+        let store = SessionStore()
+        store.seed(try unflatten(initStatData: fixture.initStatData))
+
+        // 直接喂 fixture 的 ignored_examples（不依赖 sample_messages 文本）。
+        for example in fixture.mvuOutputContract.ignoredExamples {
+            let summary = try applySinglePatchAndSummarize(store: store, op: example)
+            XCTAssertEqual(summary.appliedCount, 1, "_ 路径 op 计入 applied（计数）")
+            XCTAssertTrue(summary.affectedPaths.isEmpty,
+                          "_ 路径不进 affectedPaths（UI 不显示私有字段）")
+        }
+        XCTAssertTrue(store.snapshot().isEmpty, "_ 路径不写入 store")
+    }
+
+    /// Sample 1（仅占位符）：seed 后立刻能看到变量 —— 节点含 statusPlaceholder。
+    func testFixtureSampleOnePlaceholderAfterSeed() throws {
+        let fixture = try loadFixture()
+        let store = SessionStore()
+        store.seed(try unflatten(initStatData: fixture.initStatData))
+
+        let sample = fixture.sampleMessages[0]
+        XCTAssertTrue(sample.content.contains("<StatusPlaceHolderImpl/>"))
+
+        let tree = RenderNodeParser.parse(
+            sample.content,
+            snapshot: { store.snapshot() },
+            applyPatches: { ops in try store.apply(ops) }
+        )
+        // 节点 0 是 statusPlaceholder，节点 1 是 text 后缀。
+        guard case .statusPlaceholder = tree.nodes[0] else {
+            XCTFail("节点 0 应是 statusPlaceholder，实为 \(tree.nodes[0])")
+            return
+        }
+        guard case let .text(t) = tree.nodes[1] else {
+            XCTFail("节点 1 应是 text")
+            return
+        }
+        XCTAssertEqual(t, "你好，欢迎回来。")
+        // 占位符节点的 snapshot 非空（已 seed）—— UI 显示键值列表，不是「等待变量」空态。
+        guard case let .statusPlaceholder(snapshot) = tree.nodes[0] else { return }
+        XCTAssertFalse(snapshot.isEmpty, "seed 后 statusPlaceholder 应有变量列表")
+    }
+
+    /// 新建会话 seed 后再 apply patch 一次，再次 seed 同一 initData → initData 不覆盖已有值。
+    /// 模拟「用户中途重启 app / ChatStore reload 再 seed 同一 session」不会冲掉 patch 后的状态。
+    func testSeedAfterPatchDoesNotOverwrite() throws {
+        let fixture = try loadFixture()
+        let initNested = try unflatten(initStatData: fixture.initStatData)
+        let store = SessionStore()
+
+        // 第一次 seed（createSession 路径）
+        store.seed(initNested)
+        // 应用 sample_messages[1] 的 patch
+        _ = try applySinglePatchAndSummarize(
+            store: store,
+            op: fixture.mvuOutputContract.appliedExamples[0]
+        )
+
+        // 模拟「重发 init」：seed 同一份 initData
+        store.seed(initNested)
+        let byPath = Dictionary(uniqueKeysWithValues: store.snapshot().map { ($0.path, $0.displayValue) })
+        // patch 后的值保留
+        guard case .string(let expected) = fixture.mvuOutputContract.appliedExamples[0].value else {
+            XCTFail("applied_example value 应是 string")
+            return
+        }
+        XCTAssertEqual(byPath[fixture.mvuOutputContract.appliedExamples[0].path], expected,
+                      "二次 seed 不应覆盖 patch 后的值（避免 init 冲掉 patch 状态）")
+    }
 }
 
 // MARK: - 测试用最小 store（无 SwiftUI / UserDefaults）
@@ -380,4 +514,102 @@ final class SessionStore {
     func snapshot() -> [VariableEntry] {
         VariableStoreFlattener.snapshot(root: root)
     }
+}
+
+// MARK: - Frozen fixture loader + init_stat_data unflatten
+
+/// swift-tests/Fixtures/native_transpile_fixture.json 的最小可解码形状。
+/// 只覆盖测试用到的字段；其余字段被忽略，避免 fixture 演进时单测被打挂。
+struct NativeTranspileFixture: Decodable {
+    let initStatData: [String: JSONValue]
+    let sampleMessages: [SampleMessage]
+    let mvuOutputContract: MVUOutputContract
+
+    struct SampleMessage: Decodable {
+        let role: String
+        let content: String
+    }
+
+    struct MVUOutputContract: Decodable {
+        let ignoredPathPrefix: String
+        let allowedOps: [String]
+        let ignoredExamples: [FixturePatchExample]
+        let appliedExamples: [FixturePatchExample]
+    }
+
+    struct FixturePatchExample: Decodable {
+        let op: String
+        let path: String
+        let value: JSONValue?
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case initStatData = "init_stat_data"
+        case sampleMessages = "sample_messages"
+        case mvuOutputContract = "mvu_output_contract"
+    }
+}
+
+/// 单测辅助：load frozen fixture。
+private func loadFixture() throws -> NativeTranspileFixture {
+    // SPM 运行时 cwd 不固定，从 Bundle.module 拿（SwiftPM 自动生成的 resource accessor）。
+    // Fixture 通过 `Package.swift` 的 `resources: [.copy("Fixtures")]` 进 bundle。
+    guard let url = Bundle.module.url(forResource: "native_transpile_fixture", withExtension: "json") else {
+        throw NSError(domain: "NativeTranspileFixtureTests", code: 1,
+                      userInfo: [NSLocalizedDescriptionKey: "fixture file not found in bundle"])
+    }
+    let data = try Data(contentsOf: url)
+    return try JSONDecoder().decode(NativeTranspileFixture.self, from: data)
+}
+
+/// Fixture `init_stat_data` 的 key 是 JSON Pointer 形式（`/时间`、`/玩家/当前所在地`），
+/// 要展开成嵌套 dict（`{"时间": ..., "玩家": {"当前所在地": ...}}`），与 JSON Patch path 一致。
+private func unflatten(initStatData: [String: JSONValue]) throws -> [String: JSONValue] {
+    var result: [String: JSONValue] = [:]
+    for (key, value) in initStatData {
+        // Strip leading '/'.
+        guard key.hasPrefix("/") else {
+            result[key] = value
+            continue
+        }
+        let segments = String(key.dropFirst()).split(separator: "/").map(String.init)
+        insert(value: value, segments: segments, into: &result)
+    }
+    return result
+}
+
+private func insert(value: JSONValue, segments: [String], into dict: inout [String: JSONValue]) {
+    guard !segments.isEmpty else { return }
+    let head = segments[0]
+    let tail = Array(segments.dropFirst())
+    if tail.isEmpty {
+        dict[head] = value
+        return
+    }
+    let existing = dict[head]
+    var nested: [String: JSONValue]
+    if case .object(let d) = existing {
+        nested = d
+    } else {
+        nested = [:]
+    }
+    insert(value: value, segments: tail, into: &nested)
+    dict[head] = .object(nested)
+}
+
+private func applySinglePatchAndSummarize(
+    store: SessionStore,
+    op: NativeTranspileFixture.FixturePatchExample
+) throws -> RenderNode.VariableUpdateSummary {
+    // 把 fixture patch example 编码成 JSON Patch op，再走 patch 路径。
+    let patchOp = JSONPatchOperation(
+        op: JSONPatchOperation.Op(rawValue: op.op) ?? .replace,
+        path: op.path,
+        value: op.value
+    )
+    let applied = try store.apply([patchOp])
+    return RenderNode.VariableUpdateSummary(
+        appliedCount: applied,
+        affectedPaths: patchOp.isPrivatePath ? [] : [op.path]
+    )
 }

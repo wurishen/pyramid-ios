@@ -19,7 +19,10 @@ let package = Package(
     targets: [
         .target(
             name: "PyramidCore",
-            path: "Sources/PyramidCore"
+            path: "Sources/PyramidCore",
+            resources: [
+                .copy("Fixtures")
+            ]
         ),
         .testTarget(
             name: "PyramidCoreTests",
