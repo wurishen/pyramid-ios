@@ -321,7 +321,8 @@ struct WorldBookEntry: Codable, Identifiable, Equatable {
     /// 仅在 MVU 递归子树内查 `initvar`；非 extensions 位置的同名 key 不算。
     private static func initvarFlag(in extensions: JSONValue) -> Bool? {
         guard case .object(let ext) = extensions else { return nil }
-        return boolValue(ext["initvar"])
+        guard let value = ext["initvar"] else { return nil }
+        return boolValue(value)
     }
 
     private static func stringValue(_ v: JSONValue) -> String? {
