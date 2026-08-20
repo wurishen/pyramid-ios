@@ -390,37 +390,32 @@ struct MessageCard: View {
 
 // MARK: - P3 native transpile 节点视图
 
-/// `<StatusPlaceHolderImpl/>` → 状态占位面板：列出会话所有变量；空时显示「状态（等待变量）」。
+/// `<StatusPlaceHolderImpl/>` → 状态占位面板：按 JSON Pointer 第一段自动分组，
+/// 数字用更醒目的样式；空时显示「状态（等待变量）」。
+///
+/// 设计目标：酒馆「状态栏」感 —— 不是调试器的扁平 key-value 表。
+///   /时间               → 顶层键，单独成行
+///   /玩家/当前所在地    ┐
+///   /玩家/好感          ┘  → 「玩家」分组，2 行
+///
+/// 边界：
+/// - 不读 `message.content`，不改 `RenderNode` / `VariableStore` 协议。
+/// - 仅消费 `RenderNode.statusPlaceholder(snapshot:)` 给的 `[VariableEntry]`。
 struct StatusPlaceholderView: View {
     let snapshot: [VariableEntry]
     let scale: CGFloat
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6 * scale) {
-            HStack(spacing: 6 * scale) {
-                Image(systemName: "person.text.rectangle")
-                    .font(.system(size: 13 * scale))
-                Text("状态")
-                    .font(.system(size: 13 * scale, weight: .semibold))
-            }
-            .foregroundStyle(.secondary)
-
+        VStack(alignment: .leading, spacing: 8 * scale) {
+            header
             if snapshot.isEmpty {
                 Text("状态（等待变量）")
                     .font(.system(size: 13 * scale))
                     .foregroundStyle(.tertiary)
                     .padding(.vertical, 4 * scale)
             } else {
-                ForEach(snapshot) { entry in
-                    HStack(alignment: .firstTextBaseline, spacing: 6 * scale) {
-                        Text(entry.path)
-                            .font(.system(size: 12 * scale, design: .monospaced))
-                            .foregroundStyle(.tertiary)
-                        Spacer(minLength: 8 * scale)
-                        Text(entry.displayValue)
-                            .font(.system(size: 13 * scale))
-                            .foregroundStyle(.primary)
-                    }
+                ForEach(Array(Self.group(snapshot).enumerated()), id: \.offset) { _, group in
+                    StatusPlaceholderGroupView(group: group, scale: scale)
                 }
             }
         }
@@ -431,6 +426,107 @@ struct StatusPlaceholderView: View {
             RoundedRectangle(cornerRadius: 10 * scale)
                 .stroke(Color(.systemGray4), lineWidth: 0.5)
         )
+    }
+
+    private var header: some View {
+        HStack(spacing: 6 * scale) {
+            Image(systemName: "person.text.rectangle")
+                .font(.system(size: 13 * scale))
+            Text("状态")
+                .font(.system(size: 13 * scale, weight: .semibold))
+        }
+        .foregroundStyle(.secondary)
+    }
+
+    /// 按 JSON Pointer 第一段分组。顶层键（如 `/时间`）自己成一组，组内只有 1 条；
+    /// 嵌套键（如 `/玩家/当前所在地`）归入 `玩家` 组，组内按 path 余段排序。
+    /// 不递归 / 排序依赖 `VariableStoreFlattener` 已经按 key 排序好的结果。
+    fileprivate static func group(_ entries: [VariableEntry]) -> [StatusPlaceholderGroup] {
+        var groups: [StatusPlaceholderGroup] = []
+        var indexByTitle: [String: Int] = [:]
+        for entry in entries {
+            let segments = entry.path.split(separator: "/").map(String.init)
+            // path 形如 "/时间" / "/玩家/当前所在地" —— split 后第一段就是组名。
+            guard let head = segments.first, !head.isEmpty else { continue }
+            let leafSegments = Array(segments.dropFirst())
+            let leafPath = leafSegments.isEmpty ? head : leafSegments.joined(separator: "/")
+            if let i = indexByTitle[head], groups[i].title == head {
+                groups[i].entries.append(StatusPlaceholderEntry(leafPath: leafPath, displayValue: entry.displayValue))
+            } else {
+                indexByTitle[head] = groups.count
+                groups.append(StatusPlaceholderGroup(
+                    title: head,
+                    entries: [StatusPlaceholderEntry(leafPath: leafPath, displayValue: entry.displayValue)]
+                ))
+            }
+        }
+        return groups
+    }
+}
+
+/// 一个分组（如「玩家」）：组内多条叶子变量。
+struct StatusPlaceholderGroup: Equatable {
+    let title: String
+    var entries: [StatusPlaceholderEntry]
+}
+
+/// 组内一行：叶路径（去掉组名前缀）+ 显示值。
+struct StatusPlaceholderEntry: Equatable {
+    let leafPath: String
+    let displayValue: String
+}
+
+/// 一个分组的视觉：组标题（小、灰）+ 行列表。
+/// 顶层键（组内只有 1 条，且 leafPath == title）隐藏组标题，避免重复（路径 = 组名）。
+private struct StatusPlaceholderGroupView: View {
+    let group: StatusPlaceholderGroup
+    let scale: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4 * scale) {
+            if !shouldHideTitle {
+                Text(group.title)
+                    .font(.system(size: 11 * scale, weight: .medium))
+                    .foregroundStyle(.tertiary)
+                    .padding(.bottom, 1 * scale)
+            }
+            ForEach(Array(group.entries.enumerated()), id: \.offset) { _, entry in
+                row(entry)
+            }
+        }
+    }
+
+    /// 顶层键（如 `/时间` → 组「时间」+ 1 条 leafPath=「时间」）标题与 leaf 名相同，隐藏重复。
+    private var shouldHideTitle: Bool {
+        group.entries.count == 1 && group.entries[0].leafPath == group.title
+    }
+
+    @ViewBuilder
+    private func row(_ entry: StatusPlaceholderEntry) -> some View {
+        let isNumeric = Self.isNumeric(entry.displayValue)
+        HStack(alignment: .firstTextBaseline, spacing: 8 * scale) {
+            Text(entry.leafPath)
+                .font(.system(size: 12 * scale, design: .monospaced))
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 8 * scale)
+            Text(entry.displayValue)
+                .font(.system(
+                    size: (isNumeric ? 14 : 13) * scale,
+                    weight: isNumeric ? .semibold : .regular,
+                    design: isNumeric ? .monospaced : .default
+                ))
+                .foregroundStyle(isNumeric ? Color.accentColor : .primary)
+                .lineLimit(2)
+                .multilineTextAlignment(.trailing)
+        }
+        .padding(.leading, shouldHideTitle ? 0 : 6 * scale)
+    }
+
+    /// 简单判定显示值是不是数字。`VariableStoreFlattener.format` 会把 int/double
+    /// 编为纯数字字符串、bool 编为「是 / 否」、null 编为 `—`。这里���看是不是纯数字。
+    private static func isNumeric(_ s: String) -> Bool {
+        guard !s.isEmpty else { return false }
+        return Double(s) != nil
     }
 }
 
