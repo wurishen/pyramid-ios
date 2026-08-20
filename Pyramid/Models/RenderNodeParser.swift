@@ -84,11 +84,7 @@ enum RenderNodeParser {
     ) -> RenderTree {
         let placeholderPattern = "(?is)<StatusPlaceHolderImpl\\s*/?>"
         // 闭合标签必须把尾部 `>>` 一并吃掉，避免外层把 `>` 切成游离 .text 节点。
-        // `<\\?/UpdateVariable>>`：闭合 `<` 与 `/` 之间允许可选反斜杠 —— 兼容
-        // JSON 字符串里 `<\/UpdateVariable>` 这种转义形态（典型形态：fixture 把整段
-        // message.content 包在 JSON 里时，闭合标签常被写成 `<\\/UpdateVariable>`，
-        // 解码后实字符串里就是 `<\/UpdateVariable>`）。常规 `<</UpdateVariable>>` 也照样命中。
-        let updatePattern = "(?is)<<UpdateVariable[^>]*>>[\\s\\S]*?<\\?/UpdateVariable>>"
+        let updatePattern = "(?is)<<UpdateVariable[^>]*>>[\\s\\S]*?<</UpdateVariable>>"
 
         guard let placeholderRegex = try? NSRegularExpression(pattern: placeholderPattern),
               let updateRegex = try? NSRegularExpression(pattern: updatePattern) else {
@@ -247,8 +243,8 @@ enum RenderNodeParser {
     }
 
     private static func stripUpdateVariableBody(_ raw: String) -> String? {
-        // 同上：闭合标签吃到底，避免误把尾部 `>>` 算进 group 1。允许反斜杠转义形态。
-        let pattern = "(?is)<<UpdateVariable[^>]*>>([\\s\\S]*?)<\\?/UpdateVariable>>"
+        // 同上：闭合标签吃到底，避免误把尾部 `>>` 算进 group 1。
+        let pattern = "(?is)<<UpdateVariable[^>]*>>([\\s\\S]*?)<</UpdateVariable>>"
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
         let ns = raw as NSString
         guard let m = regex.firstMatch(in: raw, range: NSRange(location: 0, length: ns.length)) else { return nil }
