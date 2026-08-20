@@ -551,19 +551,19 @@ struct StatusPlaceholderView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            ProgressView(value: clamped(value: value, max: max), total: clampedTotal(max: max))
+            ProgressView(value: clamped(value: value, total: max), total: clampedTotal(total: max))
                 .progressViewStyle(.linear)
                 .tint(barTint(kind: kind))
         }
     }
 
-    private func clamped(value: Double, max: Double?) -> Double {
-        let total = clampedTotal(max: max)
-        return min(max(value, 0), total)
+    private func clamped(value: Double, total: Double?) -> Double {
+        let upper = clampedTotal(total: total)
+        return min(max(value, 0), upper)
     }
 
-    private func clampedTotal(max: Double?) -> Double {
-        if let m = max, m > 0 { return m }
+    private func clampedTotal(total: Double?) -> Double {
+        if let m = total, m > 0 { return m }
         return 100
     }
 
