@@ -3,6 +3,7 @@ import SwiftUI
 import os
 
 private let worldBookLog = Logger(subsystem: "pyramid.import", category: "WorldBook")
+private let adoptLog = Logger(subsystem: "pyramid.import", category: "WorldBook.Adopt")
 
 final class WorldBookStore: ObservableObject {
     @Published var books: [WorldBook] = []
@@ -200,31 +201,33 @@ final class WorldBookStore: ObservableObject {
     ///  - 优先复用 `character.embeddedWorldBookId` 对应的现有书；nil 则
     ///    `createBook(title:isGloballyEnabled:false)` 新建（embedded 永不全局）。
     ///  - 书名：`raw["name"]`（String）→ 否则 `"\(character.name) 内嵌世界书"`。
-    ///  - entries：接受 array / dict-of-int-keys（ST 两种都有）→ 逐个
-    ///    `parseSillyTavernEntry`（已扩 V3 字段）。
+    ///  - entries：接受 array / dict-of-int-keys（ST 两种都有），由
+    ///    `WorldBook.parseSillyTavernEntries(from:)` 在 `JSONValue` 上直接解析。
+    ///    历史 bug：`raw["entries"] as? [Any]` / `as? [String: Any]` 对 `JSONValue`
+    ///    恒失败 → 旧版此路径 entryDicts 恒为 `[]` → 内嵌世界书"条目 (0)"。
     ///  - 合并策略：按 `externalId == uid` 匹配替换旧条目；否则追加。
-    ///  - 幂等：同一角色二次导入复用同一本书，不重复创建。
+    ///  - 幂等：同一角色二次导入复用同一本书，不重复创建；**已存在的空壳书
+    ///    也会被重新填上 entries**（不必手删书）。
+    ///  - 解析出 0 条时仍允许建空壳书（保留 characterBookRaw），但记 os.Logger warning
+    ///    便于真机排查 character_book 形态异常。
     /// 返回书的 UUID；调用方写入 `character.embeddedWorldBookId`。
     @discardableResult
     func adoptEmbeddedWorldBook(for character: Character) -> UUID? {
         guard case .object(let raw) = character.characterBookRaw else { return nil }
 
-        // 1) 解析条目（array / dict-of-int-keys 两种形态）
-        let entryDicts: [[String: Any]]
-        if let arr = raw["entries"] as? [Any] {
-            entryDicts = arr.compactMap { $0 as? [String: Any] }
-        } else if let dict = raw["entries"] as? [String: Any] {
-            // ST legacy：数字键字典，按 key 排序保持稳定顺序
-            entryDicts = dict.keys.sorted { (a, b) in
-                (Int(a) ?? 0) < (Int(b) ?? 0)
-            }.compactMap { dict[$0] as? [String: Any] }
-        } else {
-            entryDicts = []
+        // 1) 解析 entries：走 JSONValue，不做 [Any] / [String: Any] 桥接。
+        let parsed = WorldBook.parseSillyTavernEntries(from: raw["entries"] ?? .null)
+        if parsed.isEmpty {
+            adoptLog.warning("adoptEmbeddedWorldBook: 0 entries parsed for character=\(character.name, privacy: .public) (entries 字段类型 / 形态异常，请检查 characterBookRaw)")
         }
-        let parsed = entryDicts.map { Self.parseSillyTavernEntry($0) }
 
-        // 2) 书名
-        let rawName = (raw["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        // 2) 书名：JSONValue.string(.string(s)) 读取，禁止 as? String 硬转 JSONValue。
+        let rawName: String? = {
+            if case .string(let s) = raw["name"] {
+                return s.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            return nil
+        }()
         let bookTitle = (rawName?.isEmpty == false ? rawName! : "\(character.name) 内嵌世界书")
 
         // 3) 复用旧书 or 新建
@@ -234,7 +237,7 @@ final class WorldBookStore: ObservableObject {
             bookID = existingID
             // 更新标题（命名变化时跟随）
             books[index].title = bookTitle
-            // 按 uid 合并 entries：匹配替换，否则追加
+            // 按 uid 合并 entries：匹配替换，否则追加。这条路径也负责给"空壳书"灌条目。
             for entry in parsed {
                 if let uid = entry.externalId,
                    let matchIndex = books[index].entries.firstIndex(where: { $0.externalId == uid }) {

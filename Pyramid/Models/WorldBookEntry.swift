@@ -186,4 +186,166 @@ struct WorldBookEntry: Codable, Identifiable, Equatable {
         positionRaw = try? c.decodeIfPresent(Int.self, forKey: .positionRaw)
         extensionsRaw = try? c.decodeIfPresent(JSONValue.self, forKey: .extensionsRaw)
     }
+
+    // MARK: - SillyTavern JSON 解析（JSONValue 路径，供 adoptEmbeddedWorldBook / 通用导入复用）
+
+    /// 把一条 SillyTavern V3 entry 的 `JSONValue.object(...)` 解析为 `WorldBookEntry`。
+    ///
+    /// 旧路径 `parseSillyTavernEntry([String: Any])`（`WorldBookStore` private）只在
+    /// `JSONSerialization` 解码的 `Any` 上工作；当上游是 `JSONValue`（即
+    /// `character.characterBookRaw` 透传出来的对象）时，`JSONValue` **不能**用
+    /// `as? [String: Any]` 桥接 → 旧路径恒产空 entries。本方法直接从 `JSONValue` 读字段，
+    /// 保留所有 NSNumber / 数组 / 对象 / 字符串语义，让内嵌世界书真正可用。
+    ///
+    /// **不接受**非 `.object` 输入；调用方负责把 `.array` 元素 / `.object` 子值传过来。
+    static func parse(sillyTavern raw: JSONValue) -> WorldBookEntry? {
+        guard case .object(let dict) = raw else { return nil }
+
+        var entry = WorldBookEntry()
+
+        let content = dict["content"].flatMap(Self.stringValue) ?? ""
+        entry.content = content
+
+        let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let comment = dict["comment"].flatMap(Self.stringValue),
+           !comment.trimmingCharacters(in: .whitespaces).isEmpty {
+            entry.title = comment
+        } else if let name = dict["name"].flatMap(Self.stringValue),
+                  !name.trimmingCharacters(in: .whitespaces).isEmpty {
+            entry.title = name
+        } else if !trimmedContent.isEmpty {
+            let maxLen = 50
+            entry.title = trimmedContent.count > maxLen
+                ? String(trimmedContent.prefix(maxLen)) + "…"
+                : trimmedContent
+        } else {
+            entry.title = "未命名"
+        }
+
+        // keywords：`key` 或 `keys`，数组 / 单字符串都接受
+        let keyField = dict["key"] ?? dict["keys"]
+        if let arr = keyField.flatMap(Self.stringArrayValue) {
+            entry.keywords = arr.flatMap(Self.splitKeywords)
+        } else if let s = keyField.flatMap(Self.stringValue) {
+            entry.keywords = Self.splitKeywords(s)
+        }
+
+        let secondaryField = dict["keysecondary"] ?? dict["keySecondary"]
+        if let arr = secondaryField.flatMap(Self.stringArrayValue) {
+            entry.secondaryKeywords = arr.flatMap(Self.splitKeywords)
+        } else if let s = secondaryField.flatMap(Self.stringValue) {
+            entry.secondaryKeywords = Self.splitKeywords(s)
+        }
+
+        entry.isConstant = dict["constant"].flatMap(Self.boolValue) ?? false
+        entry.isEnabled = !(dict["disable"].flatMap(Self.boolValue) ?? false)
+
+        // order / priority / insertion_order：越小越优先（小=优先），与原生 priority 一致。
+        if let order = dict["order"].flatMap(Self.intValue) {
+            entry.priority = order
+        } else if let priority = dict["priority"].flatMap(Self.intValue) {
+            entry.priority = priority
+        } else if let insertion = dict["insertion_order"].flatMap(Self.intValue) {
+            entry.priority = insertion
+        }
+
+        if let matchWholeWords = dict["matchWholeWords"].flatMap(Self.boolValue), matchWholeWords {
+            entry.matchMode = .exact
+        }
+
+        // useProbability=false 视为不启用概率（=100 恒触发）。
+        if let useProbability = dict["useProbability"].flatMap(Self.boolValue), !useProbability {
+            entry.probability = 100
+        } else if let p = dict["probability"].flatMap(Self.intValue) {
+            entry.probability = min(max(p, 0), 100)
+        }
+
+        if let depth = dict["depth"].flatMap(Self.intValue) {
+            entry.scanDepth = depth
+        } else if let scanDepth = dict["scanDepth"].flatMap(Self.intValue) {
+            entry.scanDepth = scanDepth
+        }
+
+        // V3 位置 0..6；5/6 折叠到 afterHistory；positionRaw 保留原始值用于 round-trip。
+        if let position = dict["position"].flatMap(Self.intValue) {
+            entry.positionRaw = position
+            switch position {
+            case 0:
+                entry.insertionPosition = .beforeSystem
+            case 3, 4, 5, 6:
+                entry.insertionPosition = .afterHistory
+            default:
+                entry.insertionPosition = .afterSystem
+            }
+        }
+
+        // V3 字段透传
+        entry.externalId = dict["uid"].flatMap(Self.intValue)
+        entry.groupKey = dict["group"].flatMap(Self.stringValue)
+        entry.groupWeight = dict["group_weight"].flatMap(Self.doubleValue)
+        entry.weight = dict["weight"].flatMap(Self.doubleValue)
+        entry.decay = dict["decay"].flatMap(Self.doubleValue)
+        entry.caseSensitive = dict["case_sensitive"].flatMap(Self.boolValue)
+        entry.useGroupScoring = dict["useGroupScoring"].flatMap(Self.boolValue)
+        entry.automationId = dict["automationId"].flatMap(Self.stringValue)
+        entry.roleRaw = dict["role"].flatMap(Self.intValue)
+        entry.vectorized = dict["vectorized"].flatMap(Self.boolValue)
+        entry.sticky = dict["sticky"].flatMap(Self.intValue)
+        entry.cooldown = dict["cooldown"].flatMap(Self.intValue)
+        entry.delay = dict["delay"].flatMap(Self.intValue)
+        entry.displayIndex = dict["displayIndex"].flatMap(Self.intValue)
+        entry.triggers = dict["triggers"].flatMap(Self.stringArrayValue) ?? []
+        entry.outletName = dict["outletName"].flatMap(Self.stringValue)
+        entry.excludes = dict["excludes"].flatMap(Self.stringArrayValue) ?? []
+        entry.selectiveLogicRaw = dict["selectiveLogic"].flatMap(Self.intValue)
+        // extensions 透传：任意 JSONValue 都收；与 characterBookRaw 行为对齐。
+        if let ext = dict["extensions"] {
+            entry.extensionsRaw = ext
+        }
+
+        return entry
+    }
+
+    // MARK: - JSONValue → Foundation 辅助
+
+    private static func stringValue(_ v: JSONValue) -> String? {
+        if case .string(let s) = v { return s }
+        return nil
+    }
+
+    private static func boolValue(_ v: JSONValue) -> Bool? {
+        if case .bool(let b) = v { return b }
+        return nil
+    }
+
+    private static func intValue(_ v: JSONValue) -> Int? {
+        if case .int(let i) = v { return i }
+        if case .double(let d) = v, d.rounded() == d, d >= Double(Int.min), d <= Double(Int.max) {
+            return Int(d)
+        }
+        // ST 偶尔把 uid 写成字符串数字（"42"）。
+        if case .string(let s) = v, let i = Int(s) { return i }
+        return nil
+    }
+
+    private static func doubleValue(_ v: JSONValue) -> Double? {
+        if case .double(let d) = v { return d }
+        if case .int(let i) = v { return Double(i) }
+        return nil
+    }
+
+    private static func stringArrayValue(_ v: JSONValue) -> [String]? {
+        if case .array(let arr) = v {
+            return arr.map { stringValue($0) }.compactMap { $0 }
+        }
+        return nil
+    }
+
+    /// 按 `,` / `，` / 空白切词。复用 `WorldBookStore` 旧路径里的语义。
+    private static func splitKeywords(_ text: String) -> [String] {
+        text.components(separatedBy: CharacterSet(charactersIn: ",，")
+            .union(.whitespacesAndNewlines))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
 }

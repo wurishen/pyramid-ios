@@ -38,6 +38,7 @@ let package = Package(
                 "JSONPatchTests.swift",
                 "P3TranspileProtocolTests.swift",
                 "NativeDisplayModelTests.swift",
+                "EmbeddedWorldBookParseTests.swift",
             ]
         ),
     ]
