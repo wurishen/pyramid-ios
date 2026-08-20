@@ -423,15 +423,17 @@ final class CharacterExtensionsLiftTests: XCTestCase {
             ]
         ]
         let character = ImportSupport.parseSillyTavernCard(json)
-        guard let init = character.initStatData else {
+        // Avoid `init` as a binding name — it's a Swift reserved keyword and
+        // Swift 6 (the macOS SPM toolchain on CI) rejects it as a let-pattern.
+        guard let initData = character.initStatData else {
             return XCTFail("initStatData 应当被 lift")
         }
-        XCTAssertEqual(init["时间"], .string("傍晚"))
-        XCTAssertEqual(init["玩家"], .object([
+        XCTAssertEqual(initData["时间"], .string("傍晚"))
+        XCTAssertEqual(initData["玩家"], .object([
             "当前所在地": .string("集市"),
             "金币": .int(50)
         ]))
-        XCTAssertEqual(init["$meta"], .object(["strictTemplate": .bool(false)]))
+        XCTAssertEqual(initData["$meta"], .object(["strictTemplate": .bool(false)]))
         // 已被 lift → extensionsRaw 不再含此键；其它 extensions 都为空时整体 nil。
         if case .object(let ext) = character.extensionsRaw {
             XCTAssertNil(ext["init_stat_data"], "lifted 键不应重复存于 extensionsRaw")
