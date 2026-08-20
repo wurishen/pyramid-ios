@@ -52,8 +52,20 @@ jobs:
 
       - name: SillyTavern compat layer tests (Swift Package)
         run: |
+          set -euxo pipefail
           cd swift-tests
-          swift test
+          # 把 swift test 的真实输出 dump 到 step summary（check-run API 能拿到，
+          # 不需要 admin 权限即可读 raw log）。
+          LOG=$(mktemp)
+          if swift test 2>&1 | tee "$LOG"; then
+            echo "## swift test ✅" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## swift test ❌ — last 200 lines:" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            tail -200 "$LOG" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
 
   build:
     runs-on: macos-14
