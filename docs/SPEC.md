@@ -890,14 +890,14 @@ iOS 和 Android 双端应实现**相同的核心功能集**，包括：
 
 ## 14. 原生 Transpile 流水线（v0.8）
 
-助手消息的渲染走纯原生 iOS 路径，不引入 JavaScript / WebView / HTML 渲染层。酒馆侧 `<StatusPlaceHolderImpl/>` 与 `<<UpdateVariable>>[…JSON…]<</UpdateVariable>>` 标记在 Pyramid 内部被原生节点取代：
+助手消息的渲染走纯原生 iOS 路径，不引入 JavaScript / WebView / HTML 渲染层。酒馆侧 `<StatusPlaceHolderImpl/>` 与 `<UpdateVariable>…</UpdateVariable>`（酒馆 canonical 拼写：单 `<`）标记在 Pyramid 内部被原生节点取代：
 
 | 酒馆标记 | 原生渲染节点 | 副作用 |
 |---------|------------|--------|
 | `<StatusPlaceHolderImpl/>` | `.statusPlaceholder(snapshot)` — 列出当前会话 `VariableStore` 拍扁后的所有变量；空时显示「状态（等待变量）」 | 仅读取 |
-| `<<UpdateVariable>>[…JSON Patch…]<</UpdateVariable>>` | `.variableUpdate(summary)` — 可折叠摘要：applied 计数 + 受影响 path 列表；同时把 ops 应用到 `VariableStore` | 写 `VariableStore`（每会话一份，`UserDefaults` 持久化） |
+| `<UpdateVariable>…</UpdateVariable>`（内含 `<JSONPatch>[…]</JSONPatch>` 子块） | `.variableUpdate(summary)` — 可折叠摘要：applied 计数 + 受影响 path 列表；同时把 ops 应用到 `VariableStore` | 写 `VariableStore`（每会话一份，`UserDefaults` 持久化） |
 
-**MVU 契约**：RFC 6902 JSON Patch，仅消费 `replace | add | remove`；以 `_` 开头的 path（私有视图态）协议层静默 skip，不写入也不进 affectedPaths。
+**MVU 契约**：RFC 6902 JSON Patch，仅消费 `replace | add | remove | move | delta | insert`（`delta` 与 `insert` 为 MVU 扩展；`copy` / `test` MVU 自身 silently dropped，native 一致）；以 `_` 开头的 path（私有视图态）协议层静默 skip，不写入也不进 affectedPaths。
 
 **跳过规则（HTML beautify 防滥用）**：渲染前的显示用正则按 `MessageRendererCore.orderedRegexes` 排序时，再叠加两道过滤门：
 1. `DisplayRegex.promptOnly == true` → 不进显示链（仅 outgoing prompt 阶段剥离）。
@@ -909,6 +909,13 @@ iOS 和 Android 双端应实现**相同的核心功能集**，包括：
 - `message.content` 原文永不被改写；`RenderNodeParser` 只读，复制 / 编辑 / 重新生成 / 发送 API 始终拿原文。
 - `VariableStore` 仅在客户端持有，不上传任何数据；写入仅由当前会话的 UpdateVariable 块触发。
 - 不引入 WKWebView / UIWebView / SFSafariViewController；不解析任何远程 `<script>` / `<object>` / `$('body').load(...)`。
+
+**调研参考文档**（Phase 7 源码结论，2026-08-20）：
+- [`ST_SOURCE_CONCLUSIONS.md`](./ST_SOURCE_CONCLUSIONS.md) — 酒馆 / Tavern Helper / MagVarUpdate 三仓分工、关键源文件路径、显示数据流、JsonPatch dialect 词汇表
+- [`ST_FIELD_LIST.md`](./ST_FIELD_LIST.md) — chara_card_v3 / regex_scripts / stat_data 字段的 D（数据）/ S（皮肤）/ P（协议）分类
+- [`ST_TO_NATIVE_MAPPING.md`](./ST_TO_NATIVE_MAPPING.md) — 酒馆概念 → NativeDisplayModel 原语映射表（每条附源码依据）
+- [`ST_FALLBACK_RULES.md`](./ST_FALLBACK_RULES.md) — 9 类场景下退到 `text` / `residual` / `drop` 的规则
+- [`ST_OPEN_QUESTIONS.md`](./ST_OPEN_QUESTIONS.md) — 仍不明确的 15 个决策点（含本期已落地决策汇总）
 
 ---
 
