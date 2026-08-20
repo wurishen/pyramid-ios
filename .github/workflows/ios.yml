@@ -51,37 +51,24 @@ jobs:
         run: swiftlint lint --quiet
 
       - name: SillyTavern compat layer tests (Swift Package)
-        # 调试期：先验证 GITHUB_STEP_SUMMARY 可写，再 dump swift test 输出。
         run: |
-          echo "GITHUB_STEP_SUMMARY=[$GITHUB_STEP_SUMMARY]"
-          if [ -n "$GITHUB_STEP_SUMMARY" ] && [ -e "$(dirname "$GITHUB_STEP_SUMMARY")" ]; then
-            echo "summary dir OK: $(dirname "$GITHUB_STEP_SUMMARY")"
-            echo "summary target exists?: $([ -e "$GITHUB_STEP_SUMMARY" ] && echo yes || echo no)"
-            touch "$GITHUB_STEP_SUMMARY" && echo "summary writable"
-          else
-            echo "GITHUB_STEP_SUMMARY NOT available, falling back to /tmp/sl-summary.md"
-            GITHUB_STEP_SUMMARY=/tmp/sl-summary.md
-            touch "$GITHUB_STEP_SUMMARY"
-          fi
           cd swift-tests
-          LOG=$(mktemp)
-          swift test > "$LOG" 2>&1
-          RC=$?
-          {
-            echo "## swift test (exit $RC)"
-            echo
-            echo '```'
-            head -200 "$LOG"
-            if [ "$(wc -l < "$LOG")" -gt 200 ]; then
-              echo
-              echo "... ($(wc -l < "$LOG") total lines, truncated) ..."
-              echo
-              tail -50 "$LOG"
-            fi
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-          echo "summary bytes: $(wc -c < "$GITHUB_STEP_SUMMARY")"
+          swift test 2>&1 | tee /tmp/swift-test.log
+          RC=${PIPESTATUS[0]}
+          # 失败时把日志作为 artifact 上传，便于本地诊断（artifact API 无需 admin）。
+          if [ $RC -ne 0 ]; then
+            mkdir -p /tmp/swift-test-artifact
+            cp /tmp/swift-test.log /tmp/swift-test-artifact/swift-test.log
+          fi
           exit $RC
+
+      - name: Upload swift test log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: swift-test-log
+          path: /tmp/swift-test-artifact/swift-test.log
+          retention-days: 7
 
   build:
     runs-on: macos-14
