@@ -26,7 +26,21 @@ jobs:
           sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
 
       - name: Install SwiftLint
-        run: brew install swiftlint
+        # 从 SwiftLint 官方 GitHub Release 直接下载 macOS 二进制，
+        # 避开 Homebrew `aws/tap` 未被信任导致 `brew install swiftlint` 失败的坑
+        # （macos-14 runner 上默认要求所有 tap 显式 trust，未 trust 的 tap 会被忽略）。
+        # 锁版本 0.65.0；如需升级，更新 SWIFTLINT_VERSION 与本地 `.swiftlint.yml` 同步即可。
+        run: |
+          set -euo pipefail
+          SWIFTLINT_VERSION="0.65.0"
+          TMPDIR=$(mktemp -d)
+          cd "$TMPDIR"
+          curl -fsSL -o swiftlint.zip \
+            "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/swiftlint_macOS.zip"
+          unzip -o swiftlint.zip
+          sudo mv swiftlint /usr/local/bin/swiftlint
+          sudo chmod +x /usr/local/bin/swiftlint
+          swiftlint --version
 
       - name: SwiftLint (warnings only, no --strict)
         # 风格规则已在 .swiftlint.yml 里关了一堆 false-positive；
