@@ -37,6 +37,7 @@ let package = Package(
                 "EmbeddedWorldBookToggleTests.swift",
                 "JSONPatchTests.swift",
                 "P3TranspileProtocolTests.swift",
+                "NativeDisplayModelTests.swift",
             ]
         ),
     ]
