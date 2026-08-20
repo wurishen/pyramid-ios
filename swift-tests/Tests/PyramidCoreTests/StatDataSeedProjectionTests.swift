@@ -94,7 +94,7 @@ final class StatDataSeedProjectionTests: XCTestCase {
         for child in children {
             switch child {
             case let .field(label, _): labels.append(label)
-            case let .number(label, _):
+            case let .number(_, label):
                 if let l = label { labels.append(l) }
             default: break
             }
@@ -190,7 +190,7 @@ final class StatDataSeedProjectionTests: XCTestCase {
         ])
         // 第一次 seed 之后 patch 写入。
         try store.apply([
-            JSONPatchOperation.replace(path: "/k", value: .int(99))
+            JSONPatchOperation(op: .replace, path: "/k", value: .int(99))
         ])
         XCTAssertEqual(store.statData(), .object([
             "k": .int(99),
