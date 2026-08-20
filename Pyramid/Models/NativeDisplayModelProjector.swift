@@ -59,9 +59,12 @@ enum NativeDisplayModelProjector {
         )
     }
 
-    /// 把 `[VariableEntry]`（已拍扁的路径列表）降级为单 .text 节点 + 残值。
-    /// 这是"扁平条目"维度的最佳努力投影 —— 形态已丢，无法还原嵌套 group。
-    /// 本期主要给 `statusPlaceholder` 旧路径用；建议优先 `project(statData:)`。
+    /// 把 `[VariableEntry]`（已拍扁的路径列表）投影为 `NativeDisplayModel`。
+    ///
+    /// 这是"扁平条目"维度的最佳努力投影 —— 嵌套形态已丢，无法还原嵌套 group，
+    /// 但 `HP` / `好感度` 等键名启发仍然生效，让 `bar` 原语照常走到显示层。
+    /// 数值字段来自 `VariableStoreFlattener.format` 把 int/double 编出的纯数字字符串；
+    /// 解析失败则退回 `.field`。
     static func project(entries: [VariableEntry]) -> NativeDisplayModel {
         guard !entries.isEmpty else {
             return NativeDisplayModel(
@@ -70,14 +73,31 @@ enum NativeDisplayModelProjector {
                 residual: []
             )
         }
-        let fields = entries
+        let blocks = entries
             .sorted { $0.path < $1.path }
-            .map { DisplayBlock.field(label: $0.path, value: $0.displayValue) }
+            .map { entry -> DisplayBlock in
+                let leaf = leafName(of: entry.path)
+                if let kind = hpKeyKind(leaf), let value = Double(entry.displayValue) {
+                    return .bar(label: leaf, value: value, max: 100, kind: kind)
+                }
+                return .field(label: entry.path, value: entry.displayValue)
+            }
         return NativeDisplayModel(
             version: 1,
-            blocks: [wrapRootGroup(blocks: fields)],
+            blocks: [wrapRootGroup(blocks: blocks)],
             residual: []
         )
+    }
+
+    /// 从 JSON Pointer 路径里取出最后一段作为「叶子键名」用于键名启发。
+    /// 形如 `/HP` → `HP`；`/玩家/好感度` → `好感度`；`/` 或空 → 原样返回。
+    private static func leafName(of path: String) -> String {
+        guard !path.isEmpty else { return path }
+        let trimmed = path.hasPrefix("/") ? String(path.dropFirst()) : path
+        if let last = trimmed.split(separator: "/").last {
+            return String(last)
+        }
+        return trimmed
     }
 
     // MARK: - 内部

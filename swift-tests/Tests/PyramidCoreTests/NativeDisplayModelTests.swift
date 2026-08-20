@@ -415,6 +415,44 @@ final class NativeDisplayModelTests: XCTestCase {
         }
     }
 
+    /// HP-like path → model 含 `.bar(.hp)`，让 StatusPlaceholderView 的 ProgressView 分支命中。
+    /// 这是 1→2 投影层 + 显示层闭环的关键断言：旧 flat 路径只产 field，新路径产 bar。
+    func testEntriesWithHPKeyProducesBarBlock() {
+        let entries = [
+            VariableEntry(path: "/HP", displayValue: "80"),
+            VariableEntry(path: "/player/location", displayValue: "集市")
+        ]
+        let model = NativeDisplayModelProjector.project(entries: entries)
+        guard case let .group(_, children) = model.blocks[0] else { return XCTFail("根部应是 group") }
+        let barBlocks = children.compactMap { block -> DisplayBlock? in
+            if case .bar = block { return block } else { return nil }
+        }
+        XCTAssertEqual(barBlocks.count, 1, "HP 路径必须投影为 bar")
+        guard case let .bar(label, value, max, kind) = barBlocks[0] else {
+            XCTFail("barBlocks[0] 应是 bar")
+            return
+        }
+        XCTAssertEqual(label, "HP")
+        XCTAssertEqual(value, 80)
+        XCTAssertEqual(max, 100)
+        XCTAssertEqual(kind, .hp)
+    }
+
+    /// 好感度 path → `.bar(.affection)`：确保另一条 bar kind 启发也走到显示层。
+    func testEntriesWithAffectionKeyProducesAffectionBar() {
+        let entries = [
+            VariableEntry(path: "/好感度", displayValue: "65"),
+            VariableEntry(path: "/time", displayValue: "傍晚")
+        ]
+        let model = NativeDisplayModelProjector.project(entries: entries)
+        guard case let .group(_, children) = model.blocks[0] else { return XCTFail("根部应是 group") }
+        let bars = children.compactMap { block -> DisplayBlock? in
+            if case .bar(_, _, _, let kind) = block { return kind == .affection ? block : nil }
+            return nil
+        }
+        XCTAssertEqual(bars.count, 1)
+    }
+
     // MARK: - 健壮性
 
     /// 嵌套 object 不应丢失任何键（除非内部键）。

@@ -200,9 +200,12 @@ struct MessageCard: View {
             StatusView(hp: hp, affection: affection)
                 .scaleEffect(scale, anchor: .topLeading)
         case let .statusPlaceholder(snapshot):
-            // P3 native transpile：`<StatusPlaceHolderImpl/>` → 列当前会话所有变量。
-            // snapshot 空 → 显示「状态（等待变量）」，与 fixture ios_render_boundary 对齐。
-            StatusPlaceholderView(snapshot: snapshot, scale: scale)
+            // P3 native transpile：`<StatusPlaceHolderImpl/>` → 先经
+            // `NativeDisplayModelProjector.project(entries:)` 把 `[VariableEntry]`
+            // 拍平后的快照投影成 `NativeDisplayModel`，再交给 `StatusPlaceholderView` 渲染。
+            // 显示层只消费 `NativeDisplayModel`；映射规则全部在 Projector / 文档里。
+            let model = NativeDisplayModelProjector.project(entries: snapshot)
+            StatusPlaceholderView(model: model, scale: scale)
         case let .variableUpdate(summary):
             // P3 native transpile：`<UpdateVariable>…</UpdateVariable>` 块 → 可折叠摘要。
             VariableUpdateView(summary: summary, scale: scale)
@@ -390,32 +393,41 @@ struct MessageCard: View {
 
 // MARK: - P3 native transpile 节点视图
 
-/// `<StatusPlaceHolderImpl/>` → 状态占位面板：按 JSON Pointer 第一段自动分组，
-/// 数字用更醒目的样式；空时显示「状态（等待变量）」。
+/// `<StatusPlaceHolderImpl/>` → 状态占位面板：把 `[VariableEntry]` 快照经
+/// `NativeDisplayModelProjector.project(entries:)` 投影成 `NativeDisplayModel` 后
+/// 按 `DisplayBlock` 递归渲染（text / number / field / tag / bar / section / group + residual）。
 ///
-/// 设计目标：酒馆「状态栏」感 —— 不是调试器的扁平 key-value 表。
-///   /时间               → 顶层键，单独成行
-///   /玩家/当前所在地    ┐
-///   /玩家/好感          ┘  → 「玩家」分组，2 行
+/// 设计目标：只读显示 —— 不写回 `message.content`、不点击改值、不复刻酒馆 HTML 皮肤。
+/// 形态信息（嵌套 / 数组 / 启发 bar）由 Projector 决定；本视图只把原语画出来。
 ///
 /// 边界：
-/// - 不读 `message.content`，不改 `RenderNode` / `VariableStore` 协议。
-/// - 仅消费 `RenderNode.statusPlaceholder(snapshot:)` 给的 `[VariableEntry]`。
+/// - 仅消费 `NativeDisplayModel`；不读 `message.content`，不改 `RenderNode` /
+///   `VariableStore` / `RenderNodeParser` / `JSONPatch` 协议。
+/// - `version != 1` 的 model 一律显示「投影版本不匹配」占位，避免意外数据。
+/// - residual（无法映射）以「其它」折叠区呈现，原文不丢。
 struct StatusPlaceholderView: View {
-    let snapshot: [VariableEntry]
+    let model: NativeDisplayModel
     let scale: CGFloat
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8 * scale) {
             header
-            if snapshot.isEmpty {
+            if model.version != 1 {
+                Text("状态（投影版本不匹配：\(model.version)）")
+                    .font(.system(size: 13 * scale))
+                    .foregroundStyle(.tertiary)
+                    .padding(.vertical, 4 * scale)
+            } else if model.blocks.isEmpty && model.residual.isEmpty {
                 Text("状态（等待变量）")
                     .font(.system(size: 13 * scale))
                     .foregroundStyle(.tertiary)
                     .padding(.vertical, 4 * scale)
             } else {
-                ForEach(Array(Self.group(snapshot).enumerated()), id: \.offset) { _, group in
-                    StatusPlaceholderGroupView(group: group, scale: scale)
+                ForEach(Array(model.blocks.enumerated()), id: \.offset) { _, block in
+                    renderBlock(block)
+                }
+                if !model.residual.isEmpty {
+                    residualSection
                 }
             }
         }
@@ -438,95 +450,168 @@ struct StatusPlaceholderView: View {
         .foregroundStyle(.secondary)
     }
 
-    /// 按 JSON Pointer 第一段分组。顶层键（如 `/时间`）自己成一组，组内只有 1 条；
-    /// 嵌套键（如 `/玩家/当前所在地`）归入 `玩家` 组，组内按 path 余段排序。
-    /// 不递归 / 排序依赖 `VariableStoreFlattener` 已经按 key 排序好的结果。
-    fileprivate static func group(_ entries: [VariableEntry]) -> [StatusPlaceholderGroup] {
-        var groups: [StatusPlaceholderGroup] = []
-        var indexByTitle: [String: Int] = [:]
-        for entry in entries {
-            let segments = entry.path.split(separator: "/").map(String.init)
-            // path 形如 "/时间" / "/玩家/当前所在地" —— split 后第一段就是组名。
-            guard let head = segments.first, !head.isEmpty else { continue }
-            let leafSegments = Array(segments.dropFirst())
-            let leafPath = leafSegments.isEmpty ? head : leafSegments.joined(separator: "/")
-            if let i = indexByTitle[head], groups[i].title == head {
-                groups[i].entries.append(StatusPlaceholderEntry(leafPath: leafPath, displayValue: entry.displayValue))
-            } else {
-                indexByTitle[head] = groups.count
-                groups.append(StatusPlaceholderGroup(
-                    title: head,
-                    entries: [StatusPlaceholderEntry(leafPath: leafPath, displayValue: entry.displayValue)]
-                ))
+    // MARK: - 原语分派
+
+    @ViewBuilder
+    private func renderBlock(_ block: DisplayBlock) -> some View {
+        switch block {
+        case let .text(s):
+            Text(s)
+                .font(.system(size: 13 * scale))
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+        case let .number(value, label):
+            HStack(alignment: .firstTextBaseline, spacing: 8 * scale) {
+                if let label {
+                    Text(label)
+                        .font(.system(size: 12 * scale, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8 * scale)
+                Text(format(value))
+                    .font(.system(size: 14 * scale, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Color.accentColor)
+                    .lineLimit(1)
             }
-        }
-        return groups
-    }
-}
-
-/// 一个分组（如「玩家」）：组内多条叶子变量。
-struct StatusPlaceholderGroup: Equatable {
-    let title: String
-    var entries: [StatusPlaceholderEntry]
-}
-
-/// 组内一行：叶路径（去掉组名前缀）+ 显示值。
-struct StatusPlaceholderEntry: Equatable {
-    let leafPath: String
-    let displayValue: String
-}
-
-/// 一个分组的视觉：组标题（小、灰）+ 行列表。
-/// 顶层键（组内只有 1 条，且 leafPath == title）隐藏组标题，避免重复（路径 = 组名）。
-private struct StatusPlaceholderGroupView: View {
-    let group: StatusPlaceholderGroup
-    let scale: CGFloat
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4 * scale) {
-            if !shouldHideTitle {
-                Text(group.title)
+        case let .bar(label, value, max, kind):
+            barRow(label: label, value: value, max: max, kind: kind)
+        case let .tag(label, value):
+            HStack(spacing: 4 * scale) {
+                Text(label)
+                    .font(.system(size: 12 * scale, weight: .medium))
+                    .foregroundStyle(.primary)
+                if let value {
+                    Text(value)
+                        .font(.system(size: 11 * scale, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 8 * scale)
+            .padding(.vertical, 3 * scale)
+            .background(Color(.systemGray5), in: Capsule())
+            .overlay(Capsule().stroke(Color(.systemGray3), lineWidth: 0.5))
+        case let .field(label, value):
+            HStack(alignment: .firstTextBaseline, spacing: 8 * scale) {
+                Text(label)
+                    .font(.system(size: 12 * scale, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8 * scale)
+                Text(value)
+                    .font(.system(size: 13 * scale))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.trailing)
+            }
+        case let .section(label, content):
+            VStack(alignment: .leading, spacing: 4 * scale) {
+                Text(label)
                     .font(.system(size: 11 * scale, weight: .medium))
                     .foregroundStyle(.tertiary)
                     .padding(.bottom, 1 * scale)
+                HStack(alignment: .center, spacing: 6 * scale) {
+                    ForEach(Array(content.enumerated()), id: \.offset) { _, child in
+                        renderBlock(child)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            ForEach(Array(group.entries.enumerated()), id: \.offset) { _, entry in
-                row(entry)
+        case let .group(title, children):
+            VStack(alignment: .leading, spacing: 4 * scale) {
+                Text(title)
+                    .font(.system(size: 11 * scale, weight: .medium))
+                    .foregroundStyle(.tertiary)
+                    .padding(.bottom, 1 * scale)
+                VStack(alignment: .leading, spacing: 4 * scale) {
+                    ForEach(Array(children.enumerated()), id: \.offset) { _, child in
+                        renderBlock(child)
+                    }
+                }
+                .padding(.leading, 6 * scale)
             }
         }
     }
 
-    /// 顶层键（如 `/时间` → 组「时间」+ 1 条 leafPath=「时间」）标题与 leaf 名相同，隐藏重复。
-    private var shouldHideTitle: Bool {
-        group.entries.count == 1 && group.entries[0].leafPath == group.title
-    }
+    // MARK: - 进度条
 
     @ViewBuilder
-    private func row(_ entry: StatusPlaceholderEntry) -> some View {
-        let isNumeric = Self.isNumeric(entry.displayValue)
-        HStack(alignment: .firstTextBaseline, spacing: 8 * scale) {
-            Text(entry.leafPath)
-                .font(.system(size: 12 * scale, design: .monospaced))
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 8 * scale)
-            Text(entry.displayValue)
-                .font(.system(
-                    size: (isNumeric ? 14 : 13) * scale,
-                    weight: isNumeric ? .semibold : .regular,
-                    design: isNumeric ? .monospaced : .default
-                ))
-                .foregroundStyle(isNumeric ? Color.accentColor : .primary)
-                .lineLimit(2)
-                .multilineTextAlignment(.trailing)
+    private func barRow(label: String, value: Double, max: Double?, kind: BarKind) -> some View {
+        VStack(alignment: .leading, spacing: 2 * scale) {
+            HStack(spacing: 6 * scale) {
+                Text(label)
+                    .font(.system(size: 12 * scale, weight: .medium))
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 6 * scale)
+                if let max {
+                    Text("\(format(value))/\(format(max))")
+                        .font(.system(size: 11 * scale, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(format(value))
+                        .font(.system(size: 11 * scale, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            ProgressView(value: clamped(value: value, max: max), total: clampedTotal(max: max))
+                .progressViewStyle(.linear)
+                .tint(barTint(kind: kind))
         }
-        .padding(.leading, shouldHideTitle ? 0 : 6 * scale)
     }
 
-    /// 简单判定显示值是不是数字。`VariableStoreFlattener.format` 会把 int/double
-    /// 编为纯数字字符串、bool 编为「是 / 否」、null 编为 `—`。这里���看是不是纯数字。
-    private static func isNumeric(_ s: String) -> Bool {
-        guard !s.isEmpty else { return false }
-        return Double(s) != nil
+    private func clamped(value: Double, max: Double?) -> Double {
+        let total = clampedTotal(max: max)
+        return min(max(value, 0), total)
+    }
+
+    private func clampedTotal(max: Double?) -> Double {
+        if let m = max, m > 0 { return m }
+        return 100
+    }
+
+    private func barTint(kind: BarKind) -> Color {
+        switch kind {
+        case .hp: return Color.red.opacity(0.85)
+        case .affection: return Color.pink.opacity(0.85)
+        case .ratio: return Color.accentColor
+        case .generic: return Color.secondary
+        }
+    }
+
+    private func format(_ value: Double) -> String {
+        if value.rounded() == value {
+            return String(Int(value))
+        }
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.maximumFractionDigits = 2
+        return f.string(from: NSNumber(value: value)) ?? "\(value)"
+    }
+
+    // MARK: - residual
+
+    @ViewBuilder
+    private var residualSection: some View {
+        DisclosureGroup {
+            VStack(alignment: .leading, spacing: 4 * scale) {
+                ForEach(Array(model.residual.enumerated()), id: \.offset) { _, field in
+                    VStack(alignment: .leading, spacing: 1 * scale) {
+                        if let path = field.path {
+                            Text(path)
+                                .font(.system(size: 11 * scale, design: .monospaced))
+                                .foregroundStyle(.tertiary)
+                        }
+                        Text(field.rawText)
+                            .font(.system(size: 11 * scale, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                }
+            }
+            .padding(.top, 4 * scale)
+        } label: {
+            Text("其它（\(model.residual.count)）")
+                .font(.system(size: 11 * scale, weight: .medium))
+                .foregroundStyle(.tertiary)
+        }
     }
 }
 

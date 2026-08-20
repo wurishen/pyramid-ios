@@ -54,6 +54,8 @@
 		AB000000000000000000029A /* RenderNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000029B /* RenderNode.swift */; };
 		AB000000000000000000029C /* RenderNodeParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000029D /* RenderNodeParser.swift */; };
 		AB0000000000000000000311 /* JSONPatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000310 /* JSONPatch.swift */; };
+		AB0000000000000000000410 /* NativeDisplayModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000400 /* NativeDisplayModel.swift */; };
+		AB0000000000000000000411 /* NativeDisplayModelProjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000401 /* NativeDisplayModelProjector.swift */; };
 		AB0000000000000000000313 /* VariableStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000312 /* VariableStore.swift */; };
 		AB000000000000000000029E /* StatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000029F /* StatusView.swift */; };
 		AB0000000000000000000280 /* AvatarImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000281 /* AvatarImageCache.swift */; };
@@ -112,6 +114,8 @@
 		AB000000000000000000029D /* RenderNodeParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderNodeParser.swift; sourceTree = "<group>"; };
 		AB0000000000000000000310 /* JSONPatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONPatch.swift; sourceTree = "<group>"; };
 		AB0000000000000000000312 /* VariableStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VariableStore.swift; sourceTree = "<group>"; };
+		AB0000000000000000000400 /* NativeDisplayModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeDisplayModel.swift; sourceTree = "<group>"; };
+		AB0000000000000000000401 /* NativeDisplayModelProjector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeDisplayModelProjector.swift; sourceTree = "<group>"; };
 		AB000000000000000000029F /* StatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusView.swift; sourceTree = "<group>"; };
 		AB0000000000000000000296 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
 		AB0000000000000000000298 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
@@ -181,6 +185,8 @@
 				AB000000000000000000029D /* RenderNodeParser.swift */,
 				AB0000000000000000000310 /* JSONPatch.swift */,
 				AB0000000000000000000312 /* VariableStore.swift */,
+				AB0000000000000000000400 /* NativeDisplayModel.swift */,
+				AB0000000000000000000401 /* NativeDisplayModelProjector.swift */,
 				AB0000000000000000000221 /* MacroExpander.swift */,
 			);
 			path = Models;
@@ -376,6 +382,8 @@
 				AB000000000000000000029C /* RenderNodeParser.swift in Sources */,
 				AB0000000000000000000311 /* JSONPatch.swift in Sources */,
 				AB0000000000000000000313 /* VariableStore.swift in Sources */,
+					AB0000000000000000000410 /* NativeDisplayModel.swift in Sources */,
+					AB0000000000000000000411 /* NativeDisplayModelProjector.swift in Sources */,
 				AB000000000000000000029E /* StatusView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
