@@ -136,7 +136,11 @@ Pyramid MVP **不支持 swipe**（所有回复都是单条）。
 
 > **决策**：native MVP 不实现世界书 init 来源。仅 `extensions.init_stat_data` 唯一来源。
 > 
-> **P3+ 行动**：补 world book init entry 解析。
+> **本阶段已隔离**：为避免 `[initvar]` 条目被当作普通 lore 注入进正文，
+> `WorldBookEntry.parse(sillyTavern:)` 在 `extensions.initvar == true` 时直接返回 `nil`，
+> 该条目**不**进入 `entries` 列表（即便它带 keywords、也不会被触发）。
+> 
+> **P3+ 行动**：补 world book init entry 解析（届时 initvar 条目应进入 init 路径而非被隔离）。
 
 ---
 

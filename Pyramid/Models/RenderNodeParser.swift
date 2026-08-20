@@ -3,7 +3,8 @@ import Foundation
 /// 把 RenderEngine 处理后的 cleanedText 切成 RenderTree。
 ///
 /// 支持的块（解析顺序：先 P3 新增，再 P1 的 `<status>`）：
-/// 1. `<StatusPlaceHolderImpl/>` —— `.statusPlaceholder(snapshot)`，snapshot 来自 VariableStore。
+/// 1. `<StatusPlaceHolderImpl/>` —— `.statusPlaceholder(statData)`，statData 是当前会话
+///    整棵 `JSONValue` 变量树（顶层应为 `.object`；其它形态也容错透传）。
 /// 2. `<UpdateVariable>…</UpdateVariable>`（canonical 拼写：单 `<`，酒馆 / MVU 源码一致）
 ///    —— 应用 patch 写入 VariableStore，然后输出 `.variableUpdate(summary)`；
 ///    解析失败降级为 `.text(整段含标签)`。`<<UpdateVariable>>…<</UpdateVariable>>` 是历史遗留拼写，
@@ -15,7 +16,7 @@ import Foundation
 /// 2. 整体结构错乱 → 整个 input 作为单 `.text` 节点返回。
 /// 3. **永不抛错**：任何异常路径都返回有效 RenderTree，最坏 `[.text(input)]`。
 ///
-/// **测试策略**：核心用 closure-based `parse(_:snapshot:applyPatches:)` —— 仅依赖 Foundation，
+/// **测试策略**：核心用 closure-based `parse(_:statData:applyPatches:)` —— 仅依赖 Foundation，
 /// 可在 Linux SPM 上驱动。生产 `parse(_:variableStore:sessionId:)` 把 VariableStore 转译成两个闭包，
 /// 走 SwiftUI / UserDefaults 持久化路径。
 enum RenderNodeParser {
@@ -36,13 +37,13 @@ enum RenderNodeParser {
         if let store = variableStore, let sid = sessionId {
             return parse(
                 input,
-                snapshot: { store.snapshot(sessionId: sid) },
+                statData: { store.raw(forSession: sid) },
                 applyPatches: { ops in try store.apply(ops, to: sid) }
             )
         }
         return parse(
             input,
-            snapshot: { [] },
+            statData: { .object([:]) },
             applyPatches: { _ in throw NSError(domain: "RenderNodeParser", code: 0) }
         )
     }
@@ -52,18 +53,19 @@ enum RenderNodeParser {
     /// 纯 Foundation 解析入口。让 SPM / Linux 单测不依赖 SwiftUI ObservableObject 也能驱动。
     /// - Parameters:
     ///   - input: 已过 DisplayRegex / HideTags 的文本。
-    ///   - snapshot: 返回当前会话的扁平化变量快照（用于 statusPlaceholder 节点）。
+    ///   - statData: 返回当前会话的整棵 `JSONValue` 变量树（用于 statusPlaceholder 节点）。
+    ///     UI 走 `NativeDisplayModelProjector.project(statData:)` 投影；**不**拍平。
     ///   - applyPatches: 把 JSON Patch ops 应用到当前会话，返回 applied 计数。
     ///     抛错时该块降级为 `.text`（不丢内容）。
     static func parse(
         _ input: String,
-        snapshot: () -> [VariableEntry],
+        statData: () -> JSONValue,
         applyPatches: ([JSONPatchOperation]) throws -> Int
     ) -> RenderTree {
         // 第一遍：识别 P3 新增块（StatusPlaceHolderImpl / UpdateVariable），按位置插入节点。
         // 第二遍：在剩余的 `.text` 节点里识别 P1 `<status>` 块，递归切分。
         // 这种 pass 设计避免用一个 union 正则同时匹配三类块带来的 group index 混乱。
-        let firstPass = parseP3Blocks(input, snapshot: snapshot, applyPatches: applyPatches)
+        let firstPass = parseP3Blocks(input, statData: statData, applyPatches: applyPatches)
         // 第二遍：对每个 .text 节点再走 P1 的 status 解析
         let finalNodes = firstPass.nodes.flatMap { node -> [RenderNode] in
             if case let .text(s) = node {
@@ -81,7 +83,7 @@ enum RenderNodeParser {
 
     private static func parseP3Blocks(
         _ input: String,
-        snapshot: () -> [VariableEntry],
+        statData: () -> JSONValue,
         applyPatches: ([JSONPatchOperation]) throws -> Int
     ) -> RenderTree {
         let placeholderPattern = "(?is)<StatusPlaceHolderImpl\\s*/?>"
@@ -132,7 +134,7 @@ enum RenderNodeParser {
             let rawBlock = nsInput.substring(with: hit.range)
             switch hit.kind {
             case .placeholder:
-                nodes.append(.statusPlaceholder(snapshot: snapshot()))
+                nodes.append(.statusPlaceholder(statData: statData()))
             case .update:
                 nodes.append(parseUpdateVariableBlock(rawBlock, applyPatches: applyPatches))
             }

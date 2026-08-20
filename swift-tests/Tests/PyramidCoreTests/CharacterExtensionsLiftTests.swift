@@ -401,4 +401,101 @@ final class CharacterExtensionsLiftTests: XCTestCase {
         XCTAssertNil(character.extensionsRaw)
         XCTAssertNil(character.tavernHelperRaw)
     }
+
+    // MARK: - init_stat_data lift
+
+    /// `extensions.init_stat_data`（MVU 初始变量树）→ typed `initStatData` 字段；extensionsRaw 不再含此键。
+    /// 真实 init 内容是嵌套 object / array / 标量混合；整体走 JSONValue 透传。
+    func testInitStatDataLiftedToTyped() throws {
+        let json: [String: Any] = [
+            "data": [
+                "name": "Init",
+                "extensions": [
+                    "init_stat_data": [
+                        "时间": "傍晚",
+                        "玩家": [
+                            "当前所在地": "集市",
+                            "金币": 50
+                        ],
+                        "$meta": ["strictTemplate": false]
+                    ]
+                ]
+            ]
+        ]
+        let character = ImportSupport.parseSillyTavernCard(json)
+        guard let init = character.initStatData else {
+            return XCTFail("initStatData 应当被 lift")
+        }
+        XCTAssertEqual(init["时间"], .string("傍晚"))
+        XCTAssertEqual(init["玩家"], .object([
+            "当前所在地": .string("集市"),
+            "金币": .int(50)
+        ]))
+        XCTAssertEqual(init["$meta"], .object(["strictTemplate": .bool(false)]))
+        // 已被 lift → extensionsRaw 不再含此键；其它 extensions 都为空时整体 nil。
+        if case .object(let ext) = character.extensionsRaw {
+            XCTAssertNil(ext["init_stat_data"], "lifted 键不应重复存于 extensionsRaw")
+        }
+    }
+
+    /// `init_stat_data` 是数组（畸形）→ 不 lift、不污染 typed 字段，原值保留在 extensionsRaw 走 export。
+    func testInitStatDataNonObjectFallsBackToRaw() throws {
+        let json: [String: Any] = [
+            "data": [
+                "name": "Bad",
+                "extensions": [
+                    "init_stat_data": ["not", "an", "object"] as [String]
+                ]
+            ]
+        ]
+        let character = ImportSupport.parseSillyTavernCard(json)
+        XCTAssertNil(character.initStatData, "非 object init_stat_data 不应 lift")
+        guard case .object(let ext) = character.extensionsRaw else {
+            return XCTFail("extensionsRaw 应为 object")
+        }
+        XCTAssertNotNil(ext["init_stat_data"], "lift 失败应保留在 extensionsRaw")
+    }
+
+    /// `init_stat_data` 不存在 → typed nil、extensionsRaw 不受影响。
+    func testInitStatDataAbsentLeavesTypedNil() throws {
+        let json: [String: Any] = [
+            "data": [
+                "name": "NoInit",
+                "extensions": [
+                    "talkativeness": 0.5
+                ]
+            ]
+        ]
+        let character = ImportSupport.parseSillyTavernCard(json)
+        XCTAssertNil(character.initStatData)
+        // extensionsRaw 仅有 talkativeness lift 后的剩余；init_stat_data 不存在时不该有"NoInit"多余字段。
+        XCTAssertNil(character.extensionsRaw, "talkativeness 都被 lift 走了，extensionsRaw 应 nil")
+    }
+
+    /// `init_stat_data` 与其它 extensions 字段（talkativeness / world）共存 → 各自走自己的路径，
+    /// `init_stat_data` lift 到 typed 字段，其它 lift 后剩余仍写 extensionsRaw。
+    func testInitStatDataCoexistsWithOtherExtensionsFields() throws {
+        let json: [String: Any] = [
+            "data": [
+                "name": "Mix",
+                "extensions": [
+                    "talkativeness": 0.7,
+                    "world": "before",
+                    "init_stat_data": [
+                        "foo": "bar"
+                    ]
+                ]
+            ]
+        ]
+        let character = ImportSupport.parseSillyTavernCard(json)
+        XCTAssertEqual(character.talkativeness, 0.7)
+        XCTAssertEqual(character.initStatData, ["foo": .string("bar")])
+        // talkativeness、init_stat_data 都被 lift → extensionsRaw 只剩 world。
+        guard case .object(let ext) = character.extensionsRaw else {
+            return XCTFail("extensionsRaw 应为 object")
+        }
+        XCTAssertEqual(ext["world"], .string("before"))
+        XCTAssertNil(ext["talkativeness"])
+        XCTAssertNil(ext["init_stat_data"])
+    }
 }

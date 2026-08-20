@@ -86,6 +86,7 @@
 | `init_stat_data.stat_data` 存在但 `schema` 不存在 | 仅 patch，不做 schema 校验 | variable_def.ts:172（schema 缺失时 MVU 关掉大部分功能） |
 | session 已存在 VariableStore（同 sessionId） | **不重新覆盖**（保留现状） | fixture 约定：seed-if-empty |
 | session 删除时 VariableStore 还在 | drop（清 VariableStore 行） | ChatStore 生命周期 |
+| 世界书条目 `extensions.initvar == true` | **隔离**（不进 entries 列表、不注入 lore） | `WorldBookEntry.parse(sillyTavern:)` 顶部守卫；MVP 暂不消费 initvar 子树 |
 
 ---
 

@@ -102,6 +102,7 @@ enum ImportSupport {
     /// - data.extensions.talkativeness → character.talkativeness
     /// - data.extensions.fav → character.isFavorite
     /// - data.extensions.depth_prompt → character.depthPrompt（失败保留 raw 不动）
+    /// - data.extensions.init_stat_data → character.initStatData（MVU 初始变量树）
     /// 不抛错；解析失败一律留 nil，绝不影响已有字段。
     /// **类型守门**：`character_book` / `extensions` 只接受 dict 类型 —— 数组 / 字符串
     /// 等畸形输入不写入 raw，避免下游"以为有数据"误用。
@@ -141,7 +142,31 @@ enum ImportSupport {
             // 1e) regex_scripts 既有剥离（避免与 typed extensionsRegexScripts 字段重复��
             extensions.removeValue(forKey: "regex_scripts")
 
-            // 1f) 剩余 extensions 写 extensionsRaw；空字典算"无扩展"
+            // 1f) init_stat_data typed lift（MVU 初始变量树）→ character.initStatData。
+            // 必须是顶层 object；数组 / 字符串 / 数字 → 整段忽略（保留在 extensionsRaw 走 export）。
+            // 解析失败（包括非 object）→ 留 nil，不影响其他字段；不阻断角色入库。
+            // 允许空 object（等同"无 init"）—— 仍 lift 进去，避免与"字段缺失"混淆。
+            if let initAny = extensions["init_stat_data"] {
+                if let initObj = initAny as? [String: Any] {
+                    var lifted: [String: JSONValue] = [:]
+                    var allKeysConvertible = true
+                    for (k, v) in initObj {
+                        if let jv = JSONValue.from(any: v) {
+                            lifted[k] = jv
+                        } else {
+                            allKeysConvertible = false
+                            break
+                        }
+                    }
+                    if allKeysConvertible {
+                        character.initStatData = lifted
+                        extensions.removeValue(forKey: "init_stat_data")
+                    }
+                }
+                // 解析失败 → 保留在 extensionsRaw 里（不阻断导入）
+            }
+
+            // 1g) 剩余 extensions 写 extensionsRaw；空字典算"无扩展"
             if extensions.isEmpty {
                 character.extensionsRaw = nil
             } else {

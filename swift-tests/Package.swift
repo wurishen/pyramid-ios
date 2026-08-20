@@ -39,6 +39,7 @@ let package = Package(
                 "P3TranspileProtocolTests.swift",
                 "NativeDisplayModelTests.swift",
                 "EmbeddedWorldBookParseTests.swift",
+                "StatDataSeedProjectionTests.swift",
             ]
         ),
     ]

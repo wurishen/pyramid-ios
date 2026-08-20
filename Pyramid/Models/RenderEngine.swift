@@ -21,7 +21,7 @@ enum RenderEngine {
         /// P3 native transpile：可选 VariableStore + sessionId，用于在解析阶段
         /// 把 `<UpdateVariable>…</UpdateVariable>`（canonical 单 `<`，旧数据双 `<` 兼容）块的 JSON Patch
         /// 写入会话级变量存储，
-        /// 并把 `<StatusPlaceHolderImpl/>` 转译为带 snapshot 的 `statusPlaceholder` 节点。
+        /// 并把 `<StatusPlaceHolderImpl/>` 转译为带整棵 `JSONValue` 变量树的 `statusPlaceholder` 节点。
         /// 二者必须同时提供；nil 表示纯渲染（fixture / 单测场景）。
         var variableStore: VariableStore? = nil
         var sessionId: UUID? = nil

@@ -199,12 +199,15 @@ struct MessageCard: View {
             // 单独 .scaleEffect 而不是改内部字面量，让面板整体放大。
             StatusView(hp: hp, affection: affection)
                 .scaleEffect(scale, anchor: .topLeading)
-        case let .statusPlaceholder(snapshot):
-            // P3 native transpile：`<StatusPlaceHolderImpl/>` → 先经
-            // `NativeDisplayModelProjector.project(entries:)` 把 `[VariableEntry]`
-            // 拍平后的快照投影成 `NativeDisplayModel`，再交给 `StatusPlaceholderView` 渲染。
+        case let .statusPlaceholder(statData):
+            // P3 native transpile：`<StatusPlaceHolderImpl/>` → 直接走
+            // `NativeDisplayModelProjector.project(statData:)` 把整棵 `JSONValue` 树
+            // 投影成 `NativeDisplayModel`，再交给 `StatusPlaceholderView` 渲染。
+            //
+            // 整树投影（不拍平）的原因：拍平路径会把嵌套 group 压扁，丢失 section / group 等
+            // 原语。树里有什么键就 emit 什么 block，**不**预置任何"时间/位置/选项"等固定栏目。
             // 显示层只消费 `NativeDisplayModel`；映射规则全部在 Projector / 文档里。
-            let model = NativeDisplayModelProjector.project(entries: snapshot)
+            let model = NativeDisplayModelProjector.project(statData: statData)
             StatusPlaceholderView(model: model, scale: scale)
         case let .variableUpdate(summary):
             // P3 native transpile：`<UpdateVariable>…</UpdateVariable>` 块 → 可折叠摘要。
@@ -393,8 +396,8 @@ struct MessageCard: View {
 
 // MARK: - P3 native transpile 节点视图
 
-/// `<StatusPlaceHolderImpl/>` → 状态占位面板：把 `[VariableEntry]` 快照经
-/// `NativeDisplayModelProjector.project(entries:)` 投影成 `NativeDisplayModel` 后
+/// `<StatusPlaceHolderImpl/>` → 状态占位面板：把整棵 `JSONValue` 变量树经
+/// `NativeDisplayModelProjector.project(statData:)` 投影成 `NativeDisplayModel` 后
 /// 按 `DisplayBlock` 递归渲染（text / number / field / tag / bar / section / group + residual）。
 ///
 /// 设计目标：只读显示 —— 不写回 `message.content`、不点击改值、不复刻酒馆 HTML 皮肤。

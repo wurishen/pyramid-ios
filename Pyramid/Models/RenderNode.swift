@@ -10,8 +10,10 @@ import Foundation
 /// P3 起支持的节点：
 /// - `.text(String)`：普通文本（可能含 Markdown），由 MarkdownTextView 渲染。
 /// - `.status(hp:affection:)`：酒馆式角色状态面板，由 StatusView 渲染。
-/// - `.statusPlaceholder(snapshot)`：P3 native transpile —— `<StatusPlaceHolderImpl/>` 节点，
-///   数据来自 VariableStore；UI 列所有变量，空时显示「状态（等待变量）」。
+/// - `.statusPlaceholder(statData)`：P3 native transpile —— `<StatusPlaceHolderImpl/>` 节点，
+///   数据来自 VariableStore 的当前 session 整棵 `JSONValue` 树。UI 走
+///   `NativeDisplayModelProjector.project(statData:)` 纯函数投影；**不**走拍平后的
+///   `[VariableEntry]` 路径（那会把嵌套结构压扁，丢失 group / section 等原语）。
 /// - `.variableUpdate(summary)`：P3 native transpile —— `<UpdateVariable>…</UpdateVariable>`
 ///   （canonical 单 `<`）块解析后写入 VariableStore 后产出的可折叠摘要节点；旧数据里
 ///   `<<UpdateVariable>>…<</UpdateVariable>>` 双尖括号拼写由 `RenderNodeParser` 兼容处理。
@@ -20,9 +22,11 @@ enum RenderNode: Equatable, Sendable {
     case text(String)
     /// 角色状态：HP + 好感度；解析失败时调用方应降级为 `.text`。
     case status(hp: Int, affection: Int)
-    /// 状态占位符：来自 VariableStore 的当前变量快照。
-    /// UI 列所有变量；snapshot 为空 → 显示「状态（等待变量）」。
-    case statusPlaceholder(snapshot: [VariableEntry])
+    /// 状态占位符：来自 VariableStore 的当前 session 整棵 `JSONValue` 树。
+    /// 树就是变量树本身——**不**预置任何"时间/位置/选项"等固定栏目，
+    /// 树上有什么键，UI `NativeDisplayModelProjector.project(statData:)` 就产什么 block。
+    /// 树空 → `statData` = `.object([:])` → UI 显示「状态（等待变量）」。
+    case statusPlaceholder(statData: JSONValue)
     /// 变量更新摘要：一条 UI 折叠组，列出本次 apply 的 patch 数与受影响的 path。
     case variableUpdate(summary: VariableUpdateSummary)
 

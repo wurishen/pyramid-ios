@@ -198,8 +198,16 @@ struct WorldBookEntry: Codable, Identifiable, Equatable {
     /// 保留所有 NSNumber / 数组 / 对象 / 字符串语义，让内嵌世界书真正可用。
     ///
     /// **不接受**非 `.object` 输入；调用方负责把 `.array` 元素 / `.object` 子值传过来。
+    ///
+    /// **MVU 隔离**：若 `extensions.initvar == true`（MVU 约定的 [initvar] 世界书条目标记），
+    /// **不**返回 entry —— 该条目按 MVU 语义是 init 来源、不是 lore 注入目标。
+    /// 即使它带 keywords、也**不能**作为正文被注入。MVP 暂不消费 initvar 内容的子树
+    /// （参见 `docs/ST_OPEN_QUESTIONS.md` §6），但必须隔离避免被注入成 lore。
     static func parse(sillyTavern raw: JSONValue) -> WorldBookEntry? {
         guard case .object(let dict) = raw else { return nil }
+        if let initvar = dict["extensions"].flatMap({ initvarFlag(in: $0) }), initvar {
+            return nil
+        }
 
         var entry = WorldBookEntry()
 
@@ -307,6 +315,14 @@ struct WorldBookEntry: Codable, Identifiable, Equatable {
     }
 
     // MARK: - JSONValue → Foundation 辅助
+
+    /// `extensions.initvar == true` 判定。MVU 用 `extensions.initvar` 标记 [initvar] 世界书条目，
+    /// 那类条目是 init 来源、不是 lore 注入目标 —— 见 `parse(sillyTavern:)` 顶部的隔离说明。
+    /// 仅在 MVU 递归子树内查 `initvar`；非 extensions 位置的同名 key 不算。
+    private static func initvarFlag(in extensions: JSONValue) -> Bool? {
+        guard case .object(let ext) = extensions else { return nil }
+        return boolValue(ext["initvar"])
+    }
 
     private static func stringValue(_ v: JSONValue) -> String? {
         if case .string(let s) = v { return s }

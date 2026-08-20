@@ -359,4 +359,65 @@ final class V3WorldBookEntryTests: XCTestCase {
         let entry2 = try JSONDecoder().decode(WorldBookEntry.self, from: json2)
         XCTAssertNil(entry2.extensionsRaw, "extensions: null → extensionsRaw nil")
     }
+
+    // MARK: - MVU initvar 隔离
+
+    /// `extensions.initvar == true`（MVU 标记）→ `parse(sillyTavern:)` 必须返回 nil，
+    /// 该条目**不**作为 lore 注入。否则 init 来源会被当作正文回到 chat 里。
+    func testInitvarEntryIsIsolatedFromLore() {
+        let entry: JSONValue = .object([
+            "id": .string(UUID().uuidString),
+            "comment": .string("init seed"),
+            "content": .string("{\"foo\":1}"),
+            "key": .array([.string("init")]),
+            "disable": .bool(false),
+            "extensions": .object(["initvar": .bool(true)])
+        ])
+        XCTAssertNil(WorldBookEntry.parse(sillyTavern: entry),
+                     "initvar=true 条目必须被隔离，不进 entries 列表")
+    }
+
+    /// `extensions.initvar == false`（或缺）→ 正常当作 lore 解析。
+    /// `extensions.initvar` 字段值必须是 bool；其它类型（string / number）→ 不算 initvar。
+    /// 覆盖：false / 缺失 / 字符串 "true"（非 bool）都不算 initvar。
+    func testNonInitvarEntriesAreNormalLore() {
+        let cases: [JSONValue] = [
+            .object([
+                "id": .string(UUID().uuidString),
+                "content": .string("a"),
+                "key": .array([.string("k")]),
+                "extensions": .object(["initvar": .bool(false)])
+            ]),
+            .object([
+                "id": .string(UUID().uuidString),
+                "content": .string("b"),
+                "key": .array([.string("k")]),
+                "extensions": .object([:])
+            ]),
+            .object([
+                "id": .string(UUID().uuidString),
+                "content": .string("c"),
+                "key": .array([.string("k")]),
+                "extensions": .object(["initvar": .string("true")])
+            ])
+        ]
+        for case_ in cases {
+            XCTAssertNotNil(WorldBookEntry.parse(sillyTavern: case_),
+                            "非 initvar=true 条目应正常解析为 lore")
+        }
+    }
+
+    /// initvar 不在 `extensions` 子树内（顶层同名 key）→ 不算 initvar，正常解析。
+    /// 避免"initvar"全局扫到错误位置造成的误隔离。
+    func testInitvarKeyOnlyCountedInsideExtensions() {
+        let entry: JSONValue = .object([
+            "id": .string(UUID().uuidString),
+            "content": .string("d"),
+            "key": .array([.string("k")]),
+            "extensions": .object([:]),
+            "initvar": .bool(true)
+        ])
+        XCTAssertNotNil(WorldBookEntry.parse(sillyTavern: entry),
+                       "只有 extensions.initvar 算 initvar；顶层同名 key 不算")
+    }
 }

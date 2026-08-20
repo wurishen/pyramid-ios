@@ -173,13 +173,16 @@ struct RenderInspectorView: View {
             .padding(8)
             .background(Color(.systemGray6))
             .clipShape(RoundedRectangle(cornerRadius: 6))
-        case let .statusPlaceholder(snapshot):
+        case let .statusPlaceholder(statData):
+            // 调试视图：把整棵 statData 树拍扁成「key=value」列表（仅展示用，不影响投影）。
+            // 树空 → 提示「等待变量」；绝不补造"时间/位置"等假字段。
+            let flat = StatDataSummary.summarize(statData)
             VStack(alignment: .leading, spacing: 2) {
-                Text("[\(idx)] .statusPlaceholder (\(snapshot.count) 变量)").font(.caption.weight(.medium))
-                if snapshot.isEmpty {
+                Text("[\(idx)] .statusPlaceholder (\(flat.count) 变量)").font(.caption.weight(.medium))
+                if flat.isEmpty {
                     Text("(空 — 等待变量)").font(.caption).foregroundStyle(.tertiary)
                 } else {
-                    Text(snapshot.map { "\($0.path)=\($0.displayValue)" }.joined(separator: ", "))
+                    Text(flat.map { "\($0.path)=\($0.value)" }.joined(separator: ", "))
                         .font(.system(.caption, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
@@ -214,6 +217,52 @@ struct RenderInspectorView: View {
             .padding(8)
             .background(Color(.systemGray6))
             .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+    }
+}
+
+// MARK: - Debug fallback summary
+
+/// Debug 用：把 `statData` 整棵 JSON 树拍扁成 `path + value` 列表，仅供 RenderInspector 展示。
+/// 不影响 `NativeDisplayModelProjector.project(statData:)` 主路径——主路径按树投影、保留嵌套。
+/// 树空 → 返回 `[]`（UI 显示「等待变量」），不补造任何"时间/位置"等假字段。
+private enum StatDataSummary {
+    struct Entry: Equatable {
+        var path: String
+        var value: String
+    }
+
+    static func summarize(_ value: JSONValue) -> [Entry] {
+        guard case .object(let dict) = value else { return [] }
+        return flatten(dict, prefix: "")
+    }
+
+    private static func flatten(_ dict: [String: JSONValue], prefix: String) -> [Entry] {
+        var out: [Entry] = []
+        for (key, value) in dict.sorted(by: { $0.key < $1.key }) {
+            let path = prefix.isEmpty ? "/\(key)" : "\(prefix)/\(key)"
+            switch value {
+            case .object(let nested):
+                out.append(contentsOf: flatten(nested, prefix: path))
+            case .array:
+                out.append(Entry(path: path, value: "[数组]"))
+            case .null:
+                out.append(Entry(path: path, value: "—"))
+            default:
+                out.append(Entry(path: path, value: formatInline(value)))
+            }
+        }
+        return out
+    }
+
+    private static func formatInline(_ v: JSONValue) -> String {
+        switch v {
+        case .null: return "—"
+        case .bool(let b): return b ? "true" : "false"
+        case .int(let i): return String(i)
+        case .double(let d): return String(d)
+        case .string(let s): return s
+        case .array, .object: return "(?)"
         }
     }
 }

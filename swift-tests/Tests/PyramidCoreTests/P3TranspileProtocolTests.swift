@@ -7,7 +7,8 @@ import XCTest
 ///   → 解析 JSON Patch → 写 store → `.variableUpdate(summary)`。
 /// - `<<UpdateVariable>>…<</UpdateVariable>>`（历史遗留双 `<` 拼写）
 ///   → 同上，确保旧数据不立刻全挂。
-/// - `<StatusPlaceHolderImpl/>` → `.statusPlaceholder(snapshot)`，snapshot 来自 VariableStore。
+/// - `<StatusPlaceHolderImpl/>` → `.statusPlaceholder(statData)`，statData 是当前会话
+///   整棵 `JSONValue` 树（`VariableStore.raw(forSession:)`），不预置任何固定栏目。
 /// - HTML beautify replacement（含 `<script / .load / <object / <iframe / <details / <style / <div`）
 ///   → `MessageRendererCore.isHtmlBeautify` 命中 → `orderedRegexes` 过滤。
 /// - `promptOnly == true` 的 `DisplayRegex` 不进显示链。
@@ -32,7 +33,7 @@ final class P3TranspileProtocolTests: XCTestCase {
 
         let tree = RenderNodeParser.parse(
             content,
-            snapshot: { store.snapshot() },
+            statData: { store.statData() },
             applyPatches: { ops in try store.apply(ops) }
         )
 
@@ -69,7 +70,7 @@ final class P3TranspileProtocolTests: XCTestCase {
         let store = SessionStore()
         let tree = RenderNodeParser.parse(
             content,
-            snapshot: { store.snapshot() },
+            statData: { store.statData() },
             applyPatches: { ops in try store.apply(ops) }
         )
         // 三段 .text 拼回去 == 原文（不丢内容）。
@@ -86,7 +87,7 @@ final class P3TranspileProtocolTests: XCTestCase {
         let store = SessionStore()
         let tree = RenderNodeParser.parse(
             content,
-            snapshot: { store.snapshot() },
+            statData: { store.statData() },
             applyPatches: { ops in try store.apply(ops) }
         )
         XCTAssertEqual(tree.nodes.count, 3, "前缀 + 失败块 + 后缀")
@@ -103,7 +104,7 @@ final class P3TranspileProtocolTests: XCTestCase {
         let store = SessionStore()
         let tree = RenderNodeParser.parse(
             content,
-            snapshot: { store.snapshot() },
+            statData: { store.statData() },
             applyPatches: { ops in try store.apply(ops) }
         )
         guard case let .variableUpdate(summary) = tree.nodes[0] else {
@@ -125,7 +126,7 @@ final class P3TranspileProtocolTests: XCTestCase {
         store.seed(["时间": .string("清晨")])
         let tree = RenderNodeParser.parse(
             content,
-            snapshot: { store.snapshot() },
+            statData: { store.statData() },
             applyPatches: { ops in try store.apply(ops) }
         )
         XCTAssertEqual(tree.nodes.count, 1)
@@ -150,7 +151,7 @@ final class P3TranspileProtocolTests: XCTestCase {
         ])
         let tree = RenderNodeParser.parse(
             content,
-            snapshot: { store.snapshot() },
+            statData: { store.statData() },
             applyPatches: { ops in try store.apply(ops) }
         )
         // 期望：variableUpdate(canonical) → text(" mid ") → variableUpdate(legacy)。
@@ -175,7 +176,8 @@ final class P3TranspileProtocolTests: XCTestCase {
 
     // MARK: - StatusPlaceHolderImpl
 
-    /// `<StatusPlaceHolderImpl/>` → `.statusPlaceholder(snapshot)`；snapshot 来自 seed 后的 store。
+    /// `<StatusPlaceHolderImpl/>` → `.statusPlaceholder(statData)`；statData 是整棵 JSONValue 树。
+    /// 树就是变量树本身——**不**预置任何"时间/位置/选项"等固定栏目；seed 什么、就 emit 什么。
     func testStatusPlaceholderRecognized() {
         let content = "<StatusPlaceHolderImpl/>"
         let store = SessionStore()
@@ -185,37 +187,79 @@ final class P3TranspileProtocolTests: XCTestCase {
         ])
         let tree = RenderNodeParser.parse(
             content,
-            snapshot: { store.snapshot() },
+            statData: { store.statData() },
             applyPatches: { ops in try store.apply(ops) }
         )
         XCTAssertEqual(tree.nodes.count, 1)
-        guard case let .statusPlaceholder(snapshot) = tree.nodes[0] else {
+        guard case let .statusPlaceholder(statData) = tree.nodes[0] else {
             XCTFail("节点 0 应是 statusPlaceholder，实为 \(tree.nodes[0])")
             return
         }
-        XCTAssertEqual(Set(snapshot.map(\.path)), ["/时间", "/玩家/当前所在地"])
+        // 树形结构透传：顶层 object 保留「时间」/「玩家」两个 key；
+        // 「玩家」本身也是 object，路径是 /玩家/当前所在地。
+        guard case .object(let top) = statData else {
+            XCTFail("statData 应为 object，实为 \(statData)")
+            return
+        }
+        XCTAssertEqual(top["时间"], .string("清晨"))
+        XCTAssertEqual(top["玩家"], .object(["当前所在地": .string("旅店")]))
     }
 
-    /// 未 seed 时 `<StatusPlaceHolderImpl/>` → snapshot 空 → UI 显示「等待变量」占位。
-    func testStatusPlaceholderEmptySnapshotWhenUnseeded() {
+    /// 未 seed 时 `<StatusPlaceHolderImpl/>` → statData = `.object([:])` →
+    /// UI 走「状态（等待变量）」占位。不补造任何"时间/位置"等假字段。
+    func testStatusPlaceholderEmptyStatDataWhenUnseeded() {
         let content = "<StatusPlaceHolderImpl/>hello"
         let store = SessionStore()
         let tree = RenderNodeParser.parse(
             content,
-            snapshot: { store.snapshot() },
+            statData: { store.statData() },
             applyPatches: { ops in try store.apply(ops) }
         )
         XCTAssertEqual(tree.nodes.count, 2)
-        guard case let .statusPlaceholder(snapshot) = tree.nodes[0] else {
+        guard case let .statusPlaceholder(statData) = tree.nodes[0] else {
             XCTFail("节点 0 应是 statusPlaceholder")
             return
         }
-        XCTAssertEqual(snapshot, [])
+        XCTAssertEqual(statData, .object([:]))
         guard case let .text(t) = tree.nodes[1] else {
             XCTFail("节点 1 应是 text")
             return
         }
         XCTAssertEqual(t, "hello")
+    }
+
+    /// `RawMessage` 是空对象 seed → `.statusPlaceholder(.object([:]))` → 投影得到单「等待变量」占位，
+    /// **不**发射任何"时间/位置"等固定栏目 block。
+    func testStatusPlaceholderEmptyStatDataRendersNoFixedColumns() {
+        let content = "<StatusPlaceHolderImpl/>"
+        let store = SessionStore()
+        let tree = RenderNodeParser.parse(
+            content,
+            statData: { store.statData() },
+            applyPatches: { ops in try store.apply(ops) }
+        )
+        guard case let .statusPlaceholder(statData) = tree.nodes[0] else {
+            XCTFail("节点 0 应是 statusPlaceholder")
+            return
+        }
+        let model = NativeDisplayModelProjector.project(statData: statData)
+        // 唯一 block 是 root group + 单条「等待变量」文本，不允许任何"时间/位置/选项"等固定栏目。
+        XCTAssertEqual(model.blocks.count, 1)
+        guard case let .group(_, children) = model.blocks[0] else {
+            XCTFail("根部应是 group")
+            return
+        }
+        XCTAssertEqual(children.count, 1)
+        guard case let .text(t) = children[0] else {
+            XCTFail("children[0] 应是 text")
+            return
+        }
+        XCTAssertTrue(t.contains("等待变量"))
+        // 显式禁止"时间/位置/选项"等固定栏目出现，反向回归。
+        let banned = ["时间", "位置", "选项", "当前所在地", "好感"]
+        for word in banned {
+            XCTAssertFalse(t.contains(word), "空 statData 不应出现『\(word)』固定栏目")
+        }
     }
 
     /// StatusPlaceHolderImpl 与 UpdateVariable 紧邻 → 两个结构化节点，顺序保留。
@@ -226,7 +270,7 @@ final class P3TranspileProtocolTests: XCTestCase {
         store.seed(["时间": .string("清晨")])
         let tree = RenderNodeParser.parse(
             content,
-            snapshot: { store.snapshot() },
+            statData: { store.statData() },
             applyPatches: { ops in try store.apply(ops) }
         )
         XCTAssertEqual(tree.nodes.count, 2)
@@ -350,7 +394,7 @@ final class P3TranspileProtocolTests: XCTestCase {
         let original = content
         _ = RenderNodeParser.parse(
             content,
-            snapshot: { store.snapshot() },
+            statData: { store.statData() },
             applyPatches: { ops in try store.apply(ops) }
         )
         XCTAssertEqual(content, original, "原文必须完全不变")
@@ -376,10 +420,14 @@ final class P3TranspileProtocolTests: XCTestCase {
             try JSONPatchApplier.apply(ops, to: &root)
         }
 
-        /// 把 root 拍扁成 `[VariableEntry]`（按 JSON Pointer path）。
+        /// 把 root 拍扁成 `[VariableEntry]`（按 JSON Pointer path，仅供旧断言使用）。
         func snapshot() -> [VariableEntry] {
             VariableStoreFlattener.snapshot(root: root)
         }
+
+        /// 返回整棵 `JSONValue` 树（按当前根），用于新版 `parse(statData:)` 路径。
+        /// 树就是变量树本身——不预置任何"时间/位置/选项"等固定栏目。
+        func statData() -> JSONValue { root }
 
         private func mergeSeed(_ data: [String: JSONValue], into root: inout JSONValue) {
             guard case .object(var current) = root else {
