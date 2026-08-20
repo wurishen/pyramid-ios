@@ -51,9 +51,18 @@ jobs:
         run: swiftlint lint --quiet
 
       - name: SillyTavern compat layer tests (Swift Package)
-        # 调试期：不带 set -e，确保 swift test 失败时 summary 仍能写出真实错误。
-        # check-run output API 不需要 admin 即可读取，原始 log API 要 admin（拿不到）。
+        # 调试期：先验证 GITHUB_STEP_SUMMARY 可写，再 dump swift test 输出。
         run: |
+          echo "GITHUB_STEP_SUMMARY=[$GITHUB_STEP_SUMMARY]"
+          if [ -n "$GITHUB_STEP_SUMMARY" ] && [ -e "$(dirname "$GITHUB_STEP_SUMMARY")" ]; then
+            echo "summary dir OK: $(dirname "$GITHUB_STEP_SUMMARY")"
+            echo "summary target exists?: $([ -e "$GITHUB_STEP_SUMMARY" ] && echo yes || echo no)"
+            touch "$GITHUB_STEP_SUMMARY" && echo "summary writable"
+          else
+            echo "GITHUB_STEP_SUMMARY NOT available, falling back to /tmp/sl-summary.md"
+            GITHUB_STEP_SUMMARY=/tmp/sl-summary.md
+            touch "$GITHUB_STEP_SUMMARY"
+          fi
           cd swift-tests
           LOG=$(mktemp)
           swift test > "$LOG" 2>&1
@@ -71,6 +80,7 @@ jobs:
             fi
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          echo "summary bytes: $(wc -c < "$GITHUB_STEP_SUMMARY")"
           exit $RC
 
   build:
