@@ -21,10 +21,7 @@ let package = Package(
             name: "PyramidCore",
             path: "Sources/PyramidCore",
             resources: [
-                // SPM 把目录当 folder reference 复制，会嵌套在 Bundle.module 下，
-                // `Bundle.module.url(forResource:)` 不递归找。改成显式列文件，SPM
-                // 直接平铺进 bundle，测试 `loadFixture()` 走标准 top-level lookup。
-                .copy("Fixtures/native_transpile_fixture.json")
+                .copy("Fixtures")
             ]
         ),
         .testTarget(
