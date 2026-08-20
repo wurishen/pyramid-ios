@@ -26,21 +26,22 @@ jobs:
           sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
 
       - name: Install SwiftLint
-        # 从 SwiftLint 官方 GitHub Release 直接下载 macOS arm64 二进制，
+        # 从 SwiftLint 官方 GitHub Release 下载官方 macOS pkg 安装包，
         # 避开 Homebrew `aws/tap` 未被信任导致 `brew install swiftlint` 失败的坑
         # （macos-14 runner 上默认要求所有 tap 显式 trust，未 trust 的 tap 会被忽略）。
         # 锁版本 0.65.0；如需升级，更新 SWIFTLINT_VERSION 与本地 `.swiftlint.yml` 同步即可。
-        # 注意：zip 内只有 `swiftlint.exe`（Windows 命名遗留，实际是 Mach-O），不是 `swiftlint`。
+        # ⚠️ SwiftLint release 的 asset 命名容易误导：`.arm64.zip` / `.amd64.zip`
+        # 都是 **Windows** 平台（PE/EXE）；`portable_swiftlint.zip` 是 JVM 类文件
+        # （magic `cafebabe`）。macOS 唯一正确的现成分发是 `SwiftLint.pkg`，
+        # pkg 会把 swiftlint 装到 `/usr/local/bin/`。
         run: |
           set -euo pipefail
           SWIFTLINT_VERSION="0.65.0"
           TMPDIR=$(mktemp -d)
           cd "$TMPDIR"
-          curl -fsSL -o swiftlint.zip \
-            "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/SwiftLint.arm64.zip"
-          unzip -o swiftlint.zip
-          sudo mv swiftlint.exe /usr/local/bin/swiftlint
-          sudo chmod +x /usr/local/bin/swiftlint
+          curl -fsSL -o swiftlint.pkg \
+            "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/SwiftLint.pkg"
+          sudo installer -pkg swiftlint.pkg -target /
           swiftlint --version
 
       - name: SwiftLint (warnings only, no --strict)
