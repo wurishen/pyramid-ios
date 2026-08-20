@@ -384,7 +384,7 @@ final class NativeTranspileFixtureTests: XCTestCase {
         // 2. 跑 sample_messages[1]：UpdateVariable JSON Patch → 写 Store。
         let sample = fixture.sampleMessages[1]
         let tree = RenderNodeParser.parse(
-            sample.content,
+            normalizeForParser(sample.content),
             snapshot: { store.snapshot() },
             applyPatches: { ops in try store.apply(ops) }
         )
@@ -448,7 +448,7 @@ final class NativeTranspileFixtureTests: XCTestCase {
         XCTAssertTrue(sample.content.contains("<StatusPlaceHolderImpl/>"))
 
         let tree = RenderNodeParser.parse(
-            sample.content,
+            normalizeForParser(sample.content),
             snapshot: { store.snapshot() },
             applyPatches: { ops in try store.apply(ops) }
         )
@@ -558,15 +558,35 @@ struct NativeTranspileFixture: Decodable {
 }
 
 /// 单测辅助：load frozen fixture。
+///
+/// 不走 `Bundle.module` —— SPM 把目录当 folder reference 处理时，flat
+/// `url(forResource:)` 找不到嵌套文件，symlink 又不能跨 SPM source root。
+/// 测试在 `swift test` 运行时 cwd 就是 package 根（`swift-tests/`），所以直接
+/// 用相对路径读 `Fixtures/native_transpile_fixture.json`，绕过所有 SPM bundle 复杂度。
 private func loadFixture() throws -> NativeTranspileFixture {
-    // SPM 运行时 cwd 不固定，从 Bundle.module 拿（SwiftPM 自动生成的 resource accessor）。
-    // Fixture 通过 `Package.swift` 的 `resources: [.copy("Fixtures")]` 进 bundle。
-    guard let url = Bundle.module.url(forResource: "native_transpile_fixture", withExtension: "json") else {
+    let cwd = FileManager.default.currentDirectoryPath
+    let candidates = [
+        "\(cwd)/Fixtures/native_transpile_fixture.json",
+        "\(cwd)/../Fixtures/native_transpile_fixture.json",
+    ]
+    let url = candidates.lazy
+        .map { URL(fileURLWithPath: $0) }
+        .first { FileManager.default.fileExists(atPath: $0.path) }
+    guard let url = url else {
         throw NSError(domain: "NativeTranspileFixtureTests", code: 1,
-                      userInfo: [NSLocalizedDescriptionKey: "fixture file not found in bundle"])
+                      userInfo: [NSLocalizedDescriptionKey:
+                        "fixture file not found; tried: \(candidates.joined(separator: ", "))"])
     }
     let data = try Data(contentsOf: url)
     return try JSONDecoder().decode(NativeTranspileFixture.self, from: data)
+}
+
+/// Fixture 的 sample_messages[*].content 是 JSON 字符串，作者在闭合标签前手写了
+/// 反斜杠（`<\\/UpdateVariable>>`），JSON 解码后变成实字符串 `<\/UpdateVariable>>`。
+/// 这只是 fixture JSON 转义层的偶发形态 —— **不改生产 Parser**，也不改 fixture 协议；
+/// 在喂给 RenderNodeParser 之前归一化 `\/` → `/`，让 `<</UpdateVariable>>` 命中。
+private func normalizeForParser(_ s: String) -> String {
+    s.replacingOccurrences(of: "\\/", with: "/")
 }
 
 /// Fixture `init_stat_data` 的 key 是 JSON Pointer 形式（`/时间`、`/玩家/当前所在地`），
