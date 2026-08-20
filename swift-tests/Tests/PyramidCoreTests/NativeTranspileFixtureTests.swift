@@ -535,6 +535,13 @@ struct NativeTranspileFixture: Decodable {
         let allowedOps: [String]
         let ignoredExamples: [FixturePatchExample]
         let appliedExamples: [FixturePatchExample]
+
+        private enum CodingKeys: String, CodingKey {
+            case ignoredPathPrefix = "ignored_path_prefix"
+            case allowedOps = "allowed_ops"
+            case ignoredExamples = "ignored_examples"
+            case appliedExamples = "applied_examples"
+        }
     }
 
     struct FixturePatchExample: Decodable {
