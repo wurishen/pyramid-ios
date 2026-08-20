@@ -34,6 +34,18 @@ jobs:
         # 不阻塞 PR。
         run: swiftlint lint --quiet
 
+      - name: Assert fixture files are in sync
+        # Fixture 物理上存在两份：
+        #   swift-tests/Fixtures/native_transpile_fixture.json   — 规范源（spec / docs 引用这里）
+        #   swift-tests/Sources/PyramidCore/Fixtures/native_transpile_fixture.json
+        #                                                       — SPM 资源，Bundle.module 入口
+        # 两份必须 byte-identical，否则 SPM bundle 与 spec/drift 行为不一致会很难调试。
+        run: |
+          diff -q \
+            swift-tests/Fixtures/native_transpile_fixture.json \
+            swift-tests/Sources/PyramidCore/Fixtures/native_transpile_fixture.json \
+            || { echo "::error::native_transpile_fixture.json drift between Fixtures/ and Sources/PyramidCore/Fixtures/"; exit 1; }
+
       - name: SillyTavern compat layer tests (Swift Package)
         run: |
           cd swift-tests

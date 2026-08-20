@@ -17,3 +17,12 @@ Pyramid 是纯原生 iOS Swift 应用 —— 设计目标彻底摆脱 SillyTaver
 ## 包含的文件
 
 - `native_transpile_fixture.json` —— 显示层转译协议夹具：覆盖 7 条 regex_scripts（含两组 iOS 必须跳过的远程脚本）、2 条 sample_messages、init_stat_data 形态、MVU 输出契约（RFC 6902，忽略 `_` 开头 path）。
+
+## 同步约束（双份物理存在）
+
+同一份 fixture 在 SPM 包里有**两份**：
+
+- 本目录（`swift-tests/Fixtures/native_transpile_fixture.json`）—— 规范源，SPEC / 文档 / 评审引用这里。
+- `swift-tests/Sources/PyramidCore/Fixtures/native_transpile_fixture.json` —— SPM 资源拷贝，`Bundle.module.url(forResource:)` 入口。
+
+**两文件必须 byte-identical**。`ios.yml` 的 `lint` job 跑 `diff -q` 失败即拒绝合并。改动时手动 `cp` 一遍即可（或用脚本），不要靠 symlink —— SPM `.copy` 对目录 symlink 在 folder-reference 模式下不会平铺进 bundle。

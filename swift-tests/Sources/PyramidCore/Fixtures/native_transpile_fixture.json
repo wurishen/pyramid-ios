@@ -1,1 +1,174 @@
-../../../../Fixtures/native_transpile_fixture.json
+{
+  "$schema": "pyramid://fixtures/native-transpile/v1",
+  "purpose": "Display-layer transpile protocol fixture. Drives Pyramid native render pipeline (Regex / HideTags / RenderNodeParser / MVU JSON Patch). NOT a playable character card.",
+  "first_mes": "<StatusPlaceHolderImpl/>",
+  "character": {
+    "$note": "Identity-free fields only; no avatar / name / description / persona — fixture is protocol-shaped, not character-shaped."
+  },
+
+  "ios_display_skip_rule": {
+    "$note": "跳过规则：replacement 含 <script、.load(、或 HTML beautify 标签（div/details/style）→ 不在 iOS 显示链执行；仅走 RenderNode / MVU 路径。",
+    "skip_when_replacement_contains_any_of": [
+      "<script",
+      ".load(",
+      "<object",
+      "<iframe",
+      "<details",
+      "<style",
+      "<div"
+    ]
+  },
+
+  "regex_scripts": [
+    {
+      "id": "fixture-beautify-status",
+      "name": "状态栏美化",
+      "placement": ["assistant.display.pre"],
+      "substituteRegex": true,
+      "prompt_only": false,
+      "disabled": false,
+      "regex": "<StatusPlaceHolderImpl\\s*/?>",
+      "replacement": "<div class='status-panel'><style>.status-panel{font:14px/1.4 sans-serif}</style><script src='https://example.invalid/cdn/widget.js'></script></div>",
+      "expectation_ios": "skipped",
+      "$ios_expectation_note": "replacement 含 <script / <style / <div → iOS 显示链跳过；RenderNode 仍把 <StatusPlaceHolderImpl/> 转译为 statusPlaceholder 节点。"
+    },
+    {
+      "id": "fixture-beautify-status-domestic",
+      "name": "国内美化",
+      "placement": ["assistant.display.pre"],
+      "substituteRegex": true,
+      "prompt_only": false,
+      "disabled": false,
+      "regex": "<StatusPlaceHolderImpl\\s*/?>",
+      "replacement": "<script src='https://example.invalid/cdn/widget.js' onload=\"$('body').load('https://example.invalid/remote/status_panel.html');\"></script>",
+      "expectation_ios": "skipped",
+      "$ios_expectation_note": "replacement 含 <script + $('body').load( → iOS 显示链跳过；RenderNode 路径不受影响。"
+    },
+    {
+      "id": "fixture-latest-3-floor-var-only",
+      "name": "只发送最新3楼的变量更新",
+      "placement": ["assistant.display.pre"],
+      "substituteRegex": true,
+      "prompt_only": true,
+      "disabled": false,
+      "regex": "<<UpdateVariable[^>]*>>[\\s\\S]*?<\\/UpdateVariable>",
+      "replacement": "",
+      "expectation_ios": "applied",
+      "$ios_expectation_note": "promptOnly=true：在 outgoing prompt 阶段剥离旧 UpdateVariable 块；显示链不消费。"
+    },
+    {
+      "id": "fixture-format-think-only",
+      "name": "仅格式思维链",
+      "placement": ["assistant.display.pre"],
+      "substituteRegex": true,
+      "prompt_only": true,
+      "disabled": false,
+      "regex": "<Analysis>[\\s\\S]*?<\\/Analysis>",
+      "replacement": "",
+      "expectation_ios": "applied",
+      "$ios_expectation_note": "promptOnly：剥离 Analysis 块；卡片渲染路径不依赖此条目。"
+    },
+    {
+      "id": "fixture-hide-status-from-ai",
+      "name": "对 AI 隐藏状态栏",
+      "placement": ["assistant.display.pre"],
+      "substituteRegex": true,
+      "prompt_only": true,
+      "disabled": false,
+      "regex": "<StatusPlaceHolderImpl\\s*/?>",
+      "replacement": "",
+      "expectation_ios": "applied",
+      "$ios_expectation_note": "promptOnly：把 <StatusPlaceHolderImpl/> 从 outgoing prompt 里删掉，但 RenderNode 路径仍保留占位符节点用于 UI 渲染。"
+    },
+    {
+      "id": "fixture-beautify-var-update-night-sky",
+      "name": "[美化]变量更新中-夜空诗意",
+      "placement": ["assistant.display.pre"],
+      "substituteRegex": true,
+      "prompt_only": false,
+      "disabled": false,
+      "regex": "<<UpdateVariable[^>]*>>",
+      "replacement": "<details class='variable-update'><summary>变量更新中…</summary><div class='night-sky'><style>.night-sky{background:#0b1020;color:#cfd8ff}</style><script>$('.night-sky').load('https://example.invalid/remote/variable_panel.html');</script></div></details>",
+      "expectation_ios": "skipped",
+      "$ios_expectation_note": "replacement 含 <details / <div / <style / <script + .load( → iOS 显示链跳过；MVU 路径仍把 <<UpdateVariable>> 转译为 variableUpdate 节点 + JSON Patch 指令。"
+    },
+    {
+      "id": "fixture-beautify-var-complete-night-sky",
+      "name": "[美化]完整变量完成-夜空诗意",
+      "placement": ["assistant.display.pre"],
+      "substituteRegex": true,
+      "prompt_only": false,
+      "disabled": false,
+      "regex": "<<UpdateVariable[^>]*>>",
+      "replacement": "<details class='variable-complete' open><summary>变量已更新</summary><div class='night-sky'><style>.night-sky{background:#0b1020;color:#cfd8ff}</style></div></details>",
+      "expectation_ios": "skipped",
+      "$ios_expectation_note": "replacement 含 <details / <div / <style → iOS 显示链跳过（无 script / .load 仍属 HTML beautify）；MVU 路径照常。"
+    }
+  ],
+
+  "sample_messages": [
+    {
+      "role": "assistant",
+      "content": "<StatusPlaceHolderImpl/>你好，欢迎回来。",
+      "expect_render_tree": [
+        { "type": "statusPlaceholder", "payload": null },
+        { "type": "text", "payload": "你好，欢迎回来。" }
+      ],
+      "expect_mvu_patches": [],
+      "expect_message_content_unchanged": true,
+      "$ios_expectation_note": "占位符 → statusPlaceholder 节点；message.content 原文不动。"
+    },
+    {
+      "role": "assistant",
+      "content": "她转身离开。<<UpdateVariable>>[{\"op\":\"replace\",\"path\":\"/时间\",\"value\":\"傍晚\"},{\"op\":\"replace\",\"path\":\"/玩家/当前所在地\",\"value\":\"集市\"}]<\\/UpdateVariable>>",
+      "expect_render_tree": [
+        { "type": "text", "payload": "她转身离开。" },
+        { "type": "variableUpdate", "payload": "time_and_place" }
+      ],
+      "expect_mvu_patches": [
+        { "op": "replace", "path": "/时间", "value": "傍晚" },
+        { "op": "replace", "path": "/玩家/当前所在地", "value": "集市" }
+      ],
+      "expect_message_content_unchanged": true,
+      "$ios_expectation_note": "UpdateVariable JSON Patch → variableUpdate 节点 + MVU 指令；不写回 message.content。"
+    }
+  ],
+
+  "init_stat_data": {
+    "/时间": "清晨",
+    "/玩家/当前所在地": "旅店"
+  },
+
+  "mvu_output_contract": {
+    "$note": "MVU 输出契约。Pyramid 原生路径消费 RFC 6902 JSON Patch 指令（add / replace / remove / ...），并忽略以 _ 开头的 path（约定为「私有字段 / 视图态」不写入 stat_data）。",
+    "allowed_ops": ["replace", "add", "remove"],
+    "ignored_path_prefix": "_",
+    "path_root_marker": "/",
+    "ignored_examples": [
+      { "op": "add", "path": "/_ui/scroll", "value": 42 }
+    ],
+    "applied_examples": [
+      { "op": "replace", "path": "/时间", "value": "傍晚" },
+      { "op": "replace", "path": "/玩家/当前所在地", "value": "集市" }
+    ]
+  },
+
+  "ios_render_boundary": {
+    "$note": "iOS 路径硬边界 —— 与 README.md「硬性边界」一节 + ios_display_skip_rule 对齐，供断言使用。",
+    "must_not_use": [
+      "WKWebView",
+      "UIWebView",
+      "SFSafariViewController",
+      "remote <script src=...>",
+      "remote <object data=...>",
+      "remote $('body').load(...)"
+    ],
+    "must_not_mutate": [
+      "sample_messages[*].content"
+    ],
+    "must_translate_to": [
+      "<StatusPlaceHolderImpl/> → statusPlaceholder RenderNode",
+      "<<UpdateVariable>>[…JSON…]<\\/UpdateVariable> → variableUpdate RenderNode + MVU JSON Patch ops"
+    ]
+  }
+}
