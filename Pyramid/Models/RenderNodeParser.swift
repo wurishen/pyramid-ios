@@ -152,6 +152,10 @@ enum RenderNodeParser {
     // MARK: - 第二遍：P1 <status>
 
     /// P1 的 status 解析：从一段 plain text 中切出 `<status>...</status>` 块。
+    /// 解析规则（fast-path → generic → fallback）：
+    /// 1. 块只含 `HP` + `好感度` 两个整数 → `.status(hp:affection:)`（保留旧行为）
+    /// 2. 块含任意其他 / 更多字段 → `.statusFields([StatusField])`
+    /// 3. 块完全没识别出任何 key/value → `.text(rawBlock)`（不丢内容）
     private static func parseStatusBlocks(in text: String) -> [RenderNode] {
         let pattern = "(?is)<status\\b[^>]*>(.*?)</status\\s*>"
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
@@ -179,7 +183,12 @@ enum RenderNodeParser {
             if let status = parseStatusBlock(inner) {
                 nodes.append(.status(hp: status.hp, affection: status.affection))
             } else {
-                nodes.append(.text(rawBlock))
+                let fields = parseStatusFields(inner)
+                if fields.isEmpty {
+                    nodes.append(.text(rawBlock))
+                } else {
+                    nodes.append(.statusFields(fields))
+                }
             }
             cursor = match.range.location + match.range.length
         }
@@ -192,35 +201,47 @@ enum RenderNodeParser {
         return nodes.isEmpty ? [.text(text)] : nodes
     }
 
-    /// 解析 `<status>` 块内的 `HP: <整数>` + `好感度: <整数>` 两行。
+    /// Fast-path：只识别 `HP` + `好感度` 两字段且都为整数（保留旧行为 / 旧测试）。
     static func parseStatusBlock(_ block: String) -> (hp: Int, affection: Int)? {
+        let fields = parseStatusFields(block)
+        guard fields.count == 2 else { return nil }
+        var hp: Int?
+        var affection: Int?
+        for field in fields {
+            switch field.label {
+            case "HP":
+                if let v = Int(field.value) { hp = v }
+            case "好感度":
+                if let v = Int(field.value) { affection = v }
+            default:
+                return nil
+            }
+        }
+        guard let h = hp, let a = affection else { return nil }
+        return (hp: h, affection: a)
+    }
+
+    /// 通用：从 `<status>` 块按行解析任意 `key: value` 对。
+    /// - 兼容半角 `:` 与全角 `：` 冒号；忽略空行 / 仅空白行。
+    /// - 不限定 key 集合 —— 模型可以输出 HP / 好感度 / 金币 / 饱腹 / 法力 等任意字段。
+    /// - 字段顺序与原文一致；不会去重或重排。
+    static func parseStatusFields(_ block: String) -> [StatusField] {
         let lines = block
             .components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
 
-        var hp: Int?
-        var affection: Int?
-
+        var fields: [StatusField] = []
         for line in lines {
             guard let colon = line.firstIndex(where: { $0 == ":" || $0 == "：" }) else {
                 continue
             }
             let key = line[..<colon].trimmingCharacters(in: .whitespaces)
             let value = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
-
-            switch key {
-            case "HP":
-                if let v = Int(value) { hp = v }
-            case "好感度":
-                if let v = Int(value) { affection = v }
-            default:
-                break
-            }
+            guard !key.isEmpty, !value.isEmpty else { continue }
+            fields.append(StatusField(label: key, value: value))
         }
-
-        guard let h = hp, let a = affection else { return nil }
-        return (hp: h, affection: a)
+        return fields
     }
 
     // MARK: - UpdateVariable

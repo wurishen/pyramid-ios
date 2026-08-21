@@ -87,44 +87,45 @@ final class RenderNodeParserTests: XCTestCase {
         XCTAssertEqual(tree.nodes[0], .status(hp: 42, affection: 7))
     }
 
-    // 10. status 块内额外的未知字段行被忽略（不影响 HP/好感度）
-    func test10_statusExtraLinesIgnored() {
+    // 10. status 块含额外字段 → 走 .statusFields 路径（fast-path 仅识别 HP+好感度 两个字段）
+    func test10_statusExtraFieldsPromotedToStatusFields() {
         let input = "<status>\nHP: 80\n好感度: 65\n金币: 100\n</status>"
         let tree = RenderNodeParser.parse(input)
         XCTAssertEqual(tree.nodes.count, 1)
-        XCTAssertEqual(tree.nodes[0], .status(hp: 80, affection: 65))
+        XCTAssertEqual(tree.nodes[0], .statusFields([
+            StatusField(label: "HP", value: "80"),
+            StatusField(label: "好感度", value: "65"),
+            StatusField(label: "金币", value: "100")
+        ]))
     }
 
     // MARK: - 容错降级
 
-    // 11. status 块内 HP 缺失 → 整块降级为 .text（不能消失）
-    func test11_statusMissingHPFallbackToText() {
+    // 11. status 块内 HP 缺失 → 走 .statusFields 路径（保留 好感度）
+    func test11_statusMissingHPPromotedToStatusFields() {
         let input = "<status>\n好感度: 65\n</status>"
         let tree = RenderNodeParser.parse(input)
         XCTAssertEqual(tree.nodes.count, 1)
-        if case .text = tree.nodes[0] {
-            // ok
-        } else { XCTFail("HP 缺失应降级为 .text，实际：\(tree.nodes[0])") }
+        XCTAssertEqual(tree.nodes[0], .statusFields([StatusField(label: "好感度", value: "65")]))
     }
 
-    // 12. status 块内 好感度 缺失 → 整块降级为 .text
-    func test12_statusMissingAffectionFallbackToText() {
+    // 12. status 块内 好感度 缺失 → 走 .statusFields 路径（保留 HP）
+    func test12_statusMissingAffectionPromotedToStatusFields() {
         let input = "<status>\nHP: 80\n</status>"
         let tree = RenderNodeParser.parse(input)
         XCTAssertEqual(tree.nodes.count, 1)
-        if case .text = tree.nodes[0] {
-            // ok
-        } else { XCTFail("好感度 缺失应降级为 .text，实际：\(tree.nodes[0])") }
+        XCTAssertEqual(tree.nodes[0], .statusFields([StatusField(label: "HP", value: "80")]))
     }
 
-    // 13. status 块内 HP 不是整数 → 整块降级为 .text
-    func test13_statusHPNotIntegerFallbackToText() {
+    // 13. status 块内 HP 不是整数 → 走 .statusFields 路径（value 保留原文）
+    func test13_statusHPNotIntegerPromotedToStatusFields() {
         let input = "<status>\nHP: 全满\n好感度: 65\n</status>"
         let tree = RenderNodeParser.parse(input)
         XCTAssertEqual(tree.nodes.count, 1)
-        if case .text = tree.nodes[0] {
-            // ok
-        } else { XCTFail("HP 非整数应降级为 .text，实际：\(tree.nodes[0])") }
+        XCTAssertEqual(tree.nodes[0], .statusFields([
+            StatusField(label: "HP", value: "全满"),
+            StatusField(label: "好感度", value: "65")
+        ]))
     }
 
     // 14. status 块为空（<status></status>）→ 降级为 .text
@@ -220,5 +221,46 @@ final class RenderNodeParserTests: XCTestCase {
         let b = RenderEngine.render(raw: raw, context: ctxNoM)
         XCTAssertEqual(a.tree, b.tree, "markdownEnabled 不应影响 tree 结构")
         XCTAssertNotEqual(a.markdownEnabled, b.markdownEnabled)
+    }
+
+    // MARK: - .statusFields 通用面板
+
+    // 22. 任意 key/value 走 .statusFields（包括中英混排）
+    func test22_statusFieldsArbitraryKeys() {
+        let input = "<status>金币: 200\n饱腹: 饱\n法力: 50</status>"
+        let tree = RenderNodeParser.parse(input)
+        XCTAssertEqual(tree.nodes.count, 1)
+        XCTAssertEqual(tree.nodes[0], .statusFields([
+            StatusField(label: "金币", value: "200"),
+            StatusField(label: "饱腹", value: "饱"),
+            StatusField(label: "法力", value: "50")
+        ]))
+    }
+
+    // 23. status 块空 → 降级为 .text（不能消失）
+    func test23_statusEmptyBlockFallbackToText() {
+        let input = "<status></status>"
+        let tree = RenderNodeParser.parse(input)
+        XCTAssertEqual(tree.nodes.count, 1)
+        if case .text = tree.nodes[0] { } else { XCTFail("空 status 应降级 .text，实际：\(tree.nodes[0])") }
+    }
+
+    // 24. statusFields parseStatusFields 独立测试
+    func test24_parseStatusFieldsPreservesOrderAndStripsBlank() {
+        let fields = RenderNodeParser.parseStatusFields("  HP: 80  \n\n金币: 100\n\n\n 饱腹: 饱 ")
+        XCTAssertEqual(fields, [
+            StatusField(label: "HP", value: "80"),
+            StatusField(label: "金币", value: "100"),
+            StatusField(label: "饱腹", value: "饱")
+        ])
+    }
+
+    // 25. 全角冒号在 .statusFields 路径也工作
+    func test25_statusFieldsFullWidthColon() {
+        let fields = RenderNodeParser.parseStatusFields("HP：80\n金币：100")
+        XCTAssertEqual(fields, [
+            StatusField(label: "HP", value: "80"),
+            StatusField(label: "金币", value: "100")
+        ])
     }
 }

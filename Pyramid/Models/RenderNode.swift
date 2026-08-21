@@ -9,7 +9,11 @@ import Foundation
 ///
 /// P3 起支持的节点：
 /// - `.text(String)`：普通文本（可能含 Markdown），由 MarkdownTextView 渲染。
-/// - `.status(hp:affection:)`：酒馆式角色状态面板，由 StatusView 渲染。
+/// - `.status(hp:affection:)`：酒馆式角色状态面板（仅 HP + 好感度 两个整数），由 StatusView 渲染。
+///   仍保留作 fast-path；只在 `<status>` 块**只含**这两个字段且都为整数时走此节点。
+/// - `.statusFields([StatusField])`：通用的 `<status>` 状态面板 —— 任意 key/value 列表，
+///   包含 HP / 好感度 / 金币 / 法力 / 饱腹 等模型可能产出的任何状态字段。
+///   至少识别出一个字段时由 `StatusFieldsView` 渲染；HP 字段沿用 HP 颜色梯度。
 /// - `.statusPlaceholder(statData)`：P3 native transpile —— `<StatusPlaceHolderImpl/>` 节点，
 ///   数据来自 VariableStore 的当前 session 整棵 `JSONValue` 树。UI 走
 ///   `NativeDisplayModelProjector.project(statData:)` 纯函数投影；**不**走拍平后的
@@ -20,7 +24,7 @@ import Foundation
 enum RenderNode: Equatable, Sendable {
     /// 普通文本，可能含 Markdown；具体渲染由 SwiftUI 视图层决定。
     case text(String)
-    /// 角色状态：HP + 好感度；解析失败时调用方应降级为 `.text`。
+    /// 角色状态（fast-path）：仅 HP + 好感度 两个整数，调用方应使用 StatusView 渲染。
     case status(hp: Int, affection: Int)
     /// 状态占位符：来自 VariableStore 的当前 session 整棵 `JSONValue` 树。
     /// 树就是变量树本身——**不**预置任何"时间/位置/选项"等固定栏目，
@@ -29,12 +33,21 @@ enum RenderNode: Equatable, Sendable {
     case statusPlaceholder(statData: JSONValue)
     /// 变量更新摘要：一条 UI 折叠组，列出本次 apply 的 patch 数与受影响的 path。
     case variableUpdate(summary: VariableUpdateSummary)
+    /// 通用 `<status>` 面板：模型原始输出里任意 key/value 字段。
+    case statusFields([StatusField])
 
     /// `.variableUpdate` 的摘要内容。
     struct VariableUpdateSummary: Equatable, Sendable {
         var appliedCount: Int
         var affectedPaths: [String]
     }
+}
+
+/// `.statusFields` 节点的字段条目。保留文本原文（不强制数字），由 UI 决定显示。
+struct StatusField: Equatable, Sendable, Hashable, Identifiable {
+    var label: String
+    var value: String
+    var id: String { "\(label)=\(value)" }
 }
 
 /// RenderNode 的有序集合。同一段 cleanedText 经过 RenderNodeParser 可以产生不同 RenderTree；
