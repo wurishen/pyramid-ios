@@ -35,6 +35,8 @@ final class ChatViewModel: ObservableObject {
     private let worldBook: WorldBookStore
     private let characters: CharacterStore
     private let presets: PresetStore
+    /// ST display regexes store；promptOnly pass 通过它读取当前启用的 regex 列表。
+    private let displayRegexes: DisplayRegexStore
     /// 当前进行中的流式 / 请求任务。停止生成时 cancel 它。
     private var currentTask: Task<Void, Never>?
     /// 当前请求对应的用户消息文本，停止生成后写入草稿，恢复未发送状态。
@@ -58,12 +60,13 @@ final class ChatViewModel: ObservableObject {
     private var lastContextFingerprint: Int = 0
     private static let estimateDebounceNanoseconds: UInt64 = 150_000_000
 
-    init(settings: AppSettings, store: ChatStore, worldBook: WorldBookStore, characters: CharacterStore, presets: PresetStore) {
+    init(settings: AppSettings, store: ChatStore, worldBook: WorldBookStore, characters: CharacterStore, presets: PresetStore, displayRegexes: DisplayRegexStore) {
         self.settings = settings
         self.store = store
         self.worldBook = worldBook
         self.characters = characters
         self.presets = presets
+        self.displayRegexes = displayRegexes
         restoreDraftForCurrentSession()
         // Item 6 H4：第一时间同步算出缓存值，避免首屏 contextHintBar 显示 0 闪烁再 150ms 后跳变。
         primeContextCharacterCount(input: input)

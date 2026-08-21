@@ -32,7 +32,7 @@ struct ChatView: View {
         self.presets = presets
         self.characters = characters
         self.displayRegexes = displayRegexes
-        _viewModel = StateObject(wrappedValue: ChatViewModel(settings: settings, store: store, worldBook: worldBook, characters: characters, presets: presets))
+        _viewModel = StateObject(wrappedValue: ChatViewModel(settings: settings, store: store, worldBook: worldBook, characters: characters, presets: presets, displayRegexes: displayRegexes))
     }
 
     private var currentCharacter: Character? {
