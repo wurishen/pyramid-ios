@@ -27,7 +27,7 @@ enum NativeIRProjector {
     /// 空 / 非 object 输入 → 返回占位 text，让 UI 不空白。
     static func projectRoot(statData: JSONValue) -> [NativeIRNode] {
         guard case .object(let dict) = statData else {
-            return [.text("[\(rootTitle) 等待变量]")]
+            return [.text(content: "[\(rootTitle) 等待变量]")]
         }
         var out: [NativeIRNode] = []
         for (key, value) in dict.sorted(by: { $0.key < $1.key }) {
@@ -37,7 +37,7 @@ enum NativeIRProjector {
             }
         }
         if out.isEmpty {
-            return [.text("[\(rootTitle) 等待变量]")]
+            return [.text(content: "[\(rootTitle) 等待变量]")]
         }
         return out
     }
