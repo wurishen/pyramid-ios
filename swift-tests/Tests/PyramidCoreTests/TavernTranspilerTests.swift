@@ -61,12 +61,12 @@ final class TavernTranspilerTests: XCTestCase {
         guard case let .container(_, children, _) = ir else { return XCTFail() }
 
         // 全部 6 条都应是 .number，没有任何 .progress / .container（嵌套）/ 自定义节点。
-        for (idx, node) in children.enumerated() {
-            guard case let .number(_, label) = node else {
-                return XCTFail("字段 \(fields[idx]) 应是 .number，实为 \(node)")
-            }
-            XCTAssertEqual(label, fields[idx])
-        }
+        // labels 用 Set 比较 —— projector 按 key 字典序排序，与 fields 原序不一致。
+        let labels = Set(children.compactMap { node -> String? in
+            if case let .number(_, label) = node { return label }
+            return nil
+        })
+        XCTAssertEqual(labels, Set(fields), "全部 6 个字段都应映射到 .number")
 
         let bannedSubstrings = ["HPComponent", "AffectionComponent", "BatteryComponent"]
         let described = describe(ir)
