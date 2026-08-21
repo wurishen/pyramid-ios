@@ -17,28 +17,17 @@ enum MacroExpander {
         // 用 NSRegularExpression 一次性匹配三种大小写。
         let pattern = "(?i)\\{\\{\\s*" + token + "\\s*\\}\\}"
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return text }
-        let range = NSRange(text.startIndex..., in: text)
-        // `withTemplate:` 会把 `$N` 解释成捕获组反向引用、`\X` 解释成转义序列 —— 宏值
-        // 里的 `$1` / `\d` 等是字面量，必须先转义成 `$$` / `\\`，否则原样字符会被吞掉。
-        return regex.stringByReplacingMatches(
+        let nsText = NSMutableString(string: text)
+        let matches = regex.matches(
             in: text,
             options: [],
-            range: range,
-            withTemplate: escapedReplacement(value)
+            range: NSRange(location: 0, length: nsText.length)
         )
-    }
-
-    /// 单遍转义：避免先 `\` 后 `$` 替换时把刚插好的 `$$` 二次加 `$`。
-    private static func escapedReplacement(_ value: String) -> String {
-        var out = ""
-        out.reserveCapacity(value.count)
-        for c in value {
-            switch c {
-            case "$":  out.append("$$")
-            case "\\": out.append("\\\\")
-            default:   out.append(c)
-            }
+        // 从后往前：避免先替换前段导致后续 range 偏移。`replaceCharacters` 把 `with` 当
+        // 纯字面量 —— 不解释 `$N` / `\X`，所以宏值里的 `$1\d` 保持原样。
+        for match in matches.reversed() {
+            nsText.replaceCharacters(in: match.range, with: value)
         }
-        return out
+        return nsText as String
     }
 }
