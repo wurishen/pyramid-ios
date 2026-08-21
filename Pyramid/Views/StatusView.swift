@@ -145,7 +145,7 @@ struct StatusFieldsView: View {
         StatusField(label: "好感度", value: "65"),
         StatusField(label: "金币", value: "200"),
         StatusField(label: "饱腹", value: "饱"),
-    ])
+    ], scale: 1.0)
     .padding()
     .background(Color(.systemBackground))
 }
@@ -154,7 +154,7 @@ struct StatusFieldsView: View {
     StatusFieldsView(fields: [
         StatusField(label: "HP", value: "20"),
         StatusField(label: "好感度", value: "90"),
-    ])
+    ], scale: 1.0)
     .padding()
     .background(Color(.systemBackground))
 }
