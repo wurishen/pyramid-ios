@@ -125,7 +125,7 @@ struct StatusFieldsView: View {
             Spacer()
             Text(value)
                 .font(.title3.weight(.semibold).monospacedDigit())
-                .foregroundStyle(.accentColor)
+                .foregroundStyle(Color.accentColor)
         }
     }
 }
