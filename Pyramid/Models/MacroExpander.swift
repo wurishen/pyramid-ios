@@ -18,6 +18,27 @@ enum MacroExpander {
         let pattern = "(?i)\\{\\{\\s*" + token + "\\s*\\}\\}"
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return text }
         let range = NSRange(text.startIndex..., in: text)
-        return regex.stringByReplacingMatches(in: text, options: [], range: range, withTemplate: value)
+        // `withTemplate:` 会把 `$N` 解释成捕获组反向引用、`\X` 解释成转义序列 —— 宏值
+        // 里的 `$1` / `\d` 等是字面量，必须先转义成 `$$` / `\\`，否则原样字符会被吞掉。
+        return regex.stringByReplacingMatches(
+            in: text,
+            options: [],
+            range: range,
+            withTemplate: escapedReplacement(value)
+        )
+    }
+
+    /// 单遍转义：避免先 `\` 后 `$` 替换时把刚插好的 `$$` 二次加 `$`。
+    private static func escapedReplacement(_ value: String) -> String {
+        var out = ""
+        out.reserveCapacity(value.count)
+        for c in value {
+            switch c {
+            case "$":  out.append("$$")
+            case "\\": out.append("\\\\")
+            default:   out.append(c)
+            }
+        }
+        return out
     }
 }
