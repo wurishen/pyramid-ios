@@ -72,7 +72,7 @@ enum BackupService {
         return backup
     }
 
-    #if canImport(SwiftUI)
+    #if canImport(SwiftUI) && !PYRAMID_SPM_BUILD
     static func makeBackup(
         store: ChatStore,
         characters: CharacterStore,

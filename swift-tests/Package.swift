@@ -19,7 +19,13 @@ let package = Package(
     targets: [
         .target(
             name: "PyramidCore",
-            path: "Sources/PyramidCore"
+            path: "Sources/PyramidCore",
+            swiftSettings: [
+                // SPM 编译时定义；iOS app 的 Xcode build 不受影响（不同 invocation）。
+                // 配合源码里的 `#if canImport(...) && !PYRAMID_SPM_BUILD` 守卫，
+                // 让 SPM 编译排除 iOS-only 代码（AppSettings / ChatStore 等 SPM target 里没有）。
+                .define("PYRAMID_SPM_BUILD")
+            ]
         ),
         .testTarget(
             name: "PyramidCoreTests",

@@ -17,7 +17,7 @@ enum ContextTrimMode: String, CaseIterable, Identifiable {
     }
 }
 
-#if canImport(SwiftUI)
+#if canImport(SwiftUI) && !PYRAMID_SPM_BUILD
 extension AppSettings {
     var contextTrimMode: ContextTrimMode {
         get { ContextTrimMode(rawValue: contextTrimModeRaw) ?? .byMessages }

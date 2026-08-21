@@ -57,7 +57,7 @@ final class BackupServiceTests: XCTestCase {
         enc.dateEncodingStrategy = .iso8601
         let data = try enc.encode(backup)
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("pyramid-test-\(UUID().uuidString).json")
-        try data.write(to: url, options: .atomic)
+        try data.write(to: url, options: Data.WritingOptions.atomic)
         return url
     }
 
@@ -84,7 +84,7 @@ final class BackupServiceTests: XCTestCase {
          "userPersona": "", "userPersonaInjected": true}
         """.data(using: .utf8)!
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("pyramid-test-\(UUID().uuidString).json")
-        try json.write(to: url, options: .atomic)
+        try json.write(to: url, options: Data.WritingOptions.atomic)
         defer { try? FileManager.default.removeItem(at: url) }
         XCTAssertThrowsError(try BackupService.parseBackup(from: url)) { err in
             guard case BackupError.versionMismatch(let v) = err else {
@@ -96,7 +96,7 @@ final class BackupServiceTests: XCTestCase {
 
     func test_parseBackupInvalidData() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("pyramid-test-\(UUID().uuidString).json")
-        try "not json at all".data(using: .utf8)!.write(to: url, options: .atomic)
+        try "not json at all".data(using: .utf8)!.write(to: url, options: Data.WritingOptions.atomic)
         defer { try? FileManager.default.removeItem(at: url) }
         XCTAssertThrowsError(try BackupService.parseBackup(from: url)) { err in
             guard case BackupError.invalidData = err else {
@@ -109,7 +109,7 @@ final class BackupServiceTests: XCTestCase {
         // 合法 JSON 但不是 PyramidBackup schema
         let json = #"{"foo": "bar"}"#.data(using: .utf8)!
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("pyramid-test-\(UUID().uuidString).json")
-        try json.write(to: url, options: .atomic)
+        try json.write(to: url, options: Data.WritingOptions.atomic)
         defer { try? FileManager.default.removeItem(at: url) }
         XCTAssertThrowsError(try BackupService.parseBackup(from: url))
     }

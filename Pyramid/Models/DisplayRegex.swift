@@ -1,5 +1,5 @@
 import Foundation
-#if canImport(Combine)
+#if canImport(Combine) && !PYRAMID_SPM_BUILD
 import Combine
 #endif
 
@@ -86,7 +86,7 @@ enum DisplayRegexError: LocalizedError {
     }
 }
 
-#if canImport(Combine)
+#if canImport(Combine) && !PYRAMID_SPM_BUILD
 /// `ObservableObject` + `@Published` 依赖 Combine —— 仅在 Apple 平台编译。
 /// Linux / 其他无 Combine 的平台：只有 DisplayRegex struct + DisplayRegexError 可用，
 /// 足够纯 Foundation 的 SillyTavern 兼容层测试使用。
