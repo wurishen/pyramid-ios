@@ -6,7 +6,7 @@ import SwiftUI
 /// - 头部：头像 + 角色名 / 用户名 + 楼层号 + 时间戳（用户 / 助手视觉区分）
 /// - 正文：渲染后的内容（MarkdownTextView）；超长自动折叠（>800 字）
 ///
-/// 渲染管线仅作用于展示层：`MessageRenderer.preprocess(...)`（显示用正则 + 隐藏标签剥离）
+/// 渲染管线仅作用于展示层：`RenderEngine.render(raw:context:)`（显示用正则 + 隐藏标签剥离 + RenderNode 解析）
 /// → `MarkdownTextView(text:)` 块级 Markdown 排版。原始 `message.content` 始终保留，
 /// 复制 / 编辑 / 重新生成 / 发送 API 一律使用原文（参见 `liveContent` 注释）。
 struct MessageCard: View {

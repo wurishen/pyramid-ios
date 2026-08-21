@@ -1,9 +1,9 @@
 import XCTest
 @testable import PyramidCore
 
-// MARK: - 工具：把 DisplayRegex 应用到文本（与 MessageRenderer.applyDisplayRegex 行为一致）
+// MARK: - 工具：把 DisplayRegex 应用到文本（与 MessageRendererCore.apply 行为一致）
 
-/// 复刻 MessageRenderer 的核心循环：按顺序对每条 enabled=true 的 DisplayRegex 应用
+/// 复刻渲染管线的核心循环：按顺序对每条 enabled=true 的 DisplayRegex 应用
 /// `NSRegularExpression(pattern: options: [.dotMatchesLineSeparators]).stringByReplacingMatches(...)`。
 /// 这里用 inline flag group 已经被 importer 写入 pattern，所以不需要额外的 Options。
 private func applyRegexes(_ regexes: [DisplayRegex], to text: String) -> String {

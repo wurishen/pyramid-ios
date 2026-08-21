@@ -63,12 +63,6 @@ final class VariableStore: ObservableObject {
         stores[sessionId] ?? .object([:])
     }
 
-    /// 拍扁 JSON 树为 path → value 列表（用于 StatusView 渲染）。
-    /// 只显示 `.object` 顶层 + 递归子 object 的最浅值（不递归 array 内部）。
-    func snapshot(sessionId: UUID) -> [VariableEntry] {
-        VariableStoreFlattener.snapshot(root: raw(forSession: sessionId))
-    }
-
     // MARK: - 生命周期
 
     /// 删除指定 session 的变量树（ChatStore 删除会话时调用）。

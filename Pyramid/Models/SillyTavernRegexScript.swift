@@ -23,9 +23,9 @@ import Foundation
 /// `enabled = false` / 空 pattern / pattern 无法编译 / 非显示 placement / `promptOnly`
 /// 的脚本跳过。
 ///
-/// 作用域：当前 Pyramid 只暴露 `assistantDisplayPre`（与 MessageRenderer.applyDisplayRegex
+/// 作用域：当前 Pyramid 只暴露 `assistantDisplayPre`（与 `MessageRendererCore.orderedRegexes`
 /// 的生效范围一致）。如果未来需要 user / system prompt 等其他 scope，扩展 `DisplayRegex.Scope`
-/// + MessageRenderer.applyDisplayRegex 即可，本层无需改动。
+/// + `MessageRendererCore.orderedRegexes` 即可，本层无需改动。
 ///
 /// flags 处理：JS 正则 flags 通过 `(?i)(?m)(?s)` 内联 flag group 前缀嵌入到 pattern
 /// 头部。这样不需要修改 `DisplayRegex`（保留字段稳定）也不需要修改 MessageRenderer

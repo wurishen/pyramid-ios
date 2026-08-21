@@ -1,12 +1,11 @@
 import Foundation
 
-/// `MessageRenderer.applyDisplayRegex` 的纯算法核心，单独抽出来便于在 Linux / SPM 上
+/// 渲染管线的纯算法核心（显示用正则排序 + 替换），单独抽出来便于在 Linux / SPM 上
 /// 直接测试。**没有任何渲染层副作用，不写缓存、不调 SwiftUI / os，也不依赖 Pyramid 模型**。
 ///
-/// `MessageRenderer.applyDisplayRegex` 仍保留原有的 `OSAllocatedUnfairLock` 编译缓存；
-/// 它负责把 `Preset.displayRegexIds` 和 `ChatMessage.Role` 折算成下面这两个 primitive，
-/// 然后委托到本 helper 完成排序 + 替换。算法行为与 MessageRenderer.swift 中原有实现
-/// 完全一致，集中到这里方便被测试独立验证。
+/// `RenderEngine`（iOS 端）持有原 `OSAllocatedUnfairLock` 编译缓存，负责把
+/// `Preset.displayRegexIds` 和 `ChatMessage.Role` 折算成下面这两个 primitive，
+/// 然后委托到本 helper 完成排序 + 替换。算法集中到这里方便被测试独立验证。
 ///
 /// 规则：
 /// - 只对 `isAssistant == true` 生效；其他直接原样返回。

@@ -207,7 +207,7 @@ enum MarkdownParser {
 /// 不一定真正生效——`Text(AttributedString)` 偶尔只会显示成普通字符串。手写 token
 /// 解析 + 显式属性可以保证每个 Markdown 语义都对应到 SwiftUI 的视觉样式。
 ///
-/// 与 `MessageRenderer.preprocess(_:)` 配合：`preprocess` 先做 DisplayRegex + 隐藏标签剥离，
+/// 与 `RenderEngine.render(raw:context:)` 配合：上层先做 DisplayRegex + 隐藏标签剥离，
 /// 清洗后的 String 再交给本视图渲染（不动 `message.content`）。
 struct MarkdownTextView: View {
     let text: String

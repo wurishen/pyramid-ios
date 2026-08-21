@@ -61,7 +61,7 @@ enum RenderEngine {
         )
     }
 
-    /// 算法与 `MessageRenderer.stripHideTags` 相同；放这里让 RenderEngine 不依赖 MessageRenderer。
+    /// 隐藏标签剥离的纯 Foundation 算法（`MessageRenderer` 已被移除）。
     private static func stripHideTags(_ text: String, enabled: Bool, tags: [String]) -> String {
         guard enabled else { return text }
         let cleaned = tags

@@ -1,11 +1,10 @@
 import XCTest
 @testable import PyramidCore
 
-/// MessageCard.contentCard 走 MessageRenderer.preprocess → applyDisplayRegex
-/// (委托到 MessageRendererCore.orderedRegexes + apply) → MarkdownTextView(text:)。
+/// MessageCard.contentCard 走 RenderEngine.render → MessageRendererCore.orderedRegexes + apply
+/// → MarkdownTextView(text:)。
 /// 这套测试针对 `MessageRendererCore.apply` 直接验证：它就是 iOS 渲染流水线里
-/// 真实跑的那段纯算法——`MessageRenderer.applyDisplayRegex` 在拿到顺序后直接
-/// 调用 NSRegularExpression 替换，逻辑与本 helper 完全一致。
+/// 真实跑的那段纯算法——`RenderEngine` 在拿到顺序后直接调用本 helper，逻辑与生产实现一致。
 ///
 /// 这些是「链路」测试而非单元测试：模拟真实消息进入 MessageCard 时的等价输入，
 /// 验证经过 Regex 处理后交给下游 MarkdownTextView 的字符串就是预期的展示文本。
@@ -26,9 +25,8 @@ final class MessageRendererChainTests: XCTestCase {
         )
     }
 
-    /// 等价于「MessageRenderer.preprocess」里 applyDisplayRegex 阶段（剥隐藏标签是另一段，与 Regex 无关）。
-    /// 真实 iOS 调用：MessageRenderer.preprocess(Inputs(raw:role:settings:preset:displayRegexes:))
-    /// → applyDisplayRegex → MessageRendererCore.apply(text:isAssistant:presetDisplayRegexIds:all:)。
+    /// 等价于渲染管线里的 applyDisplayRegex 阶段（剥隐藏标签是另一段，与 Regex 无关）。
+    /// 真实 iOS 调用：RenderEngine.render → MessageRendererCore.apply(text:isAssistant:presetDisplayRegexIds:all:)。
     /// 本 helper 直接调用核心；preset 由 iOS 端在调用本函数前折算成 [UUID] 后传入。
     private func render(_ raw: String, rules: [DisplayRegex]) -> String {
         MessageRendererCore.apply(
@@ -149,7 +147,7 @@ final class MessageRendererChainTests: XCTestCase {
 
     /// preset 指定了 displayRegexIds 时按预设顺序执行；未指定的 enabled 规则作为兜底追加在后面。
     /// 这里不直接构造 Preset（Preset 在 Pyramid/Models/Preset.swift 里，未链接进 SPM 包）；
-    /// 等价地用 [UUID] 测试核心算法：MessageRenderer.applyDisplayRegex 会把
+    /// 等价地用 [UUID] 测试核心��法：RenderEngine 会把
     /// preset?.displayRegexIds ?? [] 喂给同一个 helper，行为一致。
     func test_presetOrderOverridesArrayOrder() {
         let rA = regex("A", replacement: "X")
