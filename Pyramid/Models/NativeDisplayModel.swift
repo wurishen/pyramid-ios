@@ -28,8 +28,15 @@ enum DisplayBlock: Equatable, Sendable {
     case text(String)
     /// 数值（可带可选 label）。label = `nil` → 纯数字；label = `"金币"` → "50 (金币)"。
     case number(value: Double, label: String?)
-    /// 进度条 / 数值条。`max == nil` → UI 不画 100% 标线。
-    case bar(label: String, value: Double, max: Double?, kind: BarKind)
+    /// 通用数值条。`max == nil` → UI 不画上限标线。
+    ///
+    /// **不携带 Pyramid 固定语义**：本枚举只描述"这是一个条" —— 不区分 HP /
+    /// 好感度 / 比率 / 通用 等 Pyramid 业务概念。语义由数据层（角色卡 / Capability
+    /// 层）和上层 UI 决定；本层不替角色卡给它赋语义。
+    ///
+    /// 当前 `NativeDisplayModelProjector` 不会从 statData 树自动产出 `.bar`
+    /// （避免把任意命名的数值强行画成进度条）；保留此 case 供未来 Capability 层用。
+    case bar(label: String, value: Double, max: Double?)
     /// 短标签 / 胶囊。`value == nil` → 数组元素风格；`value == "true"/"false"` → bool 风格。
     case tag(label: String, value: String?)
     /// label-value 对（最朴素呈现）。
@@ -38,14 +45,6 @@ enum DisplayBlock: Equatable, Sendable {
     case section(label: String, content: [DisplayBlock])
     /// 嵌套分组（递归）。`title` 取自父对象的 key。
     case group(title: String, children: [DisplayBlock])
-}
-
-/// 进度条类型。`ratio` 留给后续 talkativeness 之类的 0–1 比例字段（卡元数据，stat_data 暂未用到）。
-enum BarKind: String, Equatable, Sendable {
-    case hp
-    case affection
-    case ratio
-    case generic
 }
 
 /// 无法映射到 `DisplayBlock` 但保留原文的字段。`path` 留空时表示整棵树根级降级。

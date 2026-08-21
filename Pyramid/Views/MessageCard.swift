@@ -486,8 +486,8 @@ struct StatusPlaceholderView: View {
                         .lineLimit(1)
                 }
             )
-        case let .bar(label, value, upper, kind):
-            return AnyView(barRow(label: label, value: value, upper: upper, kind: kind))
+        case let .bar(label, value, upper):
+            return AnyView(barRow(label: label, value: value, upper: upper))
         case let .tag(label, value):
             return AnyView(
                 HStack(spacing: 4 * scale) {
@@ -555,7 +555,7 @@ struct StatusPlaceholderView: View {
     // MARK: - 进度条
 
     @ViewBuilder
-    private func barRow(label: String, value: Double, upper: Double?, kind: BarKind) -> some View {
+    private func barRow(label: String, value: Double, upper: Double?) -> some View {
         VStack(alignment: .leading, spacing: 2 * scale) {
             HStack(spacing: 6 * scale) {
                 Text(label)
@@ -574,7 +574,7 @@ struct StatusPlaceholderView: View {
             }
             ProgressView(value: clamped(value: value, total: upper), total: clampedTotal(total: upper))
                 .progressViewStyle(.linear)
-                .tint(barTint(kind: kind))
+                .tint(barTint())
         }
     }
 
@@ -588,13 +588,10 @@ struct StatusPlaceholderView: View {
         return 100
     }
 
-    private func barTint(kind: BarKind) -> Color {
-        switch kind {
-        case .hp: return Color.red.opacity(0.85)
-        case .affection: return Color.pink.opacity(0.85)
-        case .ratio: return Color.accentColor
-        case .generic: return Color.secondary
-        }
+    /// 进度条颜色 —— 现在所有 bar 走同一中性 accent 色，不区分 HP / 好感度 等
+    /// Pyramid 固定语义。Capability 层（未来）可以在 .bar 里附带 tint hint 后再扩。
+    private func barTint() -> Color {
+        Color.accentColor
     }
 
     private func format(_ value: Double) -> String {

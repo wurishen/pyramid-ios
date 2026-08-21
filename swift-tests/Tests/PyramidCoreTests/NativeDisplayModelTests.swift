@@ -92,36 +92,34 @@ final class NativeDisplayModelTests: XCTestCase {
         XCTAssertEqual(label, "gold")
     }
 
-    /// 标量 number + HP 键名 → `bar(kind: hp, max: 100)`。
-    func testHPKeyBecomesBarKindHP() {
+    /// 标量 number + HP 键名 → `.number(value, label)`（**不再**升级为 `.bar`）。
+    /// 投影层不替角色卡赋语义：HP / 好感度 / 金币 等任意键名的数值都走同一条通用路径。
+    func testHPKeyBecomesGenericNumber() {
         let model = NativeDisplayModelProjector.project(statData: .object([
             "HP": .int(80)
         ]))
         guard case let .group(_, children) = model.blocks[0] else { return XCTFail("根部应是 group") }
-        guard case let .bar(label, value, max, kind) = children[0] else {
-            XCTFail("children[0] 应是 bar，实为 \(children[0])")
+        guard case let .number(value, label) = children[0] else {
+            XCTFail("HP 数值应走通用 .number 路径，实为 \(children[0])")
             return
         }
-        XCTAssertEqual(label, "HP")
         XCTAssertEqual(value, 80)
-        XCTAssertEqual(max, 100)
-        XCTAssertEqual(kind, .hp)
+        XCTAssertEqual(label, "HP")
     }
 
-    /// 标量 number + 好感度键 → `bar(kind: affection, max: 100)`。
-    func testAffectionKeyBecomesBarKindAffection() {
+    /// 标量 number + 好感度键 → `.number(value, label)`（**不再**升级为 `.bar`）。
+    /// 与 `testHPKeyBecomesGenericNumber` 一道锁定：键名不触发特殊 UI 模板。
+    func testAffectionKeyBecomesGenericNumber() {
         let model = NativeDisplayModelProjector.project(statData: .object([
             "好感度": .int(65)
         ]))
         guard case let .group(_, children) = model.blocks[0] else { return XCTFail("根部应是 group") }
-        guard case let .bar(label, value, max, kind) = children[0] else {
-            XCTFail("children[0] 应是 bar，实为 \(children[0])")
+        guard case let .number(value, label) = children[0] else {
+            XCTFail("好感度数值应走通用 .number 路径，实为 \(children[0])")
             return
         }
-        XCTAssertEqual(label, "好感度")
         XCTAssertEqual(value, 65)
-        XCTAssertEqual(max, 100)
-        XCTAssertEqual(kind, .affection)
+        XCTAssertEqual(label, "好感度")
     }
 
     /// 标量 bool → `tag(label, value)`（value 是 "true"/"false"）。
@@ -163,15 +161,15 @@ final class NativeDisplayModelTests: XCTestCase {
         }
         XCTAssertEqual(title, "player")
         XCTAssertEqual(grandchildren.count, 2)
-        // hp 命中 bar 启发，location 是 string → field
+        // hp 不再触发 bar 启发；现在 hp 与 location 都走通用路径：hp → number，location → field
         let kinds = Set(grandchildren.map { block -> String in
             switch block {
-            case .bar: return "bar"
+            case .number: return "number"
             case .field: return "field"
             default: return "other"
             }
         })
-        XCTAssertEqual(kinds, ["bar", "field"])
+        XCTAssertEqual(kinds, ["number", "field"])
     }
 
     /// 深度 ≤ 3 正常嵌套；深度 4 文本化；深度 ≥ 5 residual。
@@ -415,42 +413,55 @@ final class NativeDisplayModelTests: XCTestCase {
         }
     }
 
-    /// HP-like path → model 含 `.bar(.hp)`，让 StatusPlaceholderView 的 ProgressView 分支命中。
-    /// 这是 1→2 投影层 + 显示层闭环的关键断言：旧 flat 路径只产 field，新路径产 bar。
-    func testEntriesWithHPKeyProducesBarBlock() {
+    /// HP path → `.field`（**不再**升级为 `.bar`）。投影层不替角色卡赋语义：
+    /// HP 与任意其它路径一样，按 `.field(label: path, value)` 落地。
+    /// Capability 层（未来）可以基于 path / label 自行决定是否升级为 `.bar`。
+    func testEntriesWithHPKeyProducesField() {
         let entries = [
             VariableEntry(path: "/HP", displayValue: "80"),
             VariableEntry(path: "/player/location", displayValue: "集市")
         ]
         let model = NativeDisplayModelProjector.project(entries: entries)
         guard case let .group(_, children) = model.blocks[0] else { return XCTFail("根部应是 group") }
-        let barBlocks = children.compactMap { block -> DisplayBlock? in
-            if case .bar = block { return block } else { return nil }
+        // 关键否定：HP 不应被升级为 .bar。
+        let barCount = children.filter { block in
+            if case .bar = block { return true }
+            return false
+        }.count
+        XCTAssertEqual(barCount, 0, "HP 路径不应被升级为 .bar")
+
+        // HP 路径必须以 .field 落地。
+        let hpField = children.first { block in
+            if case let .field(label, _) = block { return label == "/HP" }
+            return false
         }
-        XCTAssertEqual(barBlocks.count, 1, "HP 路径必须投影为 bar")
-        guard case let .bar(label, value, max, kind) = barBlocks[0] else {
-            XCTFail("barBlocks[0] 应是 bar")
-            return
+        guard case let .field?(label, value) = hpField else {
+            return XCTFail("HP 路径应以 .field 形式存在")
         }
-        XCTAssertEqual(label, "HP")
-        XCTAssertEqual(value, 80)
-        XCTAssertEqual(max, 100)
-        XCTAssertEqual(kind, .hp)
+        XCTAssertEqual(label, "/HP")
+        XCTAssertEqual(value, "80")
     }
 
-    /// 好感度 path → `.bar(.affection)`：确保另一条 bar kind 启发也走到显示层。
-    func testEntriesWithAffectionKeyProducesAffectionBar() {
+    /// 好感度 path → `.field`（**不再**升级为 `.bar`）。与 `testEntriesWithHPKeyProducesField`
+    /// 一起锁定：扁平条目路径下，键名不影响投影结果。
+    func testEntriesWithAffectionKeyProducesField() {
         let entries = [
             VariableEntry(path: "/好感度", displayValue: "65"),
             VariableEntry(path: "/time", displayValue: "傍晚")
         ]
         let model = NativeDisplayModelProjector.project(entries: entries)
         guard case let .group(_, children) = model.blocks[0] else { return XCTFail("根部应是 group") }
-        let bars = children.compactMap { block -> DisplayBlock? in
-            if case .bar(_, _, _, let kind) = block { return kind == .affection ? block : nil }
-            return nil
+        let barCount = children.filter { block in
+            if case .bar = block { return true }
+            return false
+        }.count
+        XCTAssertEqual(barCount, 0, "好感度路径不应被升级为 .bar")
+
+        let affectionField = children.first { block in
+            if case let .field(label, _) = block { return label == "/好感度" }
+            return false
         }
-        XCTAssertEqual(bars.count, 1)
+        XCTAssertNotNil(affectionField, "好感度路径应以 .field 形式存在")
     }
 
     // MARK: - 健壮性

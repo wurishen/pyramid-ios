@@ -13,7 +13,8 @@ import Foundation
 /// - 纯函数：不读 VariableStore 全局单例；输入由调用方传入。
 /// - 不抛错：所有异常路径走 `residual`。
 /// - 不写 UI：本层只产出数据模型；UI 接线留待后续 2→3 阶段。
-/// - 不卡面特判：键名启发只匹配通用词（HP / 好感 / affection / health / 血量 / 生命 / 好感度 / favor）。
+/// - **不替角色卡赋语义**：键名（HP / 好感度 / 金币 / 小手机电量 / 催眠程度 …）
+///   都不影响投影结果。数据长什么样就产什么原语，不因字段名触发固定 UI 模板。
 enum NativeDisplayModelProjector {
 
     /// 根 group 标题。文档约定：整个 `stat_data` 包成 `group("状态", children)`。
@@ -61,10 +62,10 @@ enum NativeDisplayModelProjector {
 
     /// 把 `[VariableEntry]`（已拍扁的路径列表）投影为 `NativeDisplayModel`。
     ///
-    /// 这是"扁平条目"维度的最佳努力投影 —— 嵌套形态已丢，无法还原嵌套 group，
-    /// 但 `HP` / `好感度` 等键名启发仍然生效，让 `bar` 原语照常走到显示层。
-    /// 数值字段来自 `VariableStoreFlattener.format` 把 int/double 编出的纯数字字符串；
-    /// 解析失败则退回 `.field`。
+    /// 这是"扁平条目"维度的最佳努力投影 —— 嵌套形态已丢，无法还原嵌套 group。
+    /// 所有条目都按 `.field(label: path, value: displayValue)` 输出 —— 投影层不替
+    /// 角色卡决定哪个 key 应该画成进度条（HP / 好感度 / 小手机电量 都是 data，
+    /// Capability 层以后可以基于 path / label 自行决定是否升级为 `.bar`）。
     static func project(entries: [VariableEntry]) -> NativeDisplayModel {
         guard !entries.isEmpty else {
             return NativeDisplayModel(
@@ -76,11 +77,7 @@ enum NativeDisplayModelProjector {
         let blocks = entries
             .sorted { $0.path < $1.path }
             .map { entry -> DisplayBlock in
-                let leaf = leafName(of: entry.path)
-                if let kind = hpKeyKind(leaf), let value = Double(entry.displayValue) {
-                    return .bar(label: leaf, value: value, max: 100, kind: kind)
-                }
-                return .field(label: entry.path, value: entry.displayValue)
+                .field(label: entry.path, value: entry.displayValue)
             }
         return NativeDisplayModel(
             version: 1,
@@ -130,14 +127,10 @@ enum NativeDisplayModelProjector {
         return .field(label: key, value: value)
     }
 
-    /// 数值 → 启发式 bar / number / field。
-    /// 键名启发匹配 HP / 好感 → bar(对应 kind, max=100)；其他 → `number(value, label: key)`。
-    /// 不依赖 HTML / 卡片特判。
+    /// 数值 → `.number(value, label: key)`。
+    /// 通用值：所有数值字段都走这条路径；投影层不替角色卡决定哪个 key 应该画成进度条。
+    /// Capability 层 / 上层 UI 可以基于 `label` / `value` 自行决定是否升级为 `.bar`。
     private static func projectNumber(key: String, value: Double) -> DisplayBlock {
-        if let kind = hpKeyKind(key) {
-            return .bar(label: key, value: value, max: 100, kind: kind)
-        }
-        // 通用值：保留为 number，避免误把"金币 50"画成进度条。
         return .number(value: value, label: key)
     }
 
@@ -240,19 +233,6 @@ enum NativeDisplayModelProjector {
     }
 
     // MARK: - 键名启发（通用词；不放角色名 / 卡面路径 / 脚本名）
-
-    /// HP / 生命 / 血量 / health → `hp`；好感 / 好感度 / affection / favor → `affection`。
-    /// 其他键名**不**自动转 bar（避免把"金币 50"画成进度条）。
-    private static func hpKeyKind(_ key: String) -> BarKind? {
-        let lower = key.lowercased()
-        if ["hp", "生命", "血量", "health"].contains(where: { lower == $0.lowercased() }) {
-            return .hp
-        }
-        if ["好感", "好感度", "affection", "favor"].contains(where: { lower == $0.lowercased() }) {
-            return .affection
-        }
-        return nil
-    }
 
     /// 数组下标的人类可读 label（仅 bool 元素用得上）。
     private static func indexLabel(_ index: Int) -> String {
