@@ -168,4 +168,272 @@ final class WorldBookServiceTests: XCTestCase {
         XCTAssertTrue(out.contains("### Second"))
         XCTAssertTrue(out.contains("two"))
     }
+
+    // MARK: - V3 caseSensitive
+
+    func test_caseSensitiveRequiresExactCase() {
+        let e = WorldBookEntry(
+            keywords: ["Cat"],
+            caseSensitive: true
+        )
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "I see a Cat", history: [], entries: [e]).count, 1)
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "I see a cat", history: [], entries: [e]).count, 0)
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "I see a CAT", history: [], entries: [e]).count, 0)
+    }
+
+    func test_caseSensitiveFalseMatchesAnyCase() {
+        let e = WorldBookEntry(
+            keywords: ["Cat"],
+            caseSensitive: false
+        )
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "I see a cat", history: [], entries: [e]).count, 1)
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "I see a CAT", history: [], entries: [e]).count, 1)
+    }
+
+    func test_caseSensitiveNilDefaultsToInsensitive() {
+        // 不设 caseSensitive 应等同于 false
+        let e = WorldBookEntry(keywords: ["Cat"])
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "I see a CAT", history: [], entries: [e]).count, 1)
+    }
+
+    func test_caseSensitiveHistoryLinesAlsoCaseSensitive() {
+        // caseSensitive 应同时影响 history 上下文
+        let e = WorldBookEntry(keywords: ["SILENT"], caseSensitive: true, scanDepth: 1)
+        let h = ChatMessage(role: .user, content: "silent hill")
+        let h2 = ChatMessage(role: .user, content: "SILENT hill")
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "now", history: [h], entries: [e]).count, 0)
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "now", history: [h2], entries: [e]).count, 1)
+    }
+
+    // MARK: - V3 excludes
+
+    func test_excludesSuppressesEntry() {
+        let e = WorldBookEntry(
+            keywords: ["酒馆"],
+            excludes: ["关闭"]
+        )
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "酒馆开着", history: [], entries: [e]).count, 1)
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "酒馆已经关闭", history: [], entries: [e]).count, 0)
+    }
+
+    func test_excludesEmptyArrayIsNoOp() {
+        let e = WorldBookEntry(
+            keywords: ["酒馆"],
+            excludes: []
+        )
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "酒馆", history: [], entries: [e]).count, 1)
+    }
+
+    func test_excludesMultipleAnyMatchExcludes() {
+        // 任一 exclude 命中即排除
+        let e = WorldBookEntry(
+            keywords: ["冒险"],
+            excludes: ["战斗", "死亡"]
+        )
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "开始冒险", history: [], entries: [e]).count, 1)
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "冒险中发生战斗", history: [], entries: [e]).count, 0)
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "冒险者面临死亡", history: [], entries: [e]).count, 0)
+    }
+
+    func test_excludesCaseInsensitiveByDefault() {
+        // caseSensitive=nil → exclude 默认也按 case-insensitive 比对
+        let e = WorldBookEntry(
+            keywords: ["x"],
+            excludes: ["STOP"]
+        )
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "x please stop", history: [], entries: [e]).count, 0)
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "x please STOP", history: [], entries: [e]).count, 0)
+    }
+
+    // MARK: - V3 triggers
+
+    func test_triggersRequireAtLeastOneMatch() {
+        // V3 默认：primary AND (任一 trigger)
+        let e = WorldBookEntry(
+            keywords: ["冒险"],
+            triggers: ["哥布林", "洞穴"]
+        )
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "冒险开始", history: [], entries: [e]).count, 0,
+                       "primary 命中但 trigger 都未命中 → 排除")
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "冒险中遇到哥布林", history: [], entries: [e]).count, 1,
+                       "trigger 之一命中 → 注入")
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "冒险中进入洞穴", history: [], entries: [e]).count, 1,
+                       "另一个 trigger 命中 → 注入")
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "没有冒险也没有哥布林", history: [], entries: [e]).count, 0,
+                       "primary 都没命中 → 排除")
+    }
+
+    func test_triggersEmptyArrayBehavesAsBefore() {
+        let e = WorldBookEntry(keywords: ["x"], triggers: [])
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "x", history: [], entries: [e]).count, 1)
+    }
+
+    // MARK: - V3 selectiveLogic
+
+    func test_selectiveLogic_AND_ANY_default() {
+        // selectiveLogic = 0（默认）：secondary 至少一个命中即通过
+        let e = WorldBookEntry(
+            keywords: ["x"],
+            secondaryKeywords: ["猫", "狗"],
+            selectiveLogicRaw: 0
+        )
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "x 猫", history: [], entries: [e]).count, 1)
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "x 狗", history: [], entries: [e]).count, 1)
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "x", history: [], entries: [e]).count, 0)
+    }
+
+    func test_selectiveLogic_NOT_ALL_excludesOnFullMatch() {
+        // 1 = NOT_ALL：全部 secondary 命中 → 排除
+        let e = WorldBookEntry(
+            keywords: ["x"],
+            secondaryKeywords: ["猫", "狗"],
+            selectiveLogicRaw: 1
+        )
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "x 猫", history: [], entries: [e]).count, 1)
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "x 狗", history: [], entries: [e]).count, 1)
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "x 猫 狗", history: [], entries: [e]).count, 0,
+                       "两个 secondary 都命中 → NOT_ALL 排除")
+    }
+
+    func test_selectiveLogic_NOT_ANY_excludesOnAnyMatch() {
+        // 2 = NOT_ANY：任一 secondary 命中 → 排除
+        let e = WorldBookEntry(
+            keywords: ["x"],
+            secondaryKeywords: ["猫", "狗"],
+            selectiveLogicRaw: 2
+        )
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "x", history: [], entries: [e]).count, 1)
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "x 猫", history: [], entries: [e]).count, 0)
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "x 狗", history: [], entries: [e]).count, 0)
+    }
+
+    func test_selectiveLogic_AND_ALL_requiresFullMatch() {
+        // 3 = AND_ALL：全部 secondary 都必须命中
+        let e = WorldBookEntry(
+            keywords: ["x"],
+            secondaryKeywords: ["猫", "狗"],
+            selectiveLogicRaw: 3
+        )
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "x 猫", history: [], entries: [e]).count, 0)
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "x 猫 狗", history: [], entries: [e]).count, 1)
+    }
+
+    // MARK: - V3 weight
+
+    func test_weightZeroDisablesEntry() {
+        let e = WorldBookEntry(keywords: ["x"], weight: 0)
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "x", history: [], entries: [e]).count, 0)
+    }
+
+    func test_weightNegativeDisablesEntry() {
+        let e = WorldBookEntry(keywords: ["x"], weight: -1)
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "x", history: [], entries: [e]).count, 0)
+    }
+
+    func test_weightActsAsTiebreaker() {
+        // priority 相同的两个 entry：weight 大的排得更前
+        let a = WorldBookEntry(title: "A", keywords: ["x"], priority: 100, weight: 50)
+        let b = WorldBookEntry(title: "B", keywords: ["x"], priority: 100, weight: 200)
+        let result = WorldBookService.selectedEntries(for: "x", history: [], entries: [a, b])
+        XCTAssertEqual(result.map(\.title), ["B", "A"])
+    }
+
+    // MARK: - V3 decay
+
+    func test_decayOneIsIdentity() {
+        // decay=1 → 不应改变排序
+        let a = WorldBookEntry(title: "A", keywords: ["x"], priority: 100, decay: 1)
+        let b = WorldBookEntry(title: "B", keywords: ["x"], priority: 200, decay: 1)
+        let result = WorldBookService.selectedEntries(for: "x", history: [], entries: [a, b])
+        XCTAssertEqual(result.map(\.title), ["A", "B"])
+    }
+
+    func test_decayZeroPushesEntryLater() {
+        // decay=0 → 应大幅推迟（A 比 B 优先级低（priority 数字大）即使 priority 数字更小）
+        let decaying = WorldBookEntry(title: "D", keywords: ["x"], priority: 100, decay: 0)
+        let baseline = WorldBookEntry(title: "B", keywords: ["x"], priority: 150, decay: 1)
+        let result = WorldBookService.selectedEntries(for: "x", history: [], entries: [decaying, baseline])
+        XCTAssertEqual(result.map(\.title), ["B", "D"],
+                       "decay=0 推后的 D 应排在 priority=150 的 B 之后")
+    }
+
+    func test_decayPartialIsInterpolated() {
+        // decay=0.5 → 推后 500（(1-0.5)*1000）；priority 数字 < +500 的差 仍排在前
+        let a = WorldBookEntry(title: "A", keywords: ["x"], priority: 100, decay: 0.5)
+        let b = WorldBookEntry(title: "B", keywords: ["x"], priority: 700, decay: 1)
+        let result = WorldBookService.selectedEntries(for: "x", history: [], entries: [a, b])
+        // A: 100 + 500 = 600; B: 700 → A 排前
+        XCTAssertEqual(result.map(\.title), ["A", "B"])
+    }
+
+    // MARK: - V3 useGroupScoring
+
+    func test_groupScoringKeepsTopPerGroup() {
+        // 同 groupKey 的两个条目仅保留 priority 较小的那一个
+        let groupA1 = WorldBookEntry(title: "G1", keywords: ["x"], priority: 50,
+                                      groupKey: "weather", useGroupScoring: true)
+        let groupA2 = WorldBookEntry(title: "G2", keywords: ["x"], priority: 100,
+                                      groupKey: "weather", useGroupScoring: true)
+        let outgroup = WorldBookEntry(title: "OUT", keywords: ["x"], priority: 200)
+        let result = WorldBookService.selectedEntries(for: "x", history: [], entries: [groupA1, groupA2, outgroup])
+        XCTAssertEqual(result.map(\.title), ["G1", "OUT"],
+                       "同组只留 priority=50 那一条；非组外条目不受影响")
+    }
+
+    func test_groupScoringRespectsGroupWeightTiebreaker() {
+        // priority 相同的组内成员按 groupWeight 高者优先
+        let heavier = WorldBookEntry(title: "H", keywords: ["x"], priority: 100,
+                                      groupKey: "g", useGroupScoring: true, groupWeight: 200)
+        let lighter = WorldBookEntry(title: "L", keywords: ["x"], priority: 100,
+                                      groupKey: "g", useGroupScoring: true, groupWeight: 50)
+        let result = WorldBookService.selectedEntries(for: "x", history: [], entries: [lighter, heavier])
+        XCTAssertEqual(result.map(\.title), ["H"])
+    }
+
+    func test_groupScoringDisabledDoesNotFilter() {
+        // useGroupScoring=nil/false → 即使 groupKey 相同也不合并
+        let a = WorldBookEntry(title: "A", keywords: ["x"], priority: 100, groupKey: "g")
+        let b = WorldBookEntry(title: "B", keywords: ["x"], priority: 200, groupKey: "g")
+        let result = WorldBookService.selectedEntries(for: "x", history: [], entries: [a, b])
+        XCTAssertEqual(result.map(\.title), ["A", "B"])
+    }
+
+    func test_groupScoringEmptyGroupKeyTreatedAsUngrouped() {
+        // useGroupScoring=true 但 groupKey 为空 → 不分组
+        let a = WorldBookEntry(title: "A", keywords: ["x"], priority: 100,
+                                groupKey: "", useGroupScoring: true)
+        let b = WorldBookEntry(title: "B", keywords: ["x"], priority: 200,
+                                groupKey: "", useGroupScoring: true)
+        let result = WorldBookService.selectedEntries(for: "x", history: [], entries: [a, b])
+        XCTAssertEqual(result.map(\.title), ["A", "B"])
+    }
+
+    // MARK: - V3 组合场景
+
+    func test_caseSensitiveTriggersAndExcludesTogether() {
+        // 全组合：caseSensitive=true 时 triggers/excludes 也大小写敏感
+        let e = WorldBookEntry(
+            keywords: ["Dragon"],
+            triggers: ["FIRE"],
+            excludes: ["STOP"],
+            caseSensitive: true
+        )
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "Dragon Fire", history: [], entries: [e]).count, 1)
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "Dragon fire", history: [], entries: [e]).count, 0,
+                       "trigger 大小写敏感")
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "Dragon Fire STOP", history: [], entries: [e]).count, 0,
+                       "exclude 把已经命中的排除")
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "Dragon FIRE STOP", history: [], entries: [e]).count, 0,
+                       "exclude 大小写敏感")
+    }
+
+    func test_effectiveSortKeyDecayPlusWeight() {
+        // decay 与 weight 同时作用：weight 提前，decay 推后，但 priority 仍是主键
+        let normal = WorldBookEntry(title: "N", keywords: ["x"], priority: 100, decay: 1, weight: 50)
+        let decayed = WorldBookEntry(title: "D", keywords: ["x"], priority: 100, decay: 0, weight: 1000)
+        // N: 100 + 0 + (-0.05) = 99.95
+        // D: 100 + 1000 + (-1.0) = 1099 → D 排后（priority 推后 +1000 远超 weight -1）
+        let result = WorldBookService.selectedEntries(for: "x", history: [], entries: [normal, decayed])
+        XCTAssertEqual(result.map(\.title), ["N", "D"])
+    }
 }
