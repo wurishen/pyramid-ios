@@ -89,13 +89,14 @@ final class StatDataSeedProjectionTests: XCTestCase {
         ])
         let model = NativeDisplayModelProjector.project(statData: tree)
         guard case let .group(_, children) = model.blocks[0] else { return XCTFail("根部应是 group") }
-        // 收集 field/number 文本里出现的 label。
+        // 收集 field / number / tag 文本里出现的 label —— 验证键名原样保留，不被规范化。
         var labels: [String] = []
         for child in children {
             switch child {
             case let .field(label, _): labels.append(label)
             case let .number(_, label):
                 if let l = label { labels.append(l) }
+            case let .tag(label, _): labels.append(label)
             default: break
             }
         }

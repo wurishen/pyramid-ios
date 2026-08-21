@@ -259,8 +259,8 @@ final class WorldBookServiceTests: XCTestCase {
                        "trigger 之一命中 → 注入")
         XCTAssertEqual(WorldBookService.selectedEntries(for: "冒险中进入洞穴", history: [], entries: [e]).count, 1,
                        "另一个 trigger 命中 → 注入")
-        XCTAssertEqual(WorldBookService.selectedEntries(for: "没有冒险也没有哥布林", history: [], entries: [e]).count, 0,
-                       "primary 都没命中 → 排除")
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "去哥布林", history: [], entries: [e]).count, 0,
+                       "primary 没命中 → 排除")
     }
 
     func test_triggersEmptyArrayBehavesAsBefore() {
@@ -415,16 +415,17 @@ final class WorldBookServiceTests: XCTestCase {
         let e = WorldBookEntry(
             keywords: ["Dragon"],
             caseSensitive: true,
-            triggers: ["FIRE"],
+            triggers: ["Fire"],
             excludes: ["STOP"]
         )
-        XCTAssertEqual(WorldBookService.selectedEntries(for: "Dragon Fire", history: [], entries: [e]).count, 1)
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "Dragon Fire", history: [], entries: [e]).count, 1,
+                       "primary + trigger 都命中，无 exclude → 注入")
         XCTAssertEqual(WorldBookService.selectedEntries(for: "Dragon fire", history: [], entries: [e]).count, 0,
-                       "trigger 大小写敏感")
+                       "trigger 大小写敏感：'Fire' 不匹配 'fire'")
         XCTAssertEqual(WorldBookService.selectedEntries(for: "Dragon Fire STOP", history: [], entries: [e]).count, 0,
-                       "exclude 把已经命中的排除")
-        XCTAssertEqual(WorldBookService.selectedEntries(for: "Dragon FIRE STOP", history: [], entries: [e]).count, 0,
-                       "exclude 大小写敏感")
+                       "exclude 'STOP' 与原文大小写一致 → 排除")
+        XCTAssertEqual(WorldBookService.selectedEntries(for: "Dragon Fire stop", history: [], entries: [e]).count, 1,
+                       "exclude 大小写敏感：'STOP' 不匹配 'stop'，不排除")
     }
 
     func test_effectiveSortKeyDecayPlusWeight() {
