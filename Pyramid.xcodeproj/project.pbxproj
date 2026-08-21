@@ -41,12 +41,13 @@
 		AB000000000000000000020D /* CharacterGreetingSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000212 /* CharacterGreetingSheet.swift */; };
 		AB000000000000000000020E /* EditMessageSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000213 /* EditMessageSheet.swift */; };
 		AB000000000000000000020F /* NewSessionWithCharacterSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000214 /* NewSessionWithCharacterSheet.swift */; };
-		AB0000000000000000000215 /* MessageRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000021F /* MessageRenderer.swift */; };
 		AB0000000000000000000301 /* JSONValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000302 /* JSONValue.swift */; };
 		AB0000000000000000000303 /* CharacterDepthPrompt.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000304 /* CharacterDepthPrompt.swift */; };
 		AB0000000000000000000305 /* DepthPromptInjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000306 /* DepthPromptInjector.swift */; };
 		AB0000000000000000000216 /* DisplayRegex.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000220 /* DisplayRegex.swift */; };
 		AB0000000000000000000217 /* MacroExpander.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000221 /* MacroExpander.swift */; };
+		AB0000000000000000000501 /* PersistenceSchema.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000511 /* PersistenceSchema.swift */; };
+		AB0000000000000000000502 /* PersistenceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000512 /* PersistenceController.swift */; };
 		AB0000000000000000000282 /* SillyTavernRegexScript.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000283 /* SillyTavernRegexScript.swift */; };
 		AB0000000000000000000290 /* MessageRendererCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000291 /* MessageRendererCore.swift */; };
 		AB0000000000000000000292 /* RenderEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000293 /* RenderEngine.swift */; };
@@ -101,7 +102,6 @@
 		AB0000000000000000000212 /* CharacterGreetingSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharacterGreetingSheet.swift; sourceTree = "<group>"; };
 		AB0000000000000000000213 /* EditMessageSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditMessageSheet.swift; sourceTree = "<group>"; };
 		AB0000000000000000000214 /* NewSessionWithCharacterSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewSessionWithCharacterSheet.swift; sourceTree = "<group>"; };
-		AB000000000000000000021F /* MessageRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageRenderer.swift; sourceTree = "<group>"; };
 		AB0000000000000000000220 /* DisplayRegex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayRegex.swift; sourceTree = "<group>"; };
 		AB0000000000000000000302 /* JSONValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONValue.swift; sourceTree = "<group>"; };
 		AB0000000000000000000304 /* CharacterDepthPrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharacterDepthPrompt.swift; sourceTree = "<group>"; };
@@ -121,6 +121,8 @@
 		AB0000000000000000000298 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		AB0000000000000000000299 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		AB0000000000000000000221 /* MacroExpander.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacroExpander.swift; sourceTree = "<group>"; };
+		AB0000000000000000000511 /* PersistenceSchema.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceSchema.swift; sourceTree = "<group>"; };
+		AB0000000000000000000512 /* PersistenceController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceController.swift; sourceTree = "<group>"; };
 		AB0000000000000000000281 /* AvatarImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarImageCache.swift; sourceTree = "<group>"; };
 		AB0000000000000000000222 /* DisplayRegexListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayRegexListView.swift; sourceTree = "<group>"; };
 		AB00000000000000000000A1 /* ImportSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportSupport.swift; sourceTree = "<group>"; };
@@ -158,6 +160,7 @@
 				AB000000000000000000002F /* ViewModels */,
 				AB0000000000000000000030 /* Views */,
 				AB0000000000000000000297 /* Configs */,
+				AB0000000000000000000500 /* Persistence */,
 				AB0000000000000000000018 /* Assets.xcassets */,
 			);
 			path = Pyramid;
@@ -174,7 +177,6 @@
 				AB0000000000000000000104 /* Preset.swift */,
 				AB0000000000000000000205 /* Character.swift */,
 				AB000000000000000000020A /* ContextTrimMode.swift */,
-				AB000000000000000000021F /* MessageRenderer.swift */,
 				AB0000000000000000000220 /* DisplayRegex.swift */,
 				AB0000000000000000000283 /* SillyTavernRegexScript.swift */,
 				AB0000000000000000000302 /* JSONValue.swift */,
@@ -251,6 +253,15 @@
 				AB000000000000000000029F /* StatusView.swift */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		AB0000000000000000000500 /* Persistence */ = {
+			isa = PBXGroup;
+			children = (
+				AB0000000000000000000511 /* PersistenceSchema.swift */,
+				AB0000000000000000000512 /* PersistenceController.swift */,
+			);
+			path = Persistence;
 			sourceTree = "<group>";
 		};
 		AB0000000000000000000031 /* Products */ = {
@@ -364,7 +375,6 @@
 				AB000000000000000000020D /* CharacterGreetingSheet.swift in Sources */,
 				AB000000000000000000020E /* EditMessageSheet.swift in Sources */,
 				AB000000000000000000020F /* NewSessionWithCharacterSheet.swift in Sources */,
-				AB0000000000000000000215 /* MessageRenderer.swift in Sources */,
 				AB0000000000000000000216 /* DisplayRegex.swift in Sources */,
 				AB0000000000000000000282 /* SillyTavernRegexScript.swift in Sources */,
 				AB0000000000000000000301 /* JSONValue.swift in Sources */,
@@ -385,6 +395,8 @@
 					AB0000000000000000000410 /* NativeDisplayModel.swift in Sources */,
 					AB0000000000000000000411 /* NativeDisplayModelProjector.swift in Sources */,
 				AB000000000000000000029E /* StatusView.swift in Sources */,
+				AB0000000000000000000501 /* PersistenceSchema.swift in Sources */,
+				AB0000000000000000000502 /* PersistenceController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

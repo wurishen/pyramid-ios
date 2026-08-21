@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 @main
 struct PyramidApp: App {
@@ -10,6 +11,11 @@ struct PyramidApp: App {
     @StateObject private var displayRegexes = DisplayRegexStore()
 
     @Environment(\.scenePhase) private var scenePhase
+
+    /// SwiftData 容器（foundation only）。当前阶段没有任何 store / view 真正消费它，
+    /// 注入的目的是让编译期校验 schema、并在磁盘上准备好 store 文件供后续迁移使用。
+    /// 完整数据迁移见 `docs/MIGRATION_TO_SWIFTDATA.md`。
+    private let modelContainer: ModelContainer = PersistenceController.shared
 
     var body: some Scene {
         WindowGroup {
@@ -28,5 +34,6 @@ struct PyramidApp: App {
                 }
             }
         }
+        .modelContainer(modelContainer)
     }
 }
