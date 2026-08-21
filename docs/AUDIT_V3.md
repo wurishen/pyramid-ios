@@ -421,3 +421,36 @@ gh run watch   # 等 lint / build / release 三 job 全绿
 - 编辑器 UI（character_book / depth_prompt 页面）
 - `selectiveLogic` / `sticky` / `cooldown` 运行时语义
 - `case_sensitive` 改动 `WorldBookService.matches`
+
+---
+
+## Phase 3 落地记录（2026-08-21）
+
+| Commit | SHA | 范围 |
+|---|---|---|
+| 1 | `2f2b0ec` | `<status>` 块扩展：任意 key/value → `.statusFields([StatusField])`；fast-path（HP + 好感度）保留 → `.status(hp:affection:)`；新增 `StatusFieldsView` 通用面板 |
+| 2 | `1d025cb` | ST `promptOnly` 字段从 DisplayRegex 透传到 outgoing prompt 阶段（`RenderEngine.Context.promptOnlyRegexIds`），与 iOS 显示链解耦 |
+| 3 | `6816ef0` | 5 个 SPEC-feature coverage gap 补测试 + iOS-only 代码加 `#if canImport(SwiftUI)` 守护，SPM 编译通过 |
+| 4 | `cdac2fd` | V3 World Book Entry **运行时** 落地：6-stage pipeline（enabled/weight → keyword match[caseSensitive+triggers+excludes+selectiveLogic] → probability → group scoring → effective sort key → cap）；`WorldBookServiceTests` +26 例 |
+| 5 | `54dca50` | SwiftData persistence foundation：7 个 `@Model` 类 + `PersistenceController`；`.modelContainer(...)` 注入（无 store 真消费，纯占位）；`docs/MIGRATION_TO_SWIFTDATA.md` 路线图 |
+
+### Phase 3 缺口状态
+
+| 缺口 | 状态 |
+|---|---|
+| `<status>` 块扩展接受任意键值对 | ✅ `.statusFields` 路径 + `StatusFieldsView`；HP+好感度 fast-path 仍命中 `.status(hp:affection:)` |
+| `case_sensitive` 改动 `WorldBookService.matches` | ✅ `caseSensitive == true` → 不小写化文本 / keywords；false / nil → 维持旧 case-insensitive |
+| `selectiveLogic` 运行时语义 | ✅ 0=AND_ANY / 1=NOT_ALL / 2=NOT_ANY / 3=AND_ALL 四档落地；作用于 secondary keywords |
+| `triggers` / `excludes` 运行时语义 | ✅ triggers 至少一个命中；excludes 任一命中 → 排除 |
+| `weight` / `decay` 运行时语义 | ✅ `weight <= 0` 视为关闭；`weight > 0` 作 tiebreaker；`decay` 把 priority 推后 0-1000 |
+| `groupKey` + `useGroupScoring` 运行时语义 | ✅ 同 groupKey 仅留 priority 最高一条，`groupWeight` tiebreaker |
+| MVU / JSON Patch / 变量 store | ✅ `RenderNodeParser` 解析 `<UpdateVariable>` → 写 `VariableStore`；`StatusPlaceHolderImpl` 输出 `.statusPlaceholder`；聊天走 `applyPatches` 闭包驱动 |
+| SwiftData persistence foundation | ✅ schema / container / 注入完成；数据迁移 follow-up |
+
+### 仍待跟进（open items）
+
+- 编辑器 UI：character_book / depth_prompt / 内嵌 regex 面板（v0.7.x 暂不做）
+- `sticky` / `cooldown` / `delay` 运行时语义（v0.7.x 暂不做）
+- 聊天 system role（v0.7.x 暂不做）
+- SwiftData 实际数据迁移（详见 `docs/MIGRATION_TO_SWIFTDATA.md`）
+- 详细已知问题清单见 `docs/KNOWN_ISSUES.md`
