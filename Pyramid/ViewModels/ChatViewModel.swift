@@ -286,8 +286,20 @@ final class ChatViewModel: ObservableObject {
         let preset = currentPreset
         // 应用上下文裁剪（不写入 API 正文，仅裁剪历史；楼层号 / 时间 / 注入指示仍为纯 UI）。
         let trimmedHistory = applyContextTrim(rawHistory, userMessageID: userMessageID)
-        // 宏展开：仅作用于送入 API 的消息文本，不修改存储 / 显示。
+        // 宏展开：���作用于送入 API 的消息文本，不修改存储 / 显示。
         var apiHistory = expandMacros(in: trimmedHistory)
+        // ST `prompt_only` 规则：在 outgoing prompt 阶段把酒馆思维链 / 状态栏等
+        // 对 AI 隐藏��内容剥掉。仅作用于送入 API 的消息，不动存储 / 显示。
+        let presetDisplayIds = currentPreset?.displayRegexIds ?? []
+        apiHistory = apiHistory.map { msg in
+            var copy = msg
+            copy.content = MessageRendererCore.applyPromptOnly(
+                text: msg.content,
+                presetDisplayRegexIds: presetDisplayIds,
+                all: displayRegexes.regexes
+            )
+            return copy
+        }
         // 酒馆 post_history_instructions：作为最末 system 块拼到「历史之后」。
         // 与同位置的 world book 条目合并，world book 在前、角色 PHI 在后。
         var afterHistory = WorldBookService.injectionText(for: grouped[.afterHistory] ?? [])

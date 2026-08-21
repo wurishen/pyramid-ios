@@ -124,4 +124,66 @@ enum MessageRendererCore {
         }
         return result
     }
+
+    // MARK: - Prompt-only chain（ST `prompt_only` 字段 → `DisplayRegex.promptOnly`）
+
+    /// prompt 链过滤门：
+    /// 1. enabled + promptOnly（仅 outgoing prompt 阶段生效）
+    /// 2. replacement 不含 HTML beautify token（防注入远程脚本 / iframe）
+    /// 注意：**不**复用 `touchesNativeTranspile` —— promptOnly 规则的典型用途就是
+    /// 在 prompt 里剥掉原生 transpile token（`StatusPlaceHolderImpl` / `UpdateVariable`），
+    /// 所以这些规则必须进入 prompt 链。
+    static func shouldRunOnPrompt(_ r: DisplayRegex) -> Bool {
+        guard r.enabled, r.promptOnly else { return false }
+        guard !isHtmlBeautify(replacement: r.replacement) else { return false }
+        return true
+    }
+
+    /// 把 `[DisplayRegex]` 中 promptOnly 部分按预设优先级排序 + 去重 + 过滤。
+    static func orderedPromptOnlyRegexes(
+        presetDisplayRegexIds: [UUID],
+        all: [DisplayRegex]
+    ) -> [DisplayRegex] {
+        let byID: [UUID: DisplayRegex] = Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })
+        var ordered: [DisplayRegex] = []
+        var seen = Set<UUID>()
+        for id in presetDisplayRegexIds {
+            if let r = byID[id], shouldRunOnPrompt(r), !seen.contains(id) {
+                ordered.append(r); seen.insert(id)
+            }
+        }
+        for r in all where shouldRunOnPrompt(r) && !seen.contains(r.id) {
+            ordered.append(r); seen.insert(r.id)
+        }
+        return ordered
+    }
+
+    /// 在 outgoing prompt 阶段应用 promptOnly 规则（不限角色 —— 助手历史消息与用户
+    /// 消息都可能需要被这些规则预处理）。
+    static func applyPromptOnly(
+        text: String,
+        presetDisplayRegexIds: [UUID],
+        all: [DisplayRegex]
+    ) -> String {
+        let ordered = orderedPromptOnlyRegexes(
+            presetDisplayRegexIds: presetDisplayRegexIds,
+            all: all
+        )
+        guard !ordered.isEmpty else { return text }
+        var result = text
+        for regex in ordered {
+            guard let compiled = try? NSRegularExpression(
+                pattern: regex.pattern,
+                options: [.dotMatchesLineSeparators]
+            ) else { continue }
+            let range = NSRange(result.startIndex..., in: result)
+            result = compiled.stringByReplacingMatches(
+                in: result,
+                options: [],
+                range: range,
+                withTemplate: regex.replacement
+            )
+        }
+        return result
+    }
 }

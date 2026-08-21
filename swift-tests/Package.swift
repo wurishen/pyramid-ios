@@ -44,6 +44,7 @@ let package = Package(
                 "MacroExpanderTests.swift",
                 "ContextTrimModeTests.swift",
                 "BackupServiceTests.swift",
+                "PromptOnlyRegexTests.swift",
             ]
         ),
     ]
