@@ -487,8 +487,8 @@ struct StatusPlaceholderView: View {
                         .lineLimit(1)
                 }
             )
-        case let .bar(label, value, max, kind):
-            return AnyView(barRow(label: label, value: value, max: max, kind: kind))
+        case let .bar(label, value, upper, kind):
+            return AnyView(barRow(label: label, value: value, upper: upper, kind: kind))
         case let .tag(label, value):
             return AnyView(
                 HStack(spacing: 4 * scale) {
@@ -556,15 +556,15 @@ struct StatusPlaceholderView: View {
     // MARK: - 进度条
 
     @ViewBuilder
-    private func barRow(label: String, value: Double, max: Double?, kind: BarKind) -> some View {
+    private func barRow(label: String, value: Double, upper: Double?, kind: BarKind) -> some View {
         VStack(alignment: .leading, spacing: 2 * scale) {
             HStack(spacing: 6 * scale) {
                 Text(label)
                     .font(.system(size: 12 * scale, weight: .medium))
                     .foregroundStyle(.primary)
                 Spacer(minLength: 6 * scale)
-                if let max {
-                    Text("\(format(value))/\(format(max))")
+                if let upper {
+                    Text("\(format(value))/\(format(upper))")
                         .font(.system(size: 11 * scale, design: .monospaced))
                         .foregroundStyle(.secondary)
                 } else {
@@ -573,7 +573,7 @@ struct StatusPlaceholderView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            ProgressView(value: clamped(value: value, total: max), total: clampedTotal(total: max))
+            ProgressView(value: clamped(value: value, total: upper), total: clampedTotal(total: upper))
                 .progressViewStyle(.linear)
                 .tint(barTint(kind: kind))
         }
