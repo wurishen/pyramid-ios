@@ -13,7 +13,9 @@ import Foundation
 ///   仍保留作 fast-path；只在 `<status>` 块**只含**这两个字段且都为整数时走此节点。
 /// - `.statusFields([StatusField])`：通用的 `<status>` 状态面板 —— 任意 key/value 列表，
 ///   包含 HP / 好感度 / 金币 / 法力 / 饱腹 等模型可能产出的任何状态字段。
-///   至少识别出一个字段时由 `StatusFieldsView` 渲染；HP 字段沿用 HP 颜色梯度。
+///   至少识别出一个字段时由 `StatusFieldsView` 渲染。本节点只携带数据，
+///   Pyramid 不在此处注入「HP 颜色梯度」之类的固定 UI 语义 —— 那是
+///   `.status(hp:affection:)` 节点对应 `StatusView` 的责任。
 /// - `.statusPlaceholder(statData)`：P3 native transpile —— `<StatusPlaceHolderImpl/>` 节点，
 ///   数据来自 VariableStore 的当前 session 整棵 `JSONValue` 树。UI 走
 ///   `NativeDisplayModelProjector.project(statData:)` 纯函数投影；**不**走拍平后的

@@ -79,12 +79,13 @@ struct StatusView: View {
 
 // MARK: - 通用字段状态面板
 
-/// `<status>` 通用字段面板（HP / 好感度 / 金币 / 饱腹 / 法力 等任意字段）。
+/// `<status>` 通用字段面板（任意 key/value 列表）。
 ///
 /// 视觉与 `StatusView` 一致（圆角、systemGray6、标题「状态」），
-/// 字号 / padding / 圆角按 `scale` 缩放。`label` 大小写不敏感等于 `"HP"` 且
-/// `value` 可解析为整数时，沿用 `StatusView` 的颜色梯度（≥60 绿 / ≥30 橙 / 否则红）；
-/// 其余字段用 accent 色。
+/// 字号 / padding / 圆角按 `scale` 缩放。所有字段统一用 accent 色 —— 不在此视图中
+/// 应用任何 Pyramid 特有的语义规则（例如「HP 大于等于 60 才是绿色」），那是
+/// `StatusView`（绑死在 `.status(hp:affection:)` 旧枚举上的二字段视图）的责任。
+/// 通用面板保持中性：角色卡写什么 key/value，就显示什么 key/value。
 ///
 /// 只读；不点击不写入。由 MessageCard 在遇到 `.statusFields` 节点时实例化。
 struct StatusFieldsView: View {
@@ -124,17 +125,8 @@ struct StatusFieldsView: View {
             Spacer()
             Text(value)
                 .font(.title3.weight(.semibold).monospacedDigit())
-                .foregroundStyle(color(forLabel: label, value: value))
+                .foregroundStyle(.accentColor)
         }
-    }
-
-    private func color(forLabel label: String, value: String) -> Color {
-        if label.lowercased() == "hp", let v = Int(value) {
-            if v >= 60 { return .green }
-            if v >= 30 { return .orange }
-            return .red
-        }
-        return .accentColor
     }
 }
 
