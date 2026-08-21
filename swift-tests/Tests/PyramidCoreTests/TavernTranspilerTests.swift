@@ -411,7 +411,7 @@ final class TavernTranspilerTests: XCTestCase {
 
     private func extractNumbers(_ node: NativeIRNode) -> [Double] {
         var out: [Double] = []
-        walk(node) { n in
+        tavernWalk(node) { n in
             if case let .number(value, _) = n { out.append(value) }
         }
         return out
@@ -419,7 +419,7 @@ final class TavernTranspilerTests: XCTestCase {
 
     private func describe(_ node: NativeIRNode) -> String {
         var out: [String] = []
-        walk(node) { n in
+        tavernWalk(node) { n in
             switch n {
             case let .text(s): out.append(s)
             case let .number(value, label): out.append("\(label ?? "")=\(value)")
@@ -435,13 +435,15 @@ final class TavernTranspilerTests: XCTestCase {
         return out.joined(separator: " ")
     }
 
-    private func walk(_ node: NativeIRNode, _ visit: (NativeIRNode) -> Void) {
+    // 改名避免与 NativeIRTests.swift 同名 private helpers 冲突;
+    // Swift 5.9 在同 module 多文件同名 private 重载时解析失败。
+    private func tavernWalk(_ node: NativeIRNode, _ visit: (NativeIRNode) -> Void) {
         visit(node)
         if case let .container(_, children, _) = node {
-            children.forEach { walk($0, visit) }
+            children.forEach { tavernWalk($0, visit) }
         }
         if case let .list(items) = node {
-            items.forEach { walk($0, visit) }
+            items.forEach { tavernWalk($0, visit) }
         }
     }
 }
