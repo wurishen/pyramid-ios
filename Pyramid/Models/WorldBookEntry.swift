@@ -60,19 +60,21 @@ struct WorldBookEntry: Codable, Identifiable, Equatable {
         content: String = "",
         keywords: [String] = [],
         secondaryKeywords: [String] = [],
-        scanDepth: Int? = nil,
         probability: Int = 100,
         insertionPosition: WorldBookInsertionPosition = .afterSystem,
         isEnabled: Bool = true,
         isConstant: Bool = false,
         priority: Int = 0,
         matchMode: WorldBookMatchMode = .contains,
+        // V3 字段按逻辑对分组（weight/decay、caseSensitive/scanDepth、groupWeight/useGroupScoring），
+        // 方便调用方一眼看出「该字段属于哪个语义维度」。其余 V3 字段沿用导入顺序。
         externalId: Int? = nil,
         groupKey: String? = nil,
-        groupWeight: Double? = nil,
         weight: Double? = nil,
         decay: Double? = nil,
         caseSensitive: Bool? = nil,
+        scanDepth: Int? = nil,
+        groupWeight: Double? = nil,
         useGroupScoring: Bool? = nil,
         automationId: String? = nil,
         roleRaw: Int? = nil,
@@ -93,7 +95,6 @@ struct WorldBookEntry: Codable, Identifiable, Equatable {
         self.content = content
         self.keywords = keywords
         self.secondaryKeywords = secondaryKeywords
-        self.scanDepth = scanDepth
         self.probability = probability
         self.insertionPosition = insertionPosition
         self.isEnabled = isEnabled
@@ -102,10 +103,11 @@ struct WorldBookEntry: Codable, Identifiable, Equatable {
         self.matchMode = matchMode
         self.externalId = externalId
         self.groupKey = groupKey
-        self.groupWeight = groupWeight
         self.weight = weight
         self.decay = decay
         self.caseSensitive = caseSensitive
+        self.scanDepth = scanDepth
+        self.groupWeight = groupWeight
         self.useGroupScoring = useGroupScoring
         self.automationId = automationId
         self.roleRaw = roleRaw
