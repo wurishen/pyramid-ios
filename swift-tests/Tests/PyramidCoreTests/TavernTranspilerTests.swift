@@ -430,7 +430,9 @@ final class TavernTranspilerTests: XCTestCase {
             switch n {
             case let .text(s): out.append(s)
             case let .number(value, label): out.append("\(label ?? "")=\(value)")
-            case let .progress(label, value, max): out.append("\(label)=\(value)/\(max.map(String.init) ?? "?")")
+            case let .progress(label, value, max):
+                let maxStr: String = max.map { "\($0)" } ?? "?"
+                out.append("\(label)=\(value)/\(maxStr)")
             case let .field(label, value): out.append("\(label)=\(value)")
             case let .list(items): out.append("[list \(items.count)]")
             case let .container(title, _, anim):
