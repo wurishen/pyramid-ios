@@ -202,6 +202,17 @@ struct RenderInspectorView: View {
             .padding(8)
             .background(Color(.systemGray6))
             .clipShape(RoundedRectangle(cornerRadius: 6))
+        case let .statusFields(fields):
+            VStack(alignment: .leading, spacing: 2) {
+                Text("[\(idx)] .statusFields (\(fields.count) 字段)").font(.caption.weight(.medium))
+                Text(fields.map { "\($0.label)=\($0.value)" }.joined(separator: ", "))
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
         }
     }
 
