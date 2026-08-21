@@ -435,7 +435,7 @@ final class NativeDisplayModelTests: XCTestCase {
             if case let .field(label, _) = block { return label == "/HP" }
             return false
         }
-        guard case let .field?(label, value) = hpField else {
+        guard let hpField, case let .field(label, value) = hpField else {
             return XCTFail("HP 路径应以 .field 形式存在")
         }
         XCTAssertEqual(label, "/HP")

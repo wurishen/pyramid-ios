@@ -286,7 +286,7 @@ final class StatDataSeedProjectionTests: XCTestCase {
         case let .field(label, value): out.append("\(label)=\(value)")
         case let .number(value, label):
             if let label { out.append("\(label)=\(value)") } else { out.append(String(value)) }
-        case let .bar(label, value, _, _): out.append("\(label)=\(value)")
+        case let .bar(label, value, _): out.append("\(label)=\(value)")
         case let .tag(label, value):
             if let v = value { out.append("\(label)=\(v)") } else { out.append(label) }
         case let .section(label, content):

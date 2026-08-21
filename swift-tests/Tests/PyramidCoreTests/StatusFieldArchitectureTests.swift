@@ -182,7 +182,7 @@ final class StatusFieldArchitectureTests: XCTestCase {
             case let .number(value, label):
                 out.append(label ?? "")
                 out.append(formatNumber(value))
-            case let .bar(label, value, max, _):
+            case let .bar(label, value, max):
                 out.append(label)
                 out.append("\(formatNumber(value))/\(max.map(formatNumber) ?? "?")")
             case let .tag(label, value): out.append("\(label):\(value ?? "")")
