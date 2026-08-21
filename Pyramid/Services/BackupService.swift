@@ -58,6 +58,21 @@ enum BackupError: LocalizedError {
 }
 
 enum BackupService {
+    static func parseBackup(from url: URL) throws -> PyramidBackup {
+        let data = try ImportSupport.readImportedData(from: url)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let backup: PyramidBackup
+        do {
+            backup = try decoder.decode(PyramidBackup.self, from: data)
+        } catch {
+            throw BackupError.invalidData
+        }
+        guard backup.version == 1 else { throw BackupError.versionMismatch(backup.version) }
+        return backup
+    }
+
+    #if canImport(SwiftUI)
     static func makeBackup(
         store: ChatStore,
         characters: CharacterStore,
@@ -85,20 +100,6 @@ enum BackupService {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
         try data.write(to: url, options: .atomic)
         return url
-    }
-
-    static func parseBackup(from url: URL) throws -> PyramidBackup {
-        let data = try ImportSupport.readImportedData(from: url)
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let backup: PyramidBackup
-        do {
-            backup = try decoder.decode(PyramidBackup.self, from: data)
-        } catch {
-            throw BackupError.invalidData
-        }
-        guard backup.version == 1 else { throw BackupError.versionMismatch(backup.version) }
-        return backup
     }
 
     /// 合并：按 id 去重，已有则保留本机版本，新条目追加。
@@ -164,4 +165,5 @@ enum BackupService {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         return formatter.string(from: Date())
     }
+    #endif
 }

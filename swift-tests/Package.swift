@@ -40,6 +40,10 @@ let package = Package(
                 "NativeDisplayModelTests.swift",
                 "EmbeddedWorldBookParseTests.swift",
                 "StatDataSeedProjectionTests.swift",
+                "WorldBookServiceTests.swift",
+                "MacroExpanderTests.swift",
+                "ContextTrimModeTests.swift",
+                "BackupServiceTests.swift",
             ]
         ),
     ]

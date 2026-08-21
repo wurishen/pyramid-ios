@@ -17,9 +17,11 @@ enum ContextTrimMode: String, CaseIterable, Identifiable {
     }
 }
 
+#if canImport(SwiftUI)
 extension AppSettings {
     var contextTrimMode: ContextTrimMode {
         get { ContextTrimMode(rawValue: contextTrimModeRaw) ?? .byMessages }
         set { contextTrimModeRaw = newValue.rawValue }
     }
 }
+#endif
