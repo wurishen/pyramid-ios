@@ -6,28 +6,28 @@ final class WorldBookServiceTests: XCTestCase {
     // MARK: - Helpers
 
     private func makeEntry(
+        title: String = "T",
+        content: String = "body",
         keywords: [String] = [],
         secondary: [String] = [],
-        content: String = "body",
-        title: String = "T",
+        scanDepth: Int? = nil,
+        probability: Int = 100,
         enabled: Bool = true,
         constant: Bool = false,
-        probability: Int = 100,
         priority: Int = 100,
-        matchMode: WorldBookMatchMode = .contains,
-        scanDepth: Int? = nil
+        matchMode: WorldBookMatchMode = .contains
     ) -> WorldBookEntry {
         WorldBookEntry(
+            title: title,
+            content: content,
             keywords: keywords,
             secondaryKeywords: secondary,
-            content: content,
-            title: title,
+            scanDepth: scanDepth,
+            probability: probability,
             isEnabled: enabled,
             isConstant: constant,
-            probability: probability,
             priority: priority,
-            matchMode: matchMode,
-            scanDepth: scanDepth
+            matchMode: matchMode
         )
     }
 
@@ -97,15 +97,15 @@ final class WorldBookServiceTests: XCTestCase {
     }
 
     func test_maxCharactersCapSkipsExpensive() {
-        let cheap = makeEntry(title: "S", keywords: ["hit"], content: String(repeating: "x", count: 10))
-        let huge = makeEntry(title: "H", keywords: ["hit"], content: String(repeating: "y", count: WorldBookService.maxCharacters))
+        let cheap = makeEntry(title: "S", content: String(repeating: "x", count: 10), keywords: ["hit"])
+        let huge = makeEntry(title: "H", content: String(repeating: "y", count: WorldBookService.maxCharacters), keywords: ["hit"])
         let result = WorldBookService.selectedEntries(for: "hit", history: [], entries: [huge, cheap])
         XCTAssertEqual(result.count, 1)
         XCTAssertEqual(result.first?.title, "S")
     }
 
     func test_probabilityZeroNeverInjects() {
-        let e = makeEntry(keywords: ["x"], constant: false, probability: 0)
+        let e = makeEntry(keywords: ["x"], probability: 0, constant: false)
         let result = WorldBookService.selectedEntries(for: "x", history: [], entries: [e])
         XCTAssertTrue(result.isEmpty)
     }
@@ -198,7 +198,7 @@ final class WorldBookServiceTests: XCTestCase {
 
     func test_caseSensitiveHistoryLinesAlsoCaseSensitive() {
         // caseSensitive 应同时影响 history 上下文
-        let e = WorldBookEntry(keywords: ["SILENT"], caseSensitive: true, scanDepth: 1)
+        let e = WorldBookEntry(keywords: ["SILENT"], scanDepth: 1, caseSensitive: true)
         let h = ChatMessage(role: .user, content: "silent hill")
         let h2 = ChatMessage(role: .user, content: "SILENT hill")
         XCTAssertEqual(WorldBookService.selectedEntries(for: "now", history: [h], entries: [e]).count, 0)
@@ -383,9 +383,9 @@ final class WorldBookServiceTests: XCTestCase {
     func test_groupScoringRespectsGroupWeightTiebreaker() {
         // priority 相同的组内成员按 groupWeight 高者优先
         let heavier = WorldBookEntry(title: "H", keywords: ["x"], priority: 100,
-                                      groupKey: "g", useGroupScoring: true, groupWeight: 200)
+                                      groupKey: "g", groupWeight: 200, useGroupScoring: true)
         let lighter = WorldBookEntry(title: "L", keywords: ["x"], priority: 100,
-                                      groupKey: "g", useGroupScoring: true, groupWeight: 50)
+                                      groupKey: "g", groupWeight: 50, useGroupScoring: true)
         let result = WorldBookService.selectedEntries(for: "x", history: [], entries: [lighter, heavier])
         XCTAssertEqual(result.map(\.title), ["H"])
     }
@@ -414,9 +414,9 @@ final class WorldBookServiceTests: XCTestCase {
         // 全组合：caseSensitive=true 时 triggers/excludes 也大小写敏感
         let e = WorldBookEntry(
             keywords: ["Dragon"],
+            caseSensitive: true,
             triggers: ["FIRE"],
-            excludes: ["STOP"],
-            caseSensitive: true
+            excludes: ["STOP"]
         )
         XCTAssertEqual(WorldBookService.selectedEntries(for: "Dragon Fire", history: [], entries: [e]).count, 1)
         XCTAssertEqual(WorldBookService.selectedEntries(for: "Dragon fire", history: [], entries: [e]).count, 0,
@@ -429,8 +429,8 @@ final class WorldBookServiceTests: XCTestCase {
 
     func test_effectiveSortKeyDecayPlusWeight() {
         // decay 与 weight 同时作用：weight 提前，decay 推后，但 priority 仍是主键
-        let normal = WorldBookEntry(title: "N", keywords: ["x"], priority: 100, decay: 1, weight: 50)
-        let decayed = WorldBookEntry(title: "D", keywords: ["x"], priority: 100, decay: 0, weight: 1000)
+        let normal = WorldBookEntry(title: "N", keywords: ["x"], priority: 100, weight: 50, decay: 1)
+        let decayed = WorldBookEntry(title: "D", keywords: ["x"], priority: 100, weight: 1000, decay: 0)
         // N: 100 + 0 + (-0.05) = 99.95
         // D: 100 + 1000 + (-1.0) = 1099 → D 排后（priority 推后 +1000 远超 weight -1）
         let result = WorldBookService.selectedEntries(for: "x", history: [], entries: [normal, decayed])
