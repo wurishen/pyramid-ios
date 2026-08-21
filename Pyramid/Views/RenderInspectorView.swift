@@ -213,6 +213,20 @@ struct RenderInspectorView: View {
             .padding(8)
             .background(Color(.systemGray6))
             .clipShape(RoundedRectangle(cornerRadius: 6))
+        case let .deferredResidual(residual):
+            // 调试视图：deferred 层残留块（原文保留，仅截断展示）。
+            VStack(alignment: .leading, spacing: 2) {
+                Text("[\(idx)] .deferredResidual\(residual.ruleName.map { " · \($0)" } ?? "")")
+                    .font(.caption.weight(.medium))
+                Text(residual.replacement.isEmpty ? "(空)" : residual.replacement)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(4)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
         }
     }
 

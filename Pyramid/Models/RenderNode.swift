@@ -37,6 +37,10 @@ enum RenderNode: Equatable, Sendable {
     case variableUpdate(summary: VariableUpdateSummary)
     /// 通用 `<status>` 面板：模型原始输出里任意 key/value 字段。
     case statusFields([StatusField])
+    /// P6 deferred 显示层产物：角色卡 Regex Script 替换结果中无法安全原生转换的部分
+    /// （HTML / CSS / 远程脚本标记等）。**原文完整保留** —— 绝不静默丢弃；UI 以折叠块
+    /// 展示。内容不进入文本流、不参与后续 regex / Markdown / transpile（防重复处理）。
+    case deferredResidual(DeferredResidual)
 
     /// `.variableUpdate` 的摘要内容。
     struct VariableUpdateSummary: Equatable, Sendable {
@@ -62,11 +66,18 @@ struct RenderTree: Equatable, Sendable {
     }
 
     /// 把所有 `.text` 节点的字符串拼回一段纯文本，便于折叠判断 / 调试。
-    /// `.status` 等结构化节点不参与拼接。
+    /// `.deferredResidual` 的原文参与拼接（超长残留同样触发正文折叠）；
+    /// 其余结构化节点不参与。
     var flattenedText: String {
         nodes.compactMap { node -> String? in
-            if case let .text(s) = node { return s }
-            return nil
+            switch node {
+            case let .text(s):
+                return s
+            case let .deferredResidual(r):
+                return r.replacement
+            default:
+                return nil
+            }
         }.joined()
     }
 }

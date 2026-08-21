@@ -5,11 +5,12 @@ import Foundation
 /// 关键不变量：
 /// - **不修改 raw**：`render` 是纯函数，每次调用基于 raw 重新计算。
 /// - **可重复调用**：相同 (raw, context) → 相同 Result（`Result: Equatable`）。
-/// - **可独立使用**：`Result` 是值类型，传给 SwiftUI 视图后视图按值���等自动 diff，
+/// - **可独立使用**：`Result` 是值类型，传给 SwiftUI 视图后视图按值相等自动 diff，
 ///   context 改变 → 新 Result → SwiftUI 自动重绘。raw 始终是消息源文本。
 ///
-/// 流水线：raw → 显示用正则（仅助手） → 隐藏标签剥离 → 特殊节点解析（RenderNodeParser）
-/// → `Result.tree`。
+/// 流水线：raw → 显示用正则 Tier A（安全规则，仅助手）→ deferred 正则 Tier B
+/// （受控执行 + 产物分类：纯文本 / 可识别 Tavern 表达 / 残留保留）→ 隐藏标签剥离
+/// （逐文本段）→ RenderNodeParser（逐文本段）→ `Result.tree`。
 enum RenderEngine {
     struct Context {
         let isAssistant: Bool
@@ -39,22 +40,52 @@ enum RenderEngine {
     /// 纯函数：不持有状态，不修改 raw，可重复调用。
     /// 不持有缓存；调用方（视图层）按需复用上一次的 Result。
     static func render(raw: String, context: Context) -> Result {
-        let afterRegex = MessageRendererCore.apply(
-            text: raw,
-            isAssistant: context.isAssistant,
-            presetDisplayRegexIds: context.presetDisplayRegexIds,
-            all: context.allDisplayRegexes
-        )
-        let afterHideTags = stripHideTags(
-            afterRegex,
-            enabled: context.hideTagStripEnabled,
-            tags: context.hideTags
-        )
-        let tree = RenderNodeParser.parse(
-            afterHideTags,
-            variableStore: context.variableStore,
-            sessionId: context.sessionId
-        )
+        let tree: RenderTree
+        if context.isAssistant {
+            // Tier A：安全显示正则（过滤行为与 P3 一致，不变）。
+            let afterRegex = MessageRendererCore.apply(
+                text: raw,
+                isAssistant: true,
+                presetDisplayRegexIds: context.presetDisplayRegexIds,
+                all: context.allDisplayRegexes
+            )
+            // Tier B：deferred 正则受控执行 —— 此前被跳过的规则现在跑起来，
+            // 替换产物分流为 文本流 / 可识别表达 / 残留冻结块。
+            let segments = MessageRendererCore.applyDeferred(
+                text: afterRegex,
+                presetDisplayRegexIds: context.presetDisplayRegexIds,
+                all: context.allDisplayRegexes
+            )
+            let nodes = segments.flatMap { seg -> [RenderNode] in
+                switch seg {
+                case let .residual(r):
+                    return [.deferredResidual(r)]
+                case let .text(t):
+                    let cleaned = stripHideTags(
+                        t,
+                        enabled: context.hideTagStripEnabled,
+                        tags: context.hideTags
+                    )
+                    return RenderNodeParser.parse(
+                        cleaned,
+                        variableStore: context.variableStore,
+                        sessionId: context.sessionId
+                    ).nodes
+                }
+            }
+            tree = RenderTree(nodes: nodes.isEmpty ? [.text(raw)] : nodes)
+        } else {
+            let afterHideTags = stripHideTags(
+                raw,
+                enabled: context.hideTagStripEnabled,
+                tags: context.hideTags
+            )
+            tree = RenderNodeParser.parse(
+                afterHideTags,
+                variableStore: context.variableStore,
+                sessionId: context.sessionId
+            )
+        }
         return Result(
             tree: tree,
             markdownEnabled: context.markdownEnabled

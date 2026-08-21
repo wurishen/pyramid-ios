@@ -212,6 +212,8 @@ struct MessageCard: View {
             // 显示层只消费 `NativeDisplayModel`；映射规则全部在 Projector / 文档里。
             let model = NativeDisplayModelProjector.project(statData: statData)
             StatusPlaceholderView(model: model, scale: scale)
+        case let .deferredResidual(residual):
+            DeferredResidualView(residual: residual, scale: scale)
         case let .variableUpdate(summary):
             // P3 native transpile：`<UpdateVariable>…</UpdateVariable>` 块 → 可折叠摘要。
             VariableUpdateView(summary: summary, scale: scale)
@@ -398,6 +400,50 @@ struct MessageCard: View {
 }
 
 // MARK: - P3 native transpile 节点视图
+
+/// P6 deferred 显示层：角色卡 Regex 替换结果里无法安全原生转换的部分（HTML / CSS /
+/// 远程脚本标记等）。**原文完整保留**，默认折叠展示；内容不参与 Markdown 渲染，
+/// 也不会再被任何 regex / parser 处理（同一内容只处理一次）。
+struct DeferredResidualView: View {
+    let residual: MessageRendererCore.DeferredResidual
+    var scale: CGFloat = 1.0
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4 * scale) {
+            Button {
+                withAnimation { isExpanded.toggle() }
+            } label: {
+                HStack(spacing: 4 * scale) {
+                    Image(systemName: "shippingbox")
+                        .font(.system(size: 12 * scale))
+                    Text("无法原生转换的显示脚本（原文已保留）")
+                        .font(.system(size: 12 * scale))
+                    Spacer(minLength: 0)
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 10 * scale))
+                }
+                .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            if let name = residual.ruleName, !name.isEmpty {
+                Text(name)
+                    .font(.system(size: 10 * scale))
+                    .foregroundStyle(.tertiary)
+            }
+            if isExpanded {
+                Text(residual.replacement)
+                    .font(.system(size: 12 * scale, design: .monospaced))
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8 * scale)
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 8 * scale))
+            }
+        }
+        .padding(.vertical, 2 * scale)
+    }
+}
 
 /// `<StatusPlaceHolderImpl/>` → 状态占位面板：把整棵 `JSONValue` 变量树经
 /// `NativeDisplayModelProjector.project(statData:)` 投影成 `NativeDisplayModel` 后

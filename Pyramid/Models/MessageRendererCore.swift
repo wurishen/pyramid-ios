@@ -186,4 +186,217 @@ enum MessageRendererCore {
         }
         return result
     }
+
+    // MARK: - Deferred 显示层（P6）
+
+    /// 此前 `shouldRunOnDisplay` 把「pattern 触碰原生 token」或「replacement 含 HTML」的
+    /// 规则一律跳过 —— 角色卡 extension 提供的 Placeholder 皮肤因此从未执行，占位符
+    /// 永远退化成通用变量树投影。P6 改为：这类规则移入 **deferred 层受控执行**，
+    /// 每条替换产物按内容分流：
+    ///
+    /// ```
+    /// Tier A 安全规则（行为不变）
+    ///   ↓
+    /// Tier B deferred 规则逐条执行
+    ///   ↓ 检查替换产物
+    /// 纯文本 ──────────────► 拼回文本流（普通 Renderer）
+    /// 可识别 Tavern 表达 ───► 拼回文本流 → RenderNodeParser → NativeIR
+    /// 其余 HTML/CSS 标记 ───► DeferredResidual 冻结保留（原文绝不丢弃）
+    /// ```
+    ///
+    /// 残留块不进入文本流 —— 同一内容只处理一次，不会被后续规则 / parser 重复消费。
+
+    /// 无法原生转换的 deferred 替换产物。**原文完整保留**；UI 以折叠块展示。
+    struct DeferredResidual: Equatable, Sendable {
+        /// 规则名（可能为空）。
+        var ruleName: String?
+        /// 原始 pattern（溯源用）。
+        var sourcePattern: String
+        /// 替换串中无法转换部分的原文。
+        var replacement: String
+    }
+
+    /// deferred 层输出的一段。`text` 继续走隐藏标签剥离 + RenderNodeParser；
+    /// `residual` 是冻结证据，原样直达 UI。
+    enum PreParseSegment: Equatable, Sendable {
+        case text(String)
+        case residual(DeferredResidual)
+    }
+
+    /// deferred 候选门：enabled + 非 promptOnly + （pattern 触碰原生 token 或
+    /// replacement 含 HTML token）。enabled=false 仍彻底跳过（用户显式关闭）。
+    static func isDeferredCandidate(_ r: DisplayRegex) -> Bool {
+        guard r.enabled, !r.promptOnly else { return false }
+        return touchesNativeTranspile(pattern: r.pattern) || isHtmlBeautify(replacement: r.replacement)
+    }
+
+    /// deferred 层执行序列：与 `orderedRegexes` 同一套预设优先级排序 + 去重，
+    /// 仅过滤谓词换成 `isDeferredCandidate`。
+    static func orderedDeferredRegexes(
+        presetDisplayRegexIds: [UUID],
+        all: [DisplayRegex]
+    ) -> [DisplayRegex] {
+        let byID: [UUID: DisplayRegex] = Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })
+        var ordered: [DisplayRegex] = []
+        var seen = Set<UUID>()
+        for id in presetDisplayRegexIds {
+            if let r = byID[id], isDeferredCandidate(r), !seen.contains(id) {
+                ordered.append(r); seen.insert(id)
+            }
+        }
+        for r in all where isDeferredCandidate(r) && !seen.contains(r.id) {
+            ordered.append(r); seen.insert(r.id)
+        }
+        return ordered
+    }
+
+    /// 替换产物中可被 RenderNodeParser 原生转译的表达（与 parser 支持的块一致：
+    /// 占位符 / UpdateVariable canonical + legacy 拼写 / `<status>` 块）。
+    static let nativeExpressionPatterns: [String] = [
+        "(?is)<StatusPlaceHolderImpl\\s*/?>",
+        "(?is)<UpdateVariable\\b[^>]*>[\\s\\S]*?</UpdateVariable>",
+        "(?is)<<UpdateVariable[^>]*>>[\\s\\S]*?<</UpdateVariable>>",
+        "(?is)<status\\b[^>]*>[\\s\\S]*?</status\\s*>",
+    ]
+
+    /// 片段是否含标签式标记（`<tag …>` / `</tag>`）。只在 `splitReplacement`
+    /// 剥掉原生表达之后调用 —— 此时命中即代表「剩余内容无法原生转换」。
+    /// `<3` 这类表情不算标记（标签必须以字母开头）。
+    static func containsTagMarkup(_ s: String) -> Bool {
+        guard let re = try? NSRegularExpression(pattern: "<\\s*/?\\s*[A-Za-z][^>]*>") else {
+            return false
+        }
+        let ns = s as NSString
+        return re.firstMatch(in: s, options: [], range: NSRange(location: 0, length: ns.length)) != nil
+    }
+
+    /// 替换产物切片：原生表达片段 vs 其余片段（保序）。
+    struct ReplacementPiece: Equatable, Sendable {
+        var content: String
+        var isNativeExpression: Bool
+    }
+
+    /// 把 expanded replacement 切成有序片段。原生表达片段拼回文本流交给 parser；
+    /// 其余片段再按是否含标记分流为纯文本 / 残留。
+    static func splitReplacement(_ expanded: String) -> [ReplacementPiece] {
+        let ns = expanded as NSString
+        let full = NSRange(location: 0, length: ns.length)
+        guard full.length > 0 else { return [] }
+        var ranges: [NSRange] = []
+        for p in nativeExpressionPatterns {
+            guard let re = try? NSRegularExpression(pattern: p) else { continue }
+            ranges.append(contentsOf: re.matches(in: expanded, options: [], range: full).map(\.range))
+        }
+        ranges.sort { $0.location == $1.location ? $0.length > $1.length : $0.location < $1.location }
+
+        var pieces: [ReplacementPiece] = []
+        var cursor = 0
+        func appendPlain(_ upto: Int) {
+            guard upto > cursor else { return }
+            pieces.append(ReplacementPiece(
+                content: ns.substring(with: NSRange(location: cursor, length: upto - cursor)),
+                isNativeExpression: false
+            ))
+        }
+        for r in ranges where r.location >= cursor {
+            appendPlain(r.location)
+            pieces.append(ReplacementPiece(content: ns.substring(with: r), isNativeExpression: true))
+            cursor = r.location + r.length
+        }
+        appendPlain(ns.length)
+        return pieces
+    }
+
+    /// 执行 deferred 层：对输入文本按序应用 `orderedDeferredRegexes`，返回有序分段。
+    /// 相邻文本段合并、空文本段丢弃；残留块对后续规则不可见（防重复处理）。
+    static func applyDeferred(
+        text: String,
+        presetDisplayRegexIds: [UUID],
+        all: [DisplayRegex]
+    ) -> [PreParseSegment] {
+        var segments: [PreParseSegment] = [.text(text)]
+        for rule in orderedDeferredRegexes(presetDisplayRegexIds: presetDisplayRegexIds, all: all) {
+            segments = applyDeferredRule(rule, to: segments)
+        }
+        var merged: [PreParseSegment] = []
+        for seg in segments {
+            switch seg {
+            case .text(let t):
+                if t.isEmpty { continue }
+                if case .text(let last) = merged.last {
+                    merged[merged.count - 1] = .text(last + t)
+                } else {
+                    merged.append(.text(t))
+                }
+            case .residual:
+                merged.append(seg)
+            }
+        }
+        return merged
+    }
+
+    /// 单条 deferred 规则：只改写 `.text` 段；命中处按 `emitReplacement` 分流，
+    /// 未命中段与残留段原样透传。
+    private static func applyDeferredRule(
+        _ rule: DisplayRegex,
+        to segments: [PreParseSegment]
+    ) -> [PreParseSegment] {
+        guard let compiled = try? NSRegularExpression(
+            pattern: rule.pattern,
+            options: [.dotMatchesLineSeparators]
+        ) else {
+            return segments
+        }
+        var out: [PreParseSegment] = []
+        for seg in segments {
+            guard case .text(let s) = seg else {
+                out.append(seg)
+                continue
+            }
+            let ns = s as NSString
+            let full = NSRange(location: 0, length: ns.length)
+            let matches = compiled.matches(in: s, options: [], range: full)
+            if matches.isEmpty {
+                out.append(seg)
+                continue
+            }
+            var cursor = 0
+            for m in matches {
+                if m.range.location > cursor {
+                    out.append(.text(ns.substring(with: NSRange(location: cursor, length: m.range.location - cursor))))
+                }
+                let expanded = compiled.replacementString(
+                    for: m, in: s, offset: 0, template: rule.replacement
+                )
+                emitReplacement(expanded, rule: rule, into: &out)
+                cursor = m.range.location + m.range.length
+            }
+            if cursor < ns.length {
+                out.append(.text(ns.substring(from: cursor)))
+            }
+        }
+        return out
+    }
+
+    /// 一份 expanded replacement 的分流：原生表达片段 → 文本流（parser 转译）；
+    /// 含标记片段 → 残留冻结；其余 → 普通文本。空产物（剥除类替换）不产生节点。
+    private static func emitReplacement(
+        _ expanded: String,
+        rule: DisplayRegex,
+        into out: inout [PreParseSegment]
+    ) {
+        for piece in splitReplacement(expanded) {
+            if piece.isNativeExpression {
+                out.append(.text(piece.content))
+            } else if containsTagMarkup(piece.content) {
+                out.append(.residual(DeferredResidual(
+                    ruleName: rule.name,
+                    sourcePattern: rule.pattern,
+                    replacement: piece.content
+                )))
+            } else {
+                out.append(.text(piece.content))
+            }
+        }
+    }
 }
