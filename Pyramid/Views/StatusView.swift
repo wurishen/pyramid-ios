@@ -76,3 +76,86 @@ struct StatusView: View {
         .padding()
         .background(Color(.systemBackground))
 }
+
+// MARK: - 通用字段状态面板
+
+/// `<status>` 通用字段面板（HP / 好感度 / 金币 / 饱腹 / 法力 等任意字段）。
+///
+/// 视觉与 `StatusView` 一致（圆角、systemGray6、标题「状态」），
+/// 字号 / padding / 圆角按 `scale` 缩放。`label` 大小写不敏感等于 `"HP"` 且
+/// `value` 可解析为整数时，沿用 `StatusView` 的颜色梯度（≥60 绿 / ≥30 橙 / 否则红）；
+/// 其余字段用 accent 色。
+///
+/// 只读；不点击不写入。由 MessageCard 在遇到 `.statusFields` 节点时实例化。
+struct StatusFieldsView: View {
+    let fields: [StatusField]
+    let scale: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8 * scale) {
+            HStack(alignment: .firstTextBaseline, spacing: 6 * scale) {
+                Text("状态")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+
+            ForEach(fields) { field in
+                fieldRow(label: field.label, value: field.value)
+            }
+        }
+        .padding(.horizontal, 12 * scale)
+        .padding(.vertical, 10 * scale)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.systemGray6))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10 * scale)
+                .stroke(Color(.systemGray4), lineWidth: 0.5)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 10 * scale))
+    }
+
+    @ViewBuilder
+    private func fieldRow(label: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(label)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .font(.title3.weight(.semibold).monospacedDigit())
+                .foregroundStyle(color(forLabel: label, value: value))
+        }
+    }
+
+    private func color(forLabel label: String, value: String) -> Color {
+        if label.lowercased() == "hp", let v = Int(value) {
+            if v >= 60 { return .green }
+            if v >= 30 { return .orange }
+            return .red
+        }
+        return .accentColor
+    }
+}
+
+#if DEBUG
+#Preview("StatusFields - mixed fields") {
+    StatusFieldsView(fields: [
+        StatusField(label: "HP", value: "80"),
+        StatusField(label: "好感度", value: "65"),
+        StatusField(label: "金币", value: "200"),
+        StatusField(label: "饱腹", value: "饱"),
+    ])
+    .padding()
+    .background(Color(.systemBackground))
+}
+
+#Preview("StatusFields - low HP only") {
+    StatusFieldsView(fields: [
+        StatusField(label: "HP", value: "20"),
+        StatusField(label: "好感度", value: "90"),
+    ])
+    .padding()
+    .background(Color(.systemBackground))
+}
+#endif

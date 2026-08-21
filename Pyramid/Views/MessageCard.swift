@@ -202,7 +202,6 @@ struct MessageCard: View {
         case let .statusFields(fields):
             // 通用 `<status>` 面板：HP / 好感度 / 金币 / 饱腹 等任意字段。HP 沿用颜色梯度。
             StatusFieldsView(fields: fields, scale: scale)
-                .scaleEffect(scale, anchor: .topLeading)
         case let .statusPlaceholder(statData):
             // P3 native transpile：`<StatusPlaceHolderImpl/>` → 直接走
             // `NativeDisplayModelProjector.project(statData:)` 把整棵 `JSONValue` 树
