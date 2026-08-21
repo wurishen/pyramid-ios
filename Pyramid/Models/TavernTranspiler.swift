@@ -149,17 +149,12 @@ enum TavernTranspiler {
     /// 极简 "key: value" 分割。支持 ASCII `:` 和全角 `：`。
     /// 不解析字段名，只按字符切。
     private static func splitKV(_ line: String) -> (String, String)? {
-        // Swift 把 `":"` / `"："` 字面量推断成 String —— 显式构造 Character。
-        let separators: [Character] = [Character(":"), Character("：")]
-        for sep in separators {
-            if let idx = line.firstIndex(of: sep) {
-                let label = line[..<idx].trimmingCharacters(in: .whitespaces)
-                let value = line[line.index(after: idx)...].trimmingCharacters(in: .whitespaces)
-                if !label.isEmpty, !value.isEmpty {
-                    return (String(label), String(value))
-                }
-            }
-        }
-        return nil
+        // Swift 把 `":"` / `"："` 字面量推断成 String —— 用 CharacterSet 直接定位。
+        let set = CharacterSet(charactersIn: "::：")
+        guard let range = line.rangeOfCharacter(from: set) else { return nil }
+        let label = line[..<range.lowerBound].trimmingCharacters(in: .whitespaces)
+        let value = line[line.index(after: range.lowerBound)...].trimmingCharacters(in: .whitespaces)
+        if label.isEmpty || value.isEmpty { return nil }
+        return (String(label), String(value))
     }
 }
