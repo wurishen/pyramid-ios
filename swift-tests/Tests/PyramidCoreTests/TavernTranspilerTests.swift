@@ -101,8 +101,8 @@ final class TavernTranspilerTests: XCTestCase {
     func testBareIntDoesNotBecomeProgress() {
         let ir = TavernTranspiler.transpile(.statData(.object(["HP": .int(80)])))
         guard case let .container(_, children, _) = ir else { return XCTFail() }
-        XCTAssertTrue(children[0].isNumber)
-        XCTAssertFalse(children[0].isProgress)
+        XCTAssertTrue(TavernIRShape.isNumber(children[0]))
+        XCTAssertFalse(TavernIRShape.isProgress(children[0]))
     }
 
     // MARK: - 5. list / container
@@ -385,9 +385,9 @@ final class TavernTranspilerTests: XCTestCase {
         let ir = RenderNodeTranspiler.transpile(tree)
         guard case let .list(items) = ir else { return XCTFail("应是 .list，实为 \(ir)") }
         XCTAssertEqual(items.count, 3)
-        XCTAssertTrue(items[0].isText)
-        XCTAssertTrue(items[1].isContainer)
-        XCTAssertTrue(items[2].isText)
+        XCTAssertTrue(TavernIRShape.isText(items[0]))
+        XCTAssertTrue(TavernIRShape.isContainer(items[1]))
+        XCTAssertTrue(TavernIRShape.isText(items[2]))
     }
 
     /// `TavernTranspiler` 与 `RenderNodeTranspiler` 互不依赖：
@@ -411,15 +411,22 @@ final class TavernTranspilerTests: XCTestCase {
 
     private func extractNumbers(_ node: NativeIRNode) -> [Double] {
         var out: [Double] = []
-        tavernWalk(node) { n in
+        func visit(_ n: NativeIRNode) {
             if case let .number(value, _) = n { out.append(value) }
+            if case let .container(_, children, _) = n {
+                for c in children { visit(c) }
+            }
+            if case let .list(items) = n {
+                for i in items { visit(i) }
+            }
         }
+        visit(node)
         return out
     }
 
     private func describe(_ node: NativeIRNode) -> String {
         var out: [String] = []
-        tavernWalk(node) { n in
+        func visit(_ n: NativeIRNode) {
             switch n {
             case let .text(s): out.append(s)
             case let .number(value, label): out.append("\(label ?? "")=\(value)")
@@ -431,28 +438,39 @@ final class TavernTranspilerTests: XCTestCase {
                 if anim != nil { out.append("anim") }
             case let .button(label, _): out.append("[button:\(label)]")
             }
+            if case let .container(_, children, _) = n {
+                for c in children { visit(c) }
+            }
+            if case let .list(items) = n {
+                for i in items { visit(i) }
+            }
         }
-        return out.joined(separator: " ")
-    }
-
-    // 改名避免与 NativeIRTests.swift 同名 private helpers 冲突;
-    // Swift 5.9 在同 module 多文件同名 private 重载时解析失败。
-    private func tavernWalk(_ node: NativeIRNode, _ visit: (NativeIRNode) -> Void) {
         visit(node)
-        if case let .container(_, children, _) = node {
-            children.forEach { tavernWalk($0, visit) }
-        }
-        if case let .list(items) = node {
-            items.forEach { tavernWalk($0, visit) }
-        }
+        return out.joined(separator: " ")
     }
 }
 
 // MARK: - NativeIRNode 形状 helpers（测试内私有）
+//
+// 故意只放 inline 静态函数,避免与 NativeIRTests.swift 顶部的同名
+// `private extension NativeIRNode` 冲突 —— Swift 5.9 同 module 多文件
+// private extension 解析不可靠。
 
-private extension NativeIRNode {
-    var isNumber: Bool { if case .number = self { return true }; return false }
-    var isProgress: Bool { if case .progress = self { return true }; return false }
-    var isText: Bool { if case .text = self { return true }; return false }
-    var isContainer: Bool { if case .container = self { return true }; return false }
+private enum TavernIRShape {
+    static func isNumber(_ n: NativeIRNode) -> Bool {
+        if case .number = n { return true }
+        return false
+    }
+    static func isProgress(_ n: NativeIRNode) -> Bool {
+        if case .progress = n { return true }
+        return false
+    }
+    static func isText(_ n: NativeIRNode) -> Bool {
+        if case .text = n { return true }
+        return false
+    }
+    static func isContainer(_ n: NativeIRNode) -> Bool {
+        if case .container = n { return true }
+        return false
+    }
 }
