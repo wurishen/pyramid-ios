@@ -34,7 +34,9 @@ enum AnimationIntentAnalyzer {
     /// - 返回 nil = 「不可解析」：存在未知 / 畸形声明，整段 style 走 htmlScript
     ///   residual 路径，原始表达完整保留 —— 绝不**伪造**一条动画顶替。
     static func parseInlineStyle(_ style: String, trigger: AnimationTrigger = .onAppear) -> [AnimationIR]? {
-        let declarations = splitDeclarations(style)
+        let trimmed = style.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return [] }
+        let declarations = splitDeclarations(trimmed)
         if declarations.isEmpty { return [] }
         var result: [AnimationIR] = []
         for d in declarations {

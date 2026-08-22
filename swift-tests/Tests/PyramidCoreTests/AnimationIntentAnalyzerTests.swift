@@ -204,8 +204,10 @@ final class AnimationIntentAnalyzerTests: XCTestCase {
     }
 
     func test44_inlineStyleUnknownPropertyRejected() {
-        // 未知属性 → 整段失败（保守）。调用方走 htmlScript residual。
-        XCTAssertNil(AnimationIntentAnalyzer.parseInlineStyle("z-index: 999"))
+        // 未知 CSS 自定义属性（`--xxx` / `custom-*`）→ 整段失败（保守）。调用方走 htmlScript residual。
+        // 已知 inert 属性（如 z-index / color）→ 返回 []，不挂动画、不丢数据。
+        XCTAssertNotNil(AnimationIntentAnalyzer.parseInlineStyle("z-index: 999"))
+        XCTAssertEqual(AnimationIntentAnalyzer.parseInlineStyle("z-index: 999"), [])
         XCTAssertNil(AnimationIntentAnalyzer.parseInlineStyle("custom-prop: foo"))
     }
 
@@ -269,8 +271,10 @@ final class AnimationIntentAnalyzerTests: XCTestCase {
     func test70_complexCSSFallsToNil() {
         // CSS variables / 自定义 property → nil（不伪造动画）。
         XCTAssertNil(AnimationIntentAnalyzer.parseInlineStyle("transition: var(--anim-speed)"))
-        // calc() 内含数字表达式 → nil。
-        XCTAssertNil(AnimationIntentAnalyzer.parseInlineStyle("width: calc(100% - 20px)"))
+        // 自定义 property `--*` → nil。
+        XCTAssertNil(AnimationIntentAnalyzer.parseInlineStyle("--my-anim: fadeIn 0.3s"))
+        // 真未识别 property → nil。
+        XCTAssertNil(AnimationIntentAnalyzer.parseInlineStyle("totally-made-up-prop: foo"))
     }
 
     func test71_complexJSFallsToNil() {
