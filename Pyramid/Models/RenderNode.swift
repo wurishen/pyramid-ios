@@ -49,6 +49,10 @@ enum RenderNode: Equatable, Sendable {
     /// 「点击 → NativeAction → 变量树 mutation → 重新投影 Native IR」闭环。
     /// 解析失败（缺属性 / 未知 kind）降级为 `.text(原文)`，绝不丢内容。
     case nativeAction(label: String, action: NativeAction)
+    /// P6 通用交互控件：`<NativeInput …/>`（文本输入）/ `<NativeSelect …/>`（单选）。
+    /// 与 nativeAction 同一原则 —— path 即 JSON Pointer，提交写入 VariableStore；
+    /// 零业务语义、无固定模板。解析失败降级 `.text(原文)` 保真。
+    case nativeControl(NativeControl)
 
     /// `.variableUpdate` 的摘要内容。
     struct VariableUpdateSummary: Equatable, Sendable {

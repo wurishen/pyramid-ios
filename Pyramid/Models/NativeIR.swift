@@ -51,4 +51,10 @@ indirect enum NativeIRNode: Equatable, Sendable {
     /// 按钮：label 给 SwiftUI 渲染，action 给 dispatcher 执行。
     /// 是 Native IR 中唯一允许触发 `NativeAction` 的载体。
     case button(label: String, action: NativeAction)
+    /// 通用文本输入：提交时把字符串写到 `path`（JSON Pointer）。
+    /// **零业务语义** —— 不解释字段名；renderer 决定键盘 / 样式。
+    case textInput(label: String?, path: String, placeholder: String?)
+    /// 通用单选：选中项的 value 字符串写到 `path`。
+    /// **零业务语义** —— 选项集合完全由角色卡数据提供。
+    case selection(label: String?, path: String, options: [NativeControlOption])
 }

@@ -44,3 +44,29 @@ enum NativeAction: Equatable, Sendable {
     /// 自定义 key + payload；renderer / 上层 UI 决定如何解释。本期不实现。
     case custom(key: String, payload: [String: JSONValue])
 }
+
+/// 通用选择控件的一个选项。`value` 是提交到 VariableStore 的字符串值；`label` 是显示文案（nil → 用 value）。
+struct NativeControlOption: Equatable, Sendable {
+    var value: String
+    var label: String?
+}
+
+/// 通用交互控件：文本输入（input）/ 单选（select）。
+///
+/// 与 `NativeAction` 同一设计原则 —— **零业务语义**：
+/// - `path` 即 JSON Pointer，提交时把字符串值写入 VariableStore 对应位置；
+/// - 不解释字段名、不限定选项集合、不预置任何模板；
+/// - 由 `<NativeInput …/>` / `<NativeSelect …/>` token 解析产生（见 RenderNodeParser）。
+struct NativeControl: Equatable, Sendable {
+    enum Kind: Equatable, Sendable {
+        case input
+        case select
+    }
+    var kind: Kind
+    var label: String?
+    var path: String
+    /// input 的占位提示；select 为 nil。
+    var placeholder: String?
+    /// select 的选项集合；input 为空。
+    var options: [NativeControlOption]
+}

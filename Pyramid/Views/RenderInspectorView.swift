@@ -239,6 +239,21 @@ struct RenderInspectorView: View {
             .padding(8)
             .background(Color(.systemGray6))
             .clipShape(RoundedRectangle(cornerRadius: 6))
+        case let .nativeControl(control):
+            // 调试视图：输入控件 —— kind + path + 选项数。
+            VStack(alignment: .leading, spacing: 2) {
+                Text("[\(idx)] .nativeControl (\(control.kind == .input ? "input" : "select"))")
+                    .font(.caption.weight(.medium))
+                Text(control.options.isEmpty
+                     ? control.path
+                     : "\(control.path) · \(control.options.map { $0.label ?? $0.value }.joined(separator: "|"))")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
         }
     }
 

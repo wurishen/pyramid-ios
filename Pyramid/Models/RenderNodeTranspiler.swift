@@ -85,6 +85,15 @@ enum RenderNodeTranspiler {
             // P6 交互原语：直接落到 Native IR 的 button —— SwiftUI renderer 把
             // action 交给 NativeActionDispatcher，形成「点击 → 变量 → 新 IR」闭环。
             return .button(label: label, action: action)
+
+        case let .nativeControl(control):
+            // 通用输入控件：input / select 各自落到对应 IR case；零业务语义透传。
+            switch control.kind {
+            case .input:
+                return .textInput(label: control.label, path: control.path, placeholder: control.placeholder)
+            case .select:
+                return .selection(label: control.label, path: control.path, options: control.options)
+            }
         }
     }
 

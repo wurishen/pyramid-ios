@@ -66,4 +66,9 @@ struct NativeActionDispatcher {
         }
         return current
     }
+
+    /// 读取 JSON Pointer 处的当前值（UI 预填 input / 调试展示用）。
+    func value(at path: String, in tree: JSONValue) -> JSONValue? {
+        readAt(tree: tree, path: path)
+    }
 }

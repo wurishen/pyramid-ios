@@ -216,6 +216,8 @@ struct MessageCard: View {
             DeferredResidualView(residual: residual, scale: scale)
         case let .nativeAction(label, action):
             nativeActionButton(label: label, action: action, scale: scale)
+        case let .nativeControl(control):
+            nativeControlView(control, scale: scale)
         case let .variableUpdate(summary):
             // P3 native transpile：`<UpdateVariable>…</UpdateVariable>` 块 → 可折叠摘要。
             VariableUpdateView(summary: summary, scale: scale)
@@ -261,6 +263,84 @@ struct MessageCard: View {
         .buttonStyle(.bordered)
         .tint(.accentColor)
         .padding(.vertical, 2)
+    }
+
+    /// 交互控件草稿：path → 输入框当前文本（仅 UI 会话态，不进消息数据）。
+    @State private var inputDrafts: [String: String] = [:]
+
+    /// `<NativeInput/>` / `<NativeSelect/>`：通用输入控件。
+    /// 提交 / 选中 → 字符串值写入 VariableStore 的 JSON Pointer 路径 →
+    /// @Published 刷新 → 重渲染 → 新 Native IR。**零业务语义**：
+    /// 不解释字段名，选项集合完全来自角色卡数据。store 缺失（fixture）→ 只展示不可写。
+    private func nativeControlView(_ control: NativeControl, scale: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 4 * scale) {
+            if let label = control.label {
+                Text(label)
+                    .font(.system(size: 13 * scale))
+                    .foregroundStyle(.secondary)
+            }
+            switch control.kind {
+            case .input:
+                HStack(spacing: 6 * scale) {
+                    TextField(
+                        control.placeholder ?? "",
+                        text: Binding(
+                            get: { inputDrafts[control.path] ?? currentValueText(at: control.path) },
+                            set: { inputDrafts[control.path] = $0 }
+                        )
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 15 * scale))
+                    Button("提交") {
+                        let draft = inputDrafts[control.path] ?? currentValueText(at: control.path)
+                        applyControlValue(control.path, .string(draft))
+                        inputDrafts[control.path] = nil
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.system(size: 13 * scale, weight: .medium))
+                }
+            case .select:
+                Menu {
+                    ForEach(control.options, id: \.value) { option in
+                        Button(option.label ?? option.value) {
+                            applyControlValue(control.path, .string(option.value))
+                        }
+                    }
+                } label: {
+                    Label(currentSelectionLabel(control), systemImage: "chevron.up.chevron.down")
+                        .font(.system(size: 14 * scale, weight: .medium))
+                }
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    /// 把字符串值写到指定 path（经 dispatcher 的 patch 语义，保持单一事实源）。
+    private func applyControlValue(_ path: String, _ value: JSONValue) {
+        guard let store = variableStore, let sid = sessionId else { return }
+        let dispatcher = NativeActionDispatcher()
+        guard let ops = dispatcher.patches(
+            for: .updateVariable(path: path, value: value),
+            currentTree: store.raw(forSession: sid)
+        ) else { return }
+        try? store.apply(ops, to: sid)
+    }
+
+    private func currentValueText(at path: String) -> String {
+        guard let store = variableStore, let sid = sessionId,
+              let v = NativeActionDispatcher().value(at: path, in: store.raw(forSession: sid)),
+              case let .string(s) = v else {
+            return ""
+        }
+        return s
+    }
+
+    private func currentSelectionLabel(_ control: NativeControl) -> String {
+        let current = currentValueText(at: control.path)
+        if !current.isEmpty {
+            return control.options.first(where: { $0.value == current })?.label ?? current
+        }
+        return control.label ?? "选择"
     }
 
     @ViewBuilder

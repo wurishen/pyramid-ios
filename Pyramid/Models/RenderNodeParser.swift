@@ -96,8 +96,9 @@ enum RenderNodeParser {
         // 只命中「完整合法形态」（自闭合 / 空 body 配对）。带 body 或裸开标签的畸形
         // token 不命中 —— 整段留在文本流里逐字可见，绝不会被拆散。
         let actionPattern =
-            "(?is)<NativeAction\\b[^>]*>\\s*</NativeAction\\s*>" +
-            "|<NativeAction\\b[^>]*/>"
+            "(?is)" +
+            "(<NativeAction|<NativeInput|<NativeSelect)\\b[^>]*>\\s*</(?:NativeAction|NativeInput|NativeSelect)\\s*>" +
+            "|<(?:NativeAction|NativeInput|NativeSelect)\\b[^>]*/>"
 
         guard let placeholderRegex = try? NSRegularExpression(pattern: placeholderPattern),
               let updateRegex = try? NSRegularExpression(pattern: updatePattern),
@@ -147,7 +148,11 @@ enum RenderNodeParser {
             case .update:
                 nodes.append(parseUpdateVariableBlock(rawBlock, applyPatches: applyPatches))
             case .action:
-                nodes.append(parseNativeActionBlock(rawBlock))
+                if rawBlock.lowercased().hasPrefix("<nativeaction") {
+                    nodes.append(parseNativeActionBlock(rawBlock))
+                } else {
+                    nodes.append(parseNativeControlBlock(rawBlock))
+                }
             }
             cursor = hit.range.location + hit.range.length
         }
@@ -316,24 +321,8 @@ enum RenderNodeParser {
     ///   （整段降级 `.text(原文)` —— 不静默吞掉 body）
     /// - 任何属性缺失 / 未知 kind / value 非标量 → `.text(raw)`，绝不丢内容、不崩溃
     static func parseNativeActionBlock(_ raw: String) -> RenderNode {
-        // 整体形状校验：自闭合，或空 body 的配对写法。group 1 = 属性串。
-        let shapePattern =
-            "(?is)^<NativeAction\\b([^>]*?)/?\\s*>\\s*(?:</NativeAction\\s*>)?$"
-        guard let shapeRegex = try? NSRegularExpression(pattern: shapePattern),
-              let attrRegex = try? NSRegularExpression(pattern: "([A-Za-z_][\\w-]*)\\s*=\\s*\"([^\"]*)\"") else {
+        guard let attrs = tokenAttributes(raw, tag: "NativeAction") else {
             return .text(raw)
-        }
-        let ns = raw as NSString
-        let full = NSRange(location: 0, length: ns.length)
-        guard let m = shapeRegex.firstMatch(in: raw, options: [], range: full),
-              m.range(at: 1).location != NSNotFound else {
-            return .text(raw)
-        }
-        let attrsString = ns.substring(with: m.range(at: 1))
-        var attrs: [String: String] = [:]
-        for am in attrRegex.matches(in: attrsString, options: [], range: NSRange(location: 0, length: (attrsString as NSString).length)) {
-            let key = (attrsString as NSString).substring(with: am.range(at: 1)).lowercased()
-            attrs[key] = (attrsString as NSString).substring(with: am.range(at: 2))
         }
         guard let label = attrs["label"], !label.isEmpty,
               let kind = attrs["kind"], !kind.isEmpty,
@@ -352,6 +341,77 @@ enum RenderNodeParser {
         default:
             return .text(raw)
         }
+    }
+
+    /// `<NativeInput label? placeholder? path="/a"/>` / `<NativeSelect label? path="/a" values="v1,v2" labels?="甲,乙"/>`。
+    ///
+    /// 通用输入控件（零业务语义）：
+    /// - `path` 必填且必须以 `/` 开头（JSON Pointer）
+    /// - input：提交时把字符串写入 path；placeholder 可选
+    /// - select：`values` 必填（逗号分隔，逐项 trim 后不得为空）；`labels` 可选
+    ///   （与 values 按序 zip，缺省项显示 value 本身）
+    /// - 只认自闭合 / 空 body 配对；畸形 → `.text(原文)` 保真
+    static func parseNativeControlBlock(_ raw: String) -> RenderNode {
+        let lowered = raw.lowercased()
+        let tag = lowered.hasPrefix("<nativeinput") ? "NativeInput"
+            : lowered.hasPrefix("<nativeselect") ? "NativeSelect" : nil
+        guard let tag, let attrs = tokenAttributes(raw, tag: tag),
+              let path = attrs["path"], path.hasPrefix("/") else {
+            return .text(raw)
+        }
+        let label = attrs["label"].flatMap { $0.isEmpty ? nil : $0 }
+        switch tag {
+        case "NativeInput":
+            let placeholder = attrs["placeholder"].flatMap { $0.isEmpty ? nil : $0 }
+            return .nativeControl(NativeControl(
+                kind: .input, label: label, path: path, placeholder: placeholder, options: []
+            ))
+        case "NativeSelect":
+            guard let rawValues = attrs["values"], !rawValues.isEmpty else {
+                return .text(raw)
+            }
+            let values = rawValues.split(separator: ",", omittingEmptySubsequences: false)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+            guard !values.isEmpty, !values.contains("") else {
+                return .text(raw)
+            }
+            let labels = attrs["labels"]?
+                .split(separator: ",", omittingEmptySubsequences: false)
+                .map { $0.trimmingCharacters(in: .whitespaces) } ?? []
+            let options = values.enumerated().map { (index, value) in
+                NativeControlOption(value: value, label: index < labels.count && !labels[index].isEmpty ? labels[index] : nil)
+            }
+            return .nativeControl(NativeControl(
+                kind: .select, label: label, path: path, placeholder: nil, options: options
+            ))
+        default:
+            return .text(raw)
+        }
+    }
+
+    /// 交互 token 的整体形状校验 + 属性提取。
+    /// 形状：自闭合，或「空 body 配对」（`\s*</Tag>` 结尾）；group 1 = 属性串。
+    /// 返回 nil 表示形状不合法（调用方降级 `.text(原文)`）。
+    private static func tokenAttributes(_ raw: String, tag: String) -> [String: String]? {
+        let shapePattern = "(?is)^<\(tag)\\b([^>]*?)/?\\s*>\\s*(?:</\(tag)\\s*>)?$"
+        guard let shapeRegex = try? NSRegularExpression(pattern: shapePattern),
+              let attrRegex = try? NSRegularExpression(pattern: "([A-Za-z_][\\w-]*)\\s*=\\s*\"([^\"]*)\"") else {
+            return nil
+        }
+        let ns = raw as NSString
+        let full = NSRange(location: 0, length: ns.length)
+        guard let m = shapeRegex.firstMatch(in: raw, options: [], range: full),
+              m.range(at: 1).location != NSNotFound else {
+            return nil
+        }
+        let attrsString = ns.substring(with: m.range(at: 1))
+        var attrs: [String: String] = [:]
+        let attrNS = attrsString as NSString
+        for am in attrRegex.matches(in: attrsString, options: [], range: NSRange(location: 0, length: attrNS.length)) {
+            let key = attrNS.substring(with: am.range(at: 1)).lowercased()
+            attrs[key] = attrNS.substring(with: am.range(at: 2))
+        }
+        return attrs
     }
 
     /// JSON 标量解析：整数 → 小数 → bool → 字符串。数组 / 对象不是合法动作值。

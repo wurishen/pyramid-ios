@@ -410,6 +410,9 @@ final class TavernChainIntegrationTests: XCTestCase {
             "<NativeAction label=\"x\" kind=\"updateVariable\" path=\"noprefix\" value=\"1\"/>", // path 非 pointer
             "<NativeAction label=\"x\" kind=\"updateVariable\" path=\"/a\"/>",              // 缺 value
             "<NativeAction label=\"x\" kind=\"toggle\" path=\"/a\">非空body</NativeAction>", // body 不识别 → 整段保真
+            "<NativeInput label=\"缺path\"/>",                                              // input 缺 path
+            "<NativeSelect label=\"s\" path=\"/a\" values=\" \"/>",                         // values 空白
+            "<NativeSelect label=\"s\" path=\"/a\" values=\"v,,v2\"/>",                     // values 含空项
         ]
         for token in malformed {
             let parsed = RenderNodeParser.parse(token, statData: { .object([:]) }, applyPatches: { _ in 0 })
@@ -419,5 +422,119 @@ final class TavernChainIntegrationTests: XCTestCase {
             }
             XCTAssertEqual(t, token, "畸形 token 必须逐字保留：\(token)")
         }
+    }
+
+    // MARK: - 收尾验证：三种交互 + 动态嵌套数据 + 去重
+
+    /// 第六条：button / selection / input 三种通用交互全部可用。
+    /// 一条消息里同时出现三种控件，各自经 dispatcher → VariableStore 写入后，
+    /// 重渲染的 IR 反映全部变化 —— 无任何字段名 / 业务分支参与。
+    func testAllThreeInteractionKindsRoundTripThroughStore() throws {
+        let store = VariableStore()
+        let sid = UUID()
+        defer { store.removeSession(sid) }
+        store.seedIfEmpty(sessionId: sid, initData: ["开关": .bool(false)])
+
+        let imported = SillyTavernRegexScript(
+            name: "控制台",
+            regex: "<StatusPlaceHolderImpl\\s*/?>",
+            replacement:
+                "<NativeAction label=\"翻转\" kind=\"toggle\" path=\"/开关\"/>" +
+                "<NativeSelect label=\"选一个\" path=\"/选择\" values=\"red,blue\" labels=\"红,蓝\"/>" +
+                "<NativeInput label=\"写点字\" path=\"/草稿\" placeholder=\"在此输入\"/>"
+        )
+        guard let rule = SillyTavernScriptImporter.convert(imported) else {
+            return XCTFail("导入失败")
+        }
+        let raw = "<StatusPlaceHolderImpl/>"
+        let result = renderAssistant(raw, rules: [rule], store: store, sessionId: sid)
+
+        // 三个交互节点都产出（button / control-select / control-input）。
+        XCTAssertEqual(actions(in: result).count, 1)
+        var selectControl: NativeControl?
+        var inputControl: NativeControl?
+        for node in result.tree.nodes {
+            if case let .nativeControl(c) = node {
+                switch c.kind {
+                case .select: selectControl = c
+                case .input: inputControl = c
+                }
+            }
+        }
+        let sel = try XCTUnwrap(selectControl, "应有 select 控件")
+        let inp = try XCTUnwrap(inputControl, "应有 input 控件")
+        XCTAssertEqual(sel.options.map(\.value), ["red", "blue"])
+        XCTAssertEqual(sel.options.map(\.label), ["红", "蓝"])
+        XCTAssertEqual(inp.placeholder, "在此输入")
+
+        // 模拟三种用户操作 → VariableStore → 重渲染。
+        let dispatcher = NativeActionDispatcher()
+        // (1) button toggle
+        let ops1 = try XCTUnwrap(dispatcher.patches(for: actions(in: result)[0].action,
+                                                    currentTree: store.raw(forSession: sid)))
+        XCTAssertEqual(try store.apply(ops1, to: sid), 1)
+        // (2) select「蓝」
+        let ops2 = try XCTUnwrap(dispatcher.patches(
+            for: .updateVariable(path: sel.path, value: .string(sel.options[1].value)),
+            currentTree: store.raw(forSession: sid)))
+        XCTAssertEqual(try store.apply(ops2, to: sid), 1)
+        // (3) input 提交
+        let ops3 = try XCTUnwrap(dispatcher.patches(
+            for: .updateVariable(path: inp.path, value: .string("你好")),
+            currentTree: store.raw(forSession: sid)))
+        XCTAssertEqual(try store.apply(ops3, to: sid), 1)
+
+        // IR 重新生成后包含全部三处变化的投影。
+        let ir = TavernTranspiler.transpile(.statusPlaceholder(store.raw(forSession: sid)))
+        func flatten(_ node: NativeIRNode) -> [NativeIRNode] {
+            switch node {
+            case let .container(_, children, _):
+                return [node] + children.flatMap(flatten)
+            case let .list(items):
+                return [node] + items.flatMap(flatten)
+            default:
+                return [node]
+            }
+        }
+        let all = flatten(ir)
+        XCTAssertTrue(all.contains(where: { if case .textInput(_, let p, _) = $0 { return p == "/草稿" }; return false }))
+        XCTAssertTrue(all.contains(where: { if case .selection(_, let p, _) = $0 { return p == "/选择" }; return false }))
+    }
+
+    /// 第三条（动态数据）：深层嵌套结构经 patch 变化后，IR 重新投影出更新值；
+    /// 结构是通用 JSON Pointer 树，不产生任何按字段名命名的组件。
+    func testDeepNestedDynamicDataRegeneratesIR() throws {
+        let store = VariableStore()
+        let sid = UUID()
+        defer { store.removeSession(sid) }
+        store.seedIfEmpty(sessionId: sid, initData: [
+            "区域": .object(["房间": .object(["计数": .int(1)]),
+                            "标签": .array([.string("甲"), .string("乙")])])
+        ])
+        let rule = makeRule(pattern: "@T@", replacement: "<StatusPlaceHolderImpl/>")
+        _ = renderAssistant("@T@", rules: [rule], store: store, sessionId: sid)
+
+        let deepPatch = [JSONPatchOperation(op: .replace, path: "/区域/房间/计数", value: .int(42))]
+        XCTAssertEqual(try store.apply(deepPatch, to: sid), 1)
+
+        let ir = TavernTranspiler.transpile(.statusPlaceholder(store.raw(forSession: sid)))
+        XCTAssertTrue(irNumbers(ir).contains(where: { $0.value == 42 && $0.label == "计数" }),
+                      "深层嵌套值更新后应出现在新 IR 中")
+    }
+
+    /// 第五条补充：同一条规则同时出现在预设列表与全量列表（同一 id）→ 只执行一次。
+    func testDuplicateRuleIDRunsExactlyOnce() {
+        let rule = makeRule(pattern: "<StatusPlaceHolderImpl\\s*/?>", replacement: "[皮肤]")
+        let ordered = MessageRendererCore.orderedDeferredRegexes(
+            presetDisplayRegexIds: [rule.id],
+            all: [rule, rule]
+        )
+        XCTAssertEqual(ordered.count, 1, "同一 id 不得重复执行")
+        let segments = MessageRendererCore.applyDeferred(
+            text: "<StatusPlaceHolderImpl/>",
+            presetDisplayRegexIds: [rule.id],
+            all: [rule, rule]
+        )
+        XCTAssertEqual(segments.compactMap { if case let .text(t) = $0 { return t } }.joined(), "[皮肤]")
     }
 }
