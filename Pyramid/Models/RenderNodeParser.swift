@@ -241,6 +241,9 @@ enum RenderNodeParser {
         }
 
         func branchNodes(_ bodyText: String) -> [RenderNode] {
+            // 空 / 纯空白分支体 → 零节点（隐藏语义由「空数组」承载；
+            // .condition 节点本身保证树非空，无需 .text("") 占位）。
+            guard !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
             let tree = parse(bodyText, statData: { .object([:]) }, applyPatches: applyPatches, depth: depth + 1)
             return tree.nodes
         }

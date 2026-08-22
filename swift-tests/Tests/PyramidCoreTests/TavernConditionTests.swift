@@ -50,12 +50,12 @@ final class TavernConditionTests: XCTestCase {
         // 任意嵌套：all(any(not(p), q), r)。
         let nested = NativeCondition.all([
             NativeCondition.any([
-                NativeCondition.not(when("/a", .lt, .int(10))),
+                NativeCondition.not(when("/a", .gt, .int(100))),
                 when("/b", .nonEmpty),
             ]),
             when("/c", .eq, .bool(false)),
         ])
-        XCTAssertTrue(nested.evaluate(in: tree), "not(a<10)=false，但 b=非空 → any 真；c=false → 全真")
+        XCTAssertTrue(nested.evaluate(in: tree), "not(a>100)=真 → any 真；c=false → 全真")
     }
 
     // MARK: 2-3. 结构化 token 解析 + 组合嵌套
@@ -97,14 +97,14 @@ final class TavernConditionTests: XCTestCase {
         """
         let openForce: JSONValue = .object(["开门": .bool(true), "有钥匙": .bool(false), "力量": .int(20)])
         let openWeakKeyless: JSONValue = .object(["开门": .bool(true), "有钥匙": .bool(false), "力量": .int(3)])
-        let closed: JSONValue = .object(["开门": .bool(false), "有钥匙": .bool(true), "力量": .int(99)])
+        let openStrongNoForceField: JSONValue = .object(["开门": .bool(true), "有钥匙": .bool(false), "力量": .int(15)])
 
         guard case let .condition(node)? = parse(raw, tree: openForce).first else {
             return XCTFail("应为 .condition 节点")
         }
-        XCTAssertEqual(node.condition.dependencies.sorted(), ["/开门", "/力量", "/有钥匙"], "组合条件收集全部叶子路径并去重")
-        XCTAssertEqual(render(node.activeBranch(in: openForce).nodes, in: openForce), "门开了",
-                       "无钥匙但力量≥10 → OR 成立 → AND 成立")
+        XCTAssertEqual(Set(node.condition.dependencies), ["/开门", "/力量", "/有钥匙"], "组合条件收集全部叶子路径并去重")
+        XCTAssertEqual(render(node.activeBranch(in: openStrongNoForceField).nodes, in: openStrongNoForceField), "门开了",
+                       "无钥匙但 NOT(力量<10)=真（15≥10）→ OR 成立 → AND 成立")
         XCTAssertEqual(render(node.activeBranch(in: openWeakKeyless).nodes, in: openWeakKeyless), "门没开",
                        "无钥匙且力量<10 → OR 不成立")
         XCTAssertEqual(render(node.activeBranch(in: closed).nodes, in: closed), "门没开")
@@ -237,7 +237,7 @@ final class TavernConditionTests: XCTestCase {
     /// 端到端：按钮 patch 翻转变量 → 条件分支随之切换（解析一次的完整闭环）。
     func testEndToEndButtonFlipsBranch() throws {
         let doc = """
-        <NativeButton label="点火把" kind="updateVariable" path="/火把" value="true"/>
+        <NativeAction label="点火把" kind="updateVariable" path="/火把" value="true"/>
         <NativeIf path="/火把" op="truthy">火光照亮洞穴<NativeElse/>一片漆黑</NativeIf>
         """
         var tree: JSONValue = .object(["火把": .bool(false)])
@@ -308,7 +308,7 @@ final class TavernConditionTests: XCTestCase {
             NativeCondition.any([when("/金币", .gte, .int(10)), when("/金币", .gte, .int(50))]),
             NativeCondition.not(when("/禁言", .truthy)),
         ])
-        XCTAssertEqual(cond.dependencies.sorted(), ["/位置", "/金币", "/禁言"], "跨层级去重收集")
+        XCTAssertEqual(cond.dependencies, ["/位置", "/金币", "/禁言"], "跨层级去重收集")
     }
 }
 
