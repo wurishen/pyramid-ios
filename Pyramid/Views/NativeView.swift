@@ -41,123 +41,101 @@ import SwiftUI
 // **递归注意**：与 `MessageCard.renderNode` 同款，用 `AnyView` 而非泛型
 //  closure 避免 Release 全模块优化展开无穷类型（Debug 可过、Archive 崩）。
 
+/// NativeIRNode → SwiftUI 视图渲染入口。
+///
+/// 把 NativeIR 树（来自 TavernExpression.transpile / HTMLTranspiler.transpile）
+/// 渲染成纯 SwiftUI 视图。**当前实现是 P10 最小可用版本**，仅覆盖：
+///   - `.text` / `.number` / `.field` / `.progress` —— 纯展示
+///   - `.container` / `.list` / `.branch` —— 容器 + 条件
+///   - `.button` / `.textInput` / `.selection` —— 交互（含闭环）
+///   - `.boundText` —— 宏绑定求值
+///   - `.image` / `.link` / `.externalResource` / `.scriptPlaceholder` —— 占位
+///
+/// **不**做：动画 trigger 的状态-触发动画、layout 校准、嵌套 container 动画继承。
+/// 这些能力在 P11+ 通过扩展 `ContainerAnimationModifier` / 新增
+/// `AnimationModifier(anim:)` 加回 —— 不破坏 P10 闭环。
 struct NativeView: View {
     let node: NativeIRNode
-    /// 会话级 MVU 变量存储。nil = 纯渲染（fixture / 单测）。
     var variableStore: VariableStore? = nil
     var sessionId: UUID? = nil
-    /// UI 缩放。1.0 = 原始尺寸。
     var scale: CGFloat = 1.0
 
     var body: some View {
-        NativeNodeRenderer(node: node,
-                        variableStore: variableStore,
-                        sessionId: sessionId,
-                        scale: scale)
+        NodeRenderer(node: node,
+                    variableStore: variableStore,
+                    sessionId: sessionId,
+                    scale: scale)
     }
 }
 
 // MARK: - 递归节点渲染器
 
-/// 递归渲染单个 NativeIRNode：放在独立 View 类型里而不是 NativeView 内联函数，
-/// 是为了让每个节点得到稳定的身份（SwiftUI diff 友好）。返回 `AnyView` 是为了
-/// 让 `body` 在不同 case 下类型一致 —— 避免 switch → some View 触发编译期类型
-/// 联合爆炸（与 MessageCard 同款约束）。
-struct NativeNodeRenderer: View {
+/// 递归渲染单个 NativeIRNode。独立的 View 类型 → SwiftUI diff 友好。
+/// 返回 `AnyView` 让 15-case switch 的 body 类型一致，避免编译器联合爆炸。
+private struct NodeRenderer: View {
     let node: NativeIRNode
     var variableStore: VariableStore? = nil
     var sessionId: UUID? = nil
     var scale: CGFloat = 1.0
 
-    /// 当前会话变量树；store 缺失 → 空 object（任何 binding / condition 都会得到
-    /// unresolved / false —— 不崩溃）。
+    /// 当前会话变量树；store 缺失 → 空 object（binding / condition 走 fallback）。
     private var currentTree: JSONValue {
         guard let store = variableStore, let sid = sessionId else { return .object([:]) }
         return store.raw(forSession: sid)
     }
 
     var body: some View {
-        // VariableStore 是 ObservableObject。把它作为 @ObservedObject 持有（即便
-        // nil）让 SwiftUI 在 @Published 触发时重绘本节点 —— 是闭环刷新源。
-        VariableStoreObserver(store: variableStore) {
-            render(node)
-        }
+        StoreObserver(store: variableStore) { render(node) }
     }
 
-    /// 15 个 case 的 switch 必须显式返回 AnyView —— 用 @ViewBuilder / some View
-    /// 让编译器花指数时间试图联合 15 种 concrete view 类型，与 MessageCard
-    /// 同款风险（Release archive 全模块优化下展开无穷类型）。这里直接 AnyView
-    /// 收敛类型。
     private func render(_ node: NativeIRNode) -> AnyView {
         switch node {
         case .text(let content):
-            return AnyView(NativeTextView(content: content, scale: scale))
-
-        case let .number(value, label):
-            return AnyView(NativeNumberView(value: value, label: label, scale: scale))
-
-        case let .progress(label, value, max):
-            return AnyView(NativeProgressView(label: label, value: value, max: max, scale: scale))
-
-        case let .field(label, value):
-            return AnyView(NativeFieldView(label: label, value: value, scale: scale))
-
-        case let .list(items):
-            // list 是有序容器；children 顺序保留。
-            return AnyView(NativeListView(items: items, variableStore: variableStore,
+            return AnyView(TextView(content: content, scale: scale))
+        case .number(let value, let label):
+            return AnyView(NumberView(value: value, label: label, scale: scale))
+        case .progress(let label, let value, let max):
+            return AnyView(ProgressView_(label: label, value: value, max: max, scale: scale))
+        case .field(let label, let value):
+            return AnyView(FieldView_(label: label, value: value, scale: scale))
+        case .list(let items):
+            return AnyView(ListView_(items: items, variableStore: variableStore,
+                                     sessionId: sessionId, scale: scale))
+        case .container(let title, let children, let animation):
+            return AnyView(ContainerView_(title: title, children: children,
+                                          animation: animation,
+                                          variableStore: variableStore,
                                           sessionId: sessionId, scale: scale))
-
-        case let .container(title, children, animation):
-            // container 可挂动画意图；动画由本 View 翻译成 SwiftUI transition /
-            // withAnimation —— 不引入第三方引擎。
-            return AnyView(NativeContainerView(title: title, children: children,
-                                               animation: animation,
-                                               variableStore: variableStore,
-                                               sessionId: sessionId, scale: scale))
-
-        case let .button(label, action):
-            // 点击 → dispatcher → store.apply → @Published → 重渲染（条件 / 动画生效）。
-            return AnyView(NativeActionButtonView(label: label, action: action,
-                                                  variableStore: variableStore,
-                                                  sessionId: sessionId, scale: scale))
-
-        case let .textInput(label, path, placeholder):
-            return AnyView(NativeTextInputView(label: label, path: path,
-                                               placeholder: placeholder,
-                                               variableStore: variableStore,
-                                               sessionId: sessionId, scale: scale))
-
-        case let .selection(label, path, options):
-            return AnyView(NativeSelectionView(label: label, path: path, options: options,
-                                               variableStore: variableStore,
-                                               sessionId: sessionId, scale: scale))
-
-        case let .boundText(segments):
-            // 宏绑定：对当前变量树求值；store 变化 → 重算 → 文本同步。
-            // unresolved → 原文（信息不丢）。
+        case .button(let label, let action):
+            return AnyView(ButtonView_(label: label, action: action,
+                                       variableStore: variableStore,
+                                       sessionId: sessionId, scale: scale))
+        case .textInput(let label, let path, let placeholder):
+            return AnyView(InputView_(label: label, path: path,
+                                      placeholder: placeholder,
+                                      variableStore: variableStore,
+                                      sessionId: sessionId, scale: scale))
+        case .selection(let label, let path, let options):
+            return AnyView(SelectionView_(label: label, path: path, options: options,
+                                          variableStore: variableStore,
+                                          sessionId: sessionId, scale: scale))
+        case .boundText(let segments):
             let text = MacroRenderer.render(segments: segments, tree: currentTree)
-            return AnyView(NativeTextView(content: text, scale: scale))
-
-        case let .branch(condition, whenTrue, whenFalse):
-            // 条件分支：对当前变量树求值选支；store 变化 → 重算 → 分支切换。
-            // withAnimation 让切换具备视觉过渡（from false branch → true branch）。
+            return AnyView(TextView(content: text, scale: scale))
+        case .branch(let condition, let whenTrue, let whenFalse):
             let isTrue = condition.evaluate(in: currentTree)
             let active = isTrue ? whenTrue : whenFalse
-            return AnyView(NativeBranchView(activeBranch: active, isTrue: isTrue,
-                                            variableStore: variableStore,
-                                            sessionId: sessionId, scale: scale))
-
-        case let .image(src, alt):
-            return AnyView(NativeImageView(src: src, alt: alt, scale: scale))
-
-        case let .link(label, href):
-            return AnyView(NativeLinkView(label: label, href: href, scale: scale))
-
-        case let .externalResource(ir):
-            return AnyView(NativeExternalResourceView(ir: ir, scale: scale))
-
-        case let .scriptPlaceholder(raw, reason):
-            return AnyView(NativeScriptPlaceholderView(raw: raw, reason: reason, scale: scale))
+            return AnyView(BranchView_(activeBranch: active, isTrue: isTrue,
+                                       variableStore: variableStore,
+                                       sessionId: sessionId, scale: scale))
+        case .image(let src, let alt):
+            return AnyView(ImageView_(src: src, alt: alt, scale: scale))
+        case .link(let label, let href):
+            return AnyView(LinkView_(label: label, href: href, scale: scale))
+        case .externalResource(let ir):
+            return AnyView(ExternalResourceView_(ir: ir, scale: scale))
+        case .scriptPlaceholder(let raw, let reason):
+            return AnyView(ScriptPlaceholderView_(raw: raw, reason: reason, scale: scale))
         }
     }
 }
@@ -165,27 +143,21 @@ struct NativeNodeRenderer: View {
 // MARK: - VariableStore 订阅
 
 /// 把 VariableStore 作为依赖注入到 body —— 仅为触发刷新；不修改数据。
-/// store == nil（fixture）时退化为 passthrough，不订阅任何对象。
-///
-/// 实现要点：SwiftUI 的 `@ObservedObject` 触发刷新的前提是 **属性在 view body
-/// 路径上被读取**。把 `store` 作为实例属性 + 在 body 里调 `store.raw(...)`，
-/// 当 store 变化时 SwiftUI 自动重绘本 view。
-private struct VariableStoreObserver<Content: View>: View {
+/// store == nil 时退化为 passthrough，不订阅任何对象。
+private struct StoreObserver<Content: View>: View {
     let store: VariableStore?
     let content: () -> Content
 
     var body: some View {
         if let store {
-            // 用 `@ObservedObject` 持有 store：当 store.stores 变化时重绘子树。
-            // 这是状态变化触发 NativeView 重渲染的唯一入口。
-            PassthroughView(store: store, content: content)
+            ObservedPassthrough(store: store, content: content)
         } else {
             content()
         }
     }
 }
 
-private struct PassthroughView<Content: View>: View {
+private struct ObservedPassthrough<Content: View>: View {
     @ObservedObject var store: VariableStore
     let content: () -> Content
     var body: some View { content() }
@@ -193,7 +165,7 @@ private struct PassthroughView<Content: View>: View {
 
 // MARK: - 叶子节点视图
 
-private struct NativeTextView: View {
+private struct TextView: View {
     let content: String
     let scale: CGFloat
     var body: some View {
@@ -205,29 +177,29 @@ private struct NativeTextView: View {
     }
 }
 
-private struct NativeNumberView: View {
+private struct NumberView: View {
     let value: Double
     let label: String?
     let scale: CGFloat
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6 * scale) {
-            Text(format(value))
+            Text(formatted)
                 .font(.system(size: 18 * scale, weight: .semibold).monospacedDigit())
                 .foregroundStyle(.accentColor)
-            if let label {
+            if let label = label {
                 Text(label)
                     .font(.system(size: 13 * scale))
                     .foregroundStyle(.secondary)
             }
         }
     }
-    private func format(_ v: Double) -> String {
-        if v.rounded() == v { return String(Int(v)) }
-        return String(v)
+    private var formatted: String {
+        if value.rounded() == value { return String(Int(value)) }
+        return String(value)
     }
 }
 
-private struct NativeProgressView: View {
+private struct ProgressView_: View {
     let label: String
     let value: Double
     let max: Double?
@@ -237,22 +209,25 @@ private struct NativeProgressView: View {
             HStack {
                 Text(label).font(.system(size: 13 * scale)).foregroundStyle(.secondary)
                 Spacer()
-                Text(progressText).font(.system(size: 13 * scale, weight: .medium).monospacedDigit())
+                Text(text).font(.system(size: 13 * scale, weight: .medium).monospacedDigit())
             }
-            ProgressView(value: clamped, total: clampedTotal)
+            ProgressView(value: clamped, total: total)
                 .progressViewStyle(.linear)
                 .tint(.accentColor)
         }
     }
-    private var clamped: Double { max == nil ? max(0, min(value, 1)) : max(0, min(value, max!)) }
-    private var clampedTotal: Double { max ?? 1 }
-    private var progressText: String {
-        if let max { return "\(Int(value))/\(Int(max))" }
+    private var clamped: Double {
+        if let max = max { return Swift.max(0, Swift.min(value, max)) }
+        return Swift.max(0, Swift.min(value, 1))
+    }
+    private var total: Double { max ?? 1 }
+    private var text: String {
+        if let max = max { return "\(Int(value))/\(Int(max))" }
         return "\(Int(value))"
     }
 }
 
-private struct NativeFieldView: View {
+private struct FieldView_: View {
     let label: String
     let value: String
     let scale: CGFloat
@@ -266,27 +241,25 @@ private struct NativeFieldView: View {
     }
 }
 
-private struct NativeImageView: View {
+private struct ImageView_: View {
     let src: String
     let alt: String?
     let scale: CGFloat
     var body: some View {
-        // 通用图像：URL 记录在 IR，**不**自动下载（与 MessageCard.HTMLImageView 同款策略）。
         Text("[图片] \(alt ?? src)").font(.system(size: 13 * scale)).foregroundStyle(.secondary)
     }
 }
 
-private struct NativeLinkView: View {
+private struct LinkView_: View {
     let label: String
     let href: String
     let scale: CGFloat
     var body: some View {
         Text("🔗 \(label)").font(.system(size: 13 * scale)).foregroundStyle(.secondary)
-        // href 仅作为客户端意图记录 —— 不打开浏览器。
     }
 }
 
-private struct NativeExternalResourceView: View {
+private struct ExternalResourceView_: View {
     let ir: ExternalResourceIR
     let scale: CGFloat
     var body: some View {
@@ -295,7 +268,7 @@ private struct NativeExternalResourceView: View {
     }
 }
 
-private struct NativeScriptPlaceholderView: View {
+private struct ScriptPlaceholderView_: View {
     let raw: String
     let reason: String
     let scale: CGFloat
@@ -310,23 +283,22 @@ private struct NativeScriptPlaceholderView: View {
 
 // MARK: - 容器 / 列表 / 分支
 
-private struct NativeListView: View {
+private struct ListView_: View {
     let items: [NativeIRNode]
     var variableStore: VariableStore?
     var sessionId: UUID?
     let scale: CGFloat
     var body: some View {
-        // 列表用 VStack 表达；保持子节点顺序。
         VStack(alignment: .leading, spacing: 6 * scale) {
             ForEach(Array(items.enumerated()), id: \.offset) { _, child in
-                NativeNodeRenderer(node: child, variableStore: variableStore,
-                                   sessionId: sessionId, scale: scale)
+                NodeRenderer(node: child, variableStore: variableStore,
+                             sessionId: sessionId, scale: scale)
             }
         }
     }
 }
 
-private struct NativeContainerView: View {
+private struct ContainerView_: View {
     let title: String
     let children: [NativeIRNode]
     let animation: NativeAnimation?
@@ -342,8 +314,8 @@ private struct NativeContainerView: View {
                     .foregroundStyle(.secondary)
             }
             ForEach(Array(children.enumerated()), id: \.offset) { _, child in
-                NativeNodeRenderer(node: child, variableStore: variableStore,
-                                   sessionId: sessionId, scale: scale)
+                NodeRenderer(node: child, variableStore: variableStore,
+                             sessionId: sessionId, scale: scale)
             }
         }
         .padding(.horizontal, 12 * scale)
@@ -354,17 +326,15 @@ private struct NativeContainerView: View {
             RoundedRectangle(cornerRadius: 10 * scale)
                 .stroke(Color(.systemGray4), lineWidth: 0.5)
         )
-        // container 级动画：进入 → withAnimation。
-        .modifier(ContainerAnimationModifier(animation: animation))
+        .modifier(ContainerAnimationModifier_(animation: animation))
     }
 }
 
 /// 容器级 NativeAnimation → SwiftUI 动画。
 ///
-/// **复用 P9 AnimationRenderer**：旧式 NativeAnimation（fade / slide / scale /
-/// transition）由 `AnimationRenderer` 旁路映射；如果未来扩展成 `AnimationIR`
-/// trigger 形式，本 modifier 一对一替换为 `AnimationModifier(anim:)`。
-private struct ContainerAnimationModifier: ViewModifier {
+/// 不持有状态、不做时间轴 —— 只把 animation.kind 翻译成 SwiftUI `.transition`。
+/// 真正按 trigger 播放的能力留给 P11+（用 `AnimationModifier(anim:)` 替换）。
+private struct ContainerAnimationModifier_: ViewModifier {
     let animation: NativeAnimation?
     @ViewBuilder
     func body(content: Content) -> some View {
@@ -385,7 +355,7 @@ private struct ContainerAnimationModifier: ViewModifier {
     }
 }
 
-private struct NativeBranchView: View {
+private struct BranchView_: View {
     let activeBranch: [NativeIRNode]
     let isTrue: Bool
     var variableStore: VariableStore?
@@ -393,12 +363,10 @@ private struct NativeBranchView: View {
     let scale: CGFloat
 
     var body: some View {
-        // 用 withAnimation + .id(isTrue) 触发分支切换的视觉过渡。
-        // .id 切换让 SwiftUI 把前后分支视作不同身份，触发 transition。
         VStack(alignment: .leading, spacing: 6 * scale) {
             ForEach(Array(activeBranch.enumerated()), id: \.offset) { _, child in
-                NativeNodeRenderer(node: child, variableStore: variableStore,
-                                   sessionId: sessionId, scale: scale)
+                NodeRenderer(node: child, variableStore: variableStore,
+                             sessionId: sessionId, scale: scale)
             }
         }
         .id(isTrue)
@@ -409,7 +377,7 @@ private struct NativeBranchView: View {
 
 // MARK: - 交互节点
 
-private struct NativeActionButtonView: View {
+private struct ButtonView_: View {
     let label: String
     let action: NativeAction
     var variableStore: VariableStore?
@@ -423,15 +391,12 @@ private struct NativeActionButtonView: View {
         Button {
             guard let store = variableStore, let sid = sessionId else { return }
             let dispatcher = NativeActionDispatcher()
-            // 与 MessageCard.nativeActionButton 同一通路 —— dispatcher 算等价
-            // patch → VariableStore.apply → @Published 触发重渲染。
             guard let ops = dispatcher.patches(
                 for: action,
                 currentTree: store.raw(forSession: sid)
             ) else { return }
             try? store.apply(ops, to: sid)
-            // 触发 .onAction 动画重放：token 单调递增。
-            dispatchToken &+= 1
+            dispatchToken = dispatchToken &+ 1
         } label: {
             Label(label, systemImage: "hand.tap")
                 .font(.system(size: 14 * scale, weight: .medium))
@@ -439,13 +404,12 @@ private struct NativeActionButtonView: View {
         .buttonStyle(.bordered)
         .tint(.accentColor)
         .padding(.vertical, 2)
-        // token 变化 → scale 弹一下（SwiftUI 原生 spring）。
         .scaleEffect(dispatchToken > 0 ? 1.0 : 0.98)
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: dispatchToken)
     }
 }
 
-private struct NativeTextInputView: View {
+private struct InputView_: View {
     let label: String?
     let path: String
     let placeholder: String?
@@ -453,12 +417,11 @@ private struct NativeTextInputView: View {
     var sessionId: UUID?
     let scale: CGFloat
 
-    /// UI 会话态草稿（不进消息数据）。
     @State private var draft: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4 * scale) {
-            if let label {
+            if let label = label {
                 Text(label)
                     .font(.system(size: 13 * scale))
                     .foregroundStyle(.secondary)
@@ -503,7 +466,7 @@ private struct NativeTextInputView: View {
     }
 }
 
-private struct NativeSelectionView: View {
+private struct SelectionView_: View {
     let label: String?
     let path: String
     let options: [NativeControlOption]
@@ -513,7 +476,7 @@ private struct NativeSelectionView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4 * scale) {
-            if let label {
+            if let label = label {
                 Text(label)
                     .font(.system(size: 13 * scale))
                     .foregroundStyle(.secondary)
@@ -559,9 +522,3 @@ private struct NativeSelectionView: View {
         try? store.apply(ops, to: sid)
     }
 }
-
-// MARK: - SwiftUI Preview
-//
-// 暂时不挂 #Preview —— SwiftUI #Preview macro + 私有 generic 子 view 的组合
-// 在 Xcode 16.2 上偶发类型检查问题；NativeView 在 ChatView / MessageCard 迁移到
-// NativeIR 后会通过实际装配触发，Preview 等迁移完成再加回。
