@@ -44,9 +44,22 @@ private struct NodeRenderer: View {
         case .field(let label, let value):
             return AnyView(NatFieldView(label: label, value: value, scale: scale))
         case .list(let items):
-            return AnyView(Text("\(items.count) items"))
-        case .container(let title, let children, _):
-            return AnyView(Text("container \(title) \(children.count)"))
+            return AnyView(NatListView(items: items, variableStore: variableStore,
+                                      sessionId: sessionId, scale: scale))
+        case .container(let title, let children, let animation):
+            return AnyView(NatContainerView(title: title, children: children,
+                                            animation: animation,
+                                            variableStore: variableStore,
+                                            sessionId: sessionId, scale: scale))
+        case .boundText(let segments):
+            let text = MacroRenderer.render(segments: segments, tree: currentTree)
+            return AnyView(TextView(content: text, scale: scale))
+        case .branch(let condition, let whenTrue, let whenFalse):
+            let isTrue = condition.evaluate(in: currentTree)
+            let active = isTrue ? whenTrue : whenFalse
+            return AnyView(NatBranchView(activeBranch: active, isTrue: isTrue,
+                                        variableStore: variableStore,
+                                        sessionId: sessionId, scale: scale))
         case .button(let label, let action):
             return AnyView(NatButtonView(label: label, action: action,
                                         variableStore: variableStore,
@@ -62,7 +75,7 @@ private struct NodeRenderer: View {
         case .boundText:
             return AnyView(Text("bound"))
         case .branch(_, let whenTrue, let whenFalse):
-            let active = currentTree == .object([:]) ? whenFalse : whenTrue
+            _ = whenTrue; _ = whenFalse
             return AnyView(NodeRenderer(node: .text(content: "branch"), variableStore: variableStore, sessionId: sessionId, scale: scale))
         case .image(let src, let alt):
             return AnyView(NatImageView(src: src, alt: alt, scale: scale))
@@ -350,5 +363,104 @@ private struct NatSelectionView: View {
             currentTree: store.raw(forSession: sid)
         ) else { return }
         try? store.apply(ops, to: sid)
+    }
+}
+
+// MARK: - Batch 4: 容器 / 列表 / 分支（递归 + 动画 modifier）
+private struct NatListView: View {
+    let items: [NativeIRNode]
+    var variableStore: VariableStore? = nil
+    var sessionId: UUID? = nil
+    let scale: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6 * scale) {
+            ForEach(Array(items.enumerated()), id: \.offset) { _, child in
+                NodeRenderer(node: child,
+                             variableStore: variableStore,
+                             sessionId: sessionId,
+                             scale: scale)
+            }
+        }
+    }
+}
+
+private struct NatContainerView: View {
+    let title: String
+    let children: [NativeIRNode]
+    let animation: NativeAnimation?
+    var variableStore: VariableStore? = nil
+    var sessionId: UUID? = nil
+    let scale: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6 * scale) {
+            if !title.isEmpty {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(Array(children.enumerated()), id: \.offset) { _, child in
+                NodeRenderer(node: child,
+                             variableStore: variableStore,
+                             sessionId: sessionId,
+                             scale: scale)
+            }
+        }
+        .padding(.horizontal, 12 * scale)
+        .padding(.vertical, 10 * scale)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.systemGray6),
+                    in: RoundedRectangle(cornerRadius: 10 * scale))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10 * scale)
+                .stroke(Color(.systemGray4), lineWidth: 0.5)
+        )
+        .modifier(NatContainerAnimationModifier(animation: animation))
+    }
+}
+
+/// 容器级 NativeAnimation → SwiftUI `.transition`。
+private struct NatContainerAnimationModifier: ViewModifier {
+    let animation: NativeAnimation?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let animation = animation {
+            switch animation.kind {
+            case .fade:
+                content.transition(.opacity)
+            case .slide:
+                content.transition(.move(edge: .leading).combined(with: .opacity))
+            case .scale:
+                content.transition(.scale.combined(with: .opacity))
+            case .transition:
+                content.transition(.opacity)
+            }
+        } else {
+            content
+        }
+    }
+}
+
+private struct NatBranchView: View {
+    let activeBranch: [NativeIRNode]
+    let isTrue: Bool
+    var variableStore: VariableStore? = nil
+    var sessionId: UUID? = nil
+    let scale: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6 * scale) {
+            ForEach(Array(activeBranch.enumerated()), id: \.offset) { _, child in
+                NodeRenderer(node: child,
+                             variableStore: variableStore,
+                             sessionId: sessionId,
+                             scale: scale)
+            }
+        }
+        .id(isTrue)
+        .transition(.opacity.combined(with: .move(edge: .top)))
+        .animation(.easeInOut(duration: 0.25), value: isTrue)
     }
 }
