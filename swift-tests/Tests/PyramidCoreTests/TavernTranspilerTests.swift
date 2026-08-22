@@ -445,6 +445,14 @@ final class TavernTranspilerTests: XCTestCase {
                 out.append("[bound \(segments.count)段]")
             case let .branch(condition, whenTrue, whenFalse):
                 out.append("[cond deps:\(condition.dependencies.count) T:\(whenTrue.count)/F:\(whenFalse.count)]")
+            case let .image(src, alt):
+                out.append("[img:\(alt ?? "")→\(src)]")
+            case let .link(label, href):
+                out.append("[link:\(label)→\(href)]")
+            case .externalResource(let ir):
+                out.append("[external:\(ir.kind.rawValue)]")
+            case let .scriptPlaceholder(raw, reason):
+                out.append("[scriptPlaceholder \(reason) \(raw.count)B]")
             }
             if case let .container(_, children, _) = n {
                 for c in children { visit(c) }
