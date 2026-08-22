@@ -84,75 +84,80 @@ struct NativeNodeRenderer: View {
         }
     }
 
-    @ViewBuilder
-    private func render(_ node: NativeIRNode) -> some View {
+    /// 15 个 case 的 switch 必须显式返回 AnyView —— 用 @ViewBuilder / some View
+    /// 让编译器花指数时间试图联合 15 种 concrete view 类型，与 MessageCard
+    /// 同款风险（Release archive 全模块优化下展开无穷类型）。这里直接 AnyView
+    /// 收敛类型。
+    private func render(_ node: NativeIRNode) -> AnyView {
         switch node {
         case .text(let content):
-            NativeTextView(content: content, scale: scale)
+            return AnyView(NativeTextView(content: content, scale: scale))
 
         case let .number(value, label):
-            NativeNumberView(value: value, label: label, scale: scale)
+            return AnyView(NativeNumberView(value: value, label: label, scale: scale))
 
         case let .progress(label, value, max):
-            NativeProgressView(label: label, value: value, max: max, scale: scale)
+            return AnyView(NativeProgressView(label: label, value: value, max: max, scale: scale))
 
         case let .field(label, value):
-            NativeFieldView(label: label, value: value, scale: scale)
+            return AnyView(NativeFieldView(label: label, value: value, scale: scale))
 
         case let .list(items):
             // list 是有序容器；children 顺序保留。
-            NativeListView(items: items, variableStore: variableStore,
-                           sessionId: sessionId, scale: scale)
+            return AnyView(NativeListView(items: items, variableStore: variableStore,
+                                          sessionId: sessionId, scale: scale))
 
         case let .container(title, children, animation):
             // container 可挂动画意图；动画由本 View 翻译成 SwiftUI transition /
             // withAnimation —— 不引入第三方引擎。
-            NativeContainerView(title: title, children: children,
-                                animation: animation, variableStore: variableStore,
-                                sessionId: sessionId, scale: scale)
+            return AnyView(NativeContainerView(title: title, children: children,
+                                               animation: animation,
+                                               variableStore: variableStore,
+                                               sessionId: sessionId, scale: scale))
 
         case let .button(label, action):
             // 点击 → dispatcher → store.apply → @Published → 重渲染（条件 / 动画生效）。
-            NativeActionButtonView(label: label, action: action,
-                                    variableStore: variableStore, sessionId: sessionId,
-                                    scale: scale)
+            return AnyView(NativeActionButtonView(label: label, action: action,
+                                                  variableStore: variableStore,
+                                                  sessionId: sessionId, scale: scale))
 
         case let .textInput(label, path, placeholder):
-            NativeTextInputView(label: label, path: path, placeholder: placeholder,
-                                variableStore: variableStore, sessionId: sessionId,
-                                scale: scale)
+            return AnyView(NativeTextInputView(label: label, path: path,
+                                               placeholder: placeholder,
+                                               variableStore: variableStore,
+                                               sessionId: sessionId, scale: scale))
 
         case let .selection(label, path, options):
-            NativeSelectionView(label: label, path: path, options: options,
-                                variableStore: variableStore, sessionId: sessionId,
-                                scale: scale)
+            return AnyView(NativeSelectionView(label: label, path: path, options: options,
+                                               variableStore: variableStore,
+                                               sessionId: sessionId, scale: scale))
 
         case let .boundText(segments):
             // 宏绑定：对当前变量树求值；store 变化 → 重算 → 文本同步。
             // unresolved → 原文（信息不丢）。
             let text = MacroRenderer.render(segments: segments, tree: currentTree)
-            NativeTextView(content: text, scale: scale)
+            return AnyView(NativeTextView(content: text, scale: scale))
 
         case let .branch(condition, whenTrue, whenFalse):
             // 条件分支：对当前变量树求值选支；store 变化 → 重算 → 分支切换。
             // withAnimation 让切换具备视觉过渡（from false branch → true branch）。
             let isTrue = condition.evaluate(in: currentTree)
             let active = isTrue ? whenTrue : whenFalse
-            NativeBranchView(activeBranch: active, isTrue: isTrue,
-                             variableStore: variableStore, sessionId: sessionId,
-                             scale: scale)
+            return AnyView(NativeBranchView(activeBranch: active, isTrue: isTrue,
+                                            variableStore: variableStore,
+                                            sessionId: sessionId, scale: scale))
 
         case let .image(src, alt):
-            NativeImageView(src: src, alt: alt, scale: scale)
+            return AnyView(NativeImageView(src: src, alt: alt, scale: scale))
 
         case let .link(label, href):
-            NativeLinkView(label: label, href: href, scale: scale)
+            return AnyView(NativeLinkView(label: label, href: href, scale: scale))
 
         case let .externalResource(ir):
-            NativeExternalResourceView(ir: ir, scale: scale)
+            return AnyView(NativeExternalResourceView(ir: ir, scale: scale))
 
         case let .scriptPlaceholder(raw, reason):
-            NativeScriptPlaceholderView(raw: raw, reason: reason, scale: scale)
+            return AnyView(NativeScriptPlaceholderView(raw: raw, reason: reason, scale: scale))
         }
     }
 }
