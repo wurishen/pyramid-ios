@@ -62,6 +62,25 @@ enum RenderNode: Equatable, Sendable {
     /// 求值选支 —— VariableStore 变化 → 分支自动切换，无需重发消息。
     /// 解析失败不产生本节点（整段降级 `.text(原文)` residual —— 「无法解析」≠ false）。
     case condition(NativeConditionNode)
+    /// P8 HTML/Script 静态分析产物 —— 通用容器（`div` / `span` / `p` /
+    /// `section` 等容器标签），children 可以是任意 RenderNode。
+    ///
+    /// **非业务组件**：不绑定任何 Pyramid 语义（无 PhoneContainer / StatusContainer）；
+    /// UI 把 children 当有序列表依次渲染（缩进或视觉分组由 renderer 决定）。
+    /// HTML 标签只是「输入形态」，不决定 UI 组件名。
+    indirect case htmlContainer(children: [RenderNode])
+    /// P8 `<img>` 通用原语 —— `src` 记录意图（**不**保证下载，renderer 决定是否加载）。
+    /// `alt` 可选，作为 fallback 文本。
+    case htmlImage(src: String, alt: String?)
+    /// P8 `<a>` 通用原语 —— `href` 记录意图（**不**保证跳转，renderer 决定是否点击）。
+    /// `label` 是提取的纯文本。
+    case htmlLink(label: String, href: String)
+    /// P8 `<script>...</script>` 与 `<style>...</style>` —— **永不执行** body，
+    /// 原文完整保留在 `residual.replacement` 里供 UI 折叠展示。
+    case htmlScript(residual: MessageRendererCore.DeferredResidual)
+    /// P8 外部资源（`<script src>` / `<iframe src>` / `$(...).load(url)` / 等）——
+    /// 仅描述「存在一个远程 URL」，**永不下载**。UI 可选展示（默认不加载、不跳转）。
+    case htmlExternalResource(ExternalResourceIR)
 
     /// `.variableUpdate` 的摘要内容。
     struct VariableUpdateSummary: Equatable, Sendable {

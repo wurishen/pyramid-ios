@@ -284,6 +284,53 @@ struct RenderInspectorView: View {
             .padding(8)
             .background(Color(.systemGray6))
             .clipShape(RoundedRectangle(cornerRadius: 6))
+        case let .htmlContainer(children):
+            VStack(alignment: .leading, spacing: 2) {
+                Text("[\(idx)] .htmlContainer (\(children.count) 子节点)").font(.caption.weight(.medium))
+                Text("HTML 容器（非业务组件）").font(.caption2).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        case let .htmlImage(src, alt):
+            VStack(alignment: .leading, spacing: 2) {
+                Text("[\(idx)] .htmlImage").font(.caption.weight(.medium))
+                Text("src: \(src)").font(.system(.caption, design: .monospaced)).lineLimit(1)
+                if let alt { Text("alt: \(alt)").font(.caption2).foregroundStyle(.secondary) }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        case let .htmlLink(label, href):
+            VStack(alignment: .leading, spacing: 2) {
+                Text("[\(idx)] .htmlLink").font(.caption.weight(.medium))
+                Text("\"\(label)\" → \(href)").font(.system(.caption, design: .monospaced)).lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        case let .htmlScript(residual):
+            VStack(alignment: .leading, spacing: 2) {
+                Text("[\(idx)] .htmlScript (未执行)").font(.caption.weight(.medium))
+                Text(residual.replacement.prefix(80)).font(.system(.caption, design: .monospaced)).lineLimit(2)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        case let .htmlExternalResource(ir):
+            VStack(alignment: .leading, spacing: 2) {
+                Text("[\(idx)] .htmlExternalResource (\(ir.kind.rawValue) · 未加载)")
+                    .font(.caption.weight(.medium))
+                Text(ir.url).font(.system(.caption, design: .monospaced)).lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
         }
     }
 

@@ -64,4 +64,19 @@ indirect enum NativeIRNode: Equatable, Sendable {
     /// 条件分支：解析一次的组合条件 + 预转译双分支。渲染层对当前变量树求值选支
     /// （变量更新 → 重算 → 分支切换）；两支内容都是任意 NativeIRNode 子树。
     case branch(condition: NativeCondition, whenTrue: [NativeIRNode], whenFalse: [NativeIRNode])
+    /// P8 通用图像原语：HTML `<img>` 转译产物。`src` 记录 URL 意图，**不**保证加载
+    /// —— renderer 决定是否真的下载（默认不下载外部 URL）。`alt` 是 fallback 文本。
+    /// **不是**业务组件；非 Character avatar 之类专用节点。
+    case image(src: String, alt: String?)
+    /// P8 通用链接原语：HTML `<a href>` 转译产物。`href` 记录 URL 意图，**不**保证跳转
+    /// —— renderer 决定（默认展示 label + URL 提示，点击不打开浏览器，纯客户端意图）。
+    case link(label: String, href: String)
+    /// P8 外部资源 IR —— `<script src>` / `<iframe src>` / `$(...).load(url)` /
+    /// `fetch()` 等远端调用转译产物。仅描述「存在一个远程 URL」，**永不下载、永不执行**。
+    /// UI 可选折叠展示 raw + URL 提示；renderer 不得调用任何 HTTP / WebView 加载。
+    case externalResource(ExternalResourceIR)
+    /// P8 不可执行脚本占位：HTML `<script>...</script>` / `<style>...</style>` /
+    /// 任何 `isSafeURL == false` 的远端调用转译产物。`raw` 是原始片段（含完整开闭标签），
+    /// **永不执行**。UI 折叠展示原文 + 「未执行」提示。
+    case scriptPlaceholder(raw: String, reason: String)
 }

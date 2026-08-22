@@ -330,6 +330,10 @@ final class NativeIRTests: XCTestCase {
                 out.append("[bound \(segments.count)段]")
             case let .branch(condition, whenTrue, whenFalse):
                 out.append("[cond deps:\(condition.dependencies.count) T:\(whenTrue.count)/F:\(whenFalse.count)]")
+            case let .image(src, alt): out.append("[image:\(src) alt:\(alt ?? "")]")
+            case let .link(label, href): out.append("[link:\(label)→\(href)]")
+            case let .externalResource(ir): out.append("[ext:\(ir.kind.rawValue) \(ir.url)]")
+            case let .scriptPlaceholder(raw, reason): out.append("[script:\(reason) (\(raw.count) chars)]")
             }
         }
         return out.joined(separator: " ")

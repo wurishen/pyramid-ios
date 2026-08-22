@@ -230,6 +230,23 @@ struct MessageCard: View {
         case let .variableUpdate(summary):
             // P3 native transpile：`<UpdateVariable>…</UpdateVariable>` 块 → 可折叠摘要。
             VariableUpdateView(summary: summary, scale: scale)
+        case let .htmlContainer(children):
+            // P8 HTML 容器：递归渲染子节点；不引入业务视觉（无 PhoneContainer / StatusContainer）。
+            // 与 conditionBranchView 同款 —— `renderNode` 与本函数互相递归，
+            // 用 AnyView 而非泛型 closure 避免 Release archive 触发无穷类型展开崩溃。
+            htmlContainerView(children: children, isLong: isLong, scale: scale)
+        case let .htmlImage(src, alt):
+            // P8 通用图像：URL 记录在 IR，**不**自动下载；alt 作为 fallback 文本。
+            HTMLImageView(src: src, alt: alt, scale: scale)
+        case let .htmlLink(label, href):
+            // P8 通用链接：URL 记录在 IR，**不**自动跳转；纯客户端提示。
+            HTMLLinkView(label: label, href: href, scale: scale)
+        case let .htmlScript(residual):
+            // P8 不可执行脚本：原文折叠保留，绝不调用 JS 引擎。
+            HTMLScriptView(residual: residual, scale: scale)
+        case let .htmlExternalResource(ir):
+            // P8 外部资源：URL 折叠提示，绝不下载。
+            HTMLExternalResourceView(ir: ir, scale: scale)
         }
     }
 
@@ -257,6 +274,19 @@ struct MessageCard: View {
     private var currentVariableTree: JSONValue {
         guard let store = variableStore, let sid = sessionId else { return .object([:]) }
         return store.raw(forSession: sid)
+    }
+
+    /// P8 HTML 容器递归入口 —— 用 AnyView 包装 renderNode 调用，避免泛型递归导致的
+    /// Release archive 类型展开崩溃（参见 conditionBranchView 注释）。
+    private func htmlContainerView(children: [RenderNode], isLong: Bool, scale: CGFloat) -> AnyView {
+        AnyView(
+            HTMLContainerView(
+                children: children,
+                isLong: isLong,
+                scale: scale,
+                renderChild: { child in AnyView(renderNode(child, isLong: isLong, scale: scale)) }
+            )
+        )
     }
 
     @ViewBuilder
@@ -846,5 +876,160 @@ struct VariableUpdateView: View {
         }
         .padding(8 * scale)
         .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 8 * scale))
+    }
+}
+
+// MARK: - P8 HTML 容器 / 元素视图
+
+/// P8 通用 HTML 容器：递归渲染子节点。**不**绑定任何业务组件名（无 PhoneContainer /
+/// StatusContainer）；只负责视觉上的左缩进与子节点分隔。`children` 可能是任意
+/// RenderNode（含嵌套 htmlContainer / 文本 / 控件）。
+struct HTMLContainerView: View {
+    let children: [RenderNode]
+    let isLong: Bool
+    let scale: CGFloat
+    /// `renderChild` 必须返回 `AnyView` —— `renderNode` 与本视图互相递归，泛型 / 不透明
+    /// 返回类型会在 Release 全模块优化里展开无穷类型（与 `conditionBranchView` 同款原因）。
+    let renderChild: (RenderNode) -> AnyView
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4 * scale) {
+            ForEach(Array(children.enumerated()), id: \.offset) { _, child in
+                renderChild(child)
+            }
+        }
+    }
+}
+
+/// P8 通用图像：URL 记录在 IR，**不**自动下载（避免远端追踪 / XSS / 数据外传）。
+/// `alt` 缺失时显示「[image]」+ src 摘要；UI 不引入任何网络请求逻辑。
+struct HTMLImageView: View {
+    let src: String
+    let alt: String?
+    let scale: CGFloat
+
+    var body: some View {
+        HStack(spacing: 6 * scale) {
+            Image(systemName: "photo")
+                .font(.system(size: 12 * scale))
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2 * scale) {
+                let altText: String = {
+                    if let alt, !alt.isEmpty { return alt }
+                    return "[image]"
+                }()
+                Text(altText)
+                    .font(.system(size: 12 * scale))
+                Text(src)
+                    .font(.system(size: 10 * scale, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(6 * scale)
+        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 6 * scale))
+    }
+}
+
+/// P8 通用链接：URL 记录在 IR，**不**自动跳转。renderer 仅展示 label + href 摘要。
+struct HTMLLinkView: View {
+    let label: String
+    let href: String
+    let scale: CGFloat
+
+    var body: some View {
+        HStack(spacing: 6 * scale) {
+            Image(systemName: "link")
+                .font(.system(size: 12 * scale))
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2 * scale) {
+                Text(label.isEmpty ? href : label)
+                    .font(.system(size: 12 * scale))
+                    .foregroundStyle(Color.accentColor)
+                Text(href)
+                    .font(.system(size: 10 * scale, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(6 * scale)
+        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 6 * scale))
+    }
+}
+
+/// P8 不可执行脚本占位：原文折叠展示，**绝不**调 JS 引擎。
+/// 与 `DeferredResidualView` 同形：默认折叠、点击展开等宽字体原文、可复制。
+struct HTMLScriptView: View {
+    let residual: MessageRendererCore.DeferredResidual
+    let scale: CGFloat
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4 * scale) {
+            Button {
+                withAnimation { expanded.toggle() }
+            } label: {
+                HStack(spacing: 6 * scale) {
+                    Image(systemName: "exclamationmark.shield")
+                        .font(.system(size: 12 * scale))
+                    Text("脚本（未执行，原文已保留）")
+                        .font(.system(size: 12 * scale))
+                    Spacer(minLength: 0)
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 10 * scale))
+                }
+                .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            if expanded {
+                Text(residual.replacement)
+                    .font(.system(size: 11 * scale, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8 * scale)
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 6 * scale))
+                    .textSelection(.enabled)
+            }
+        }
+    }
+}
+
+/// P8 外部资源占位：URL 折叠提示，**绝不**下载。
+struct HTMLExternalResourceView: View {
+    let ir: ExternalResourceIR
+    let scale: CGFloat
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4 * scale) {
+            Button {
+                withAnimation { expanded.toggle() }
+            } label: {
+                HStack(spacing: 6 * scale) {
+                    Image(systemName: "network")
+                        .font(.system(size: 12 * scale))
+                    Text("外部资源（未加载）· \(ir.kind.rawValue)")
+                        .font(.system(size: 12 * scale))
+                    Spacer(minLength: 0)
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 10 * scale))
+                }
+                .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            if expanded {
+                Text(ir.url)
+                    .font(.system(size: 11 * scale, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8 * scale)
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 6 * scale))
+                    .textSelection(.enabled)
+            }
+        }
     }
 }

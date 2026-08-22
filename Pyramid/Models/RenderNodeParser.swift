@@ -68,15 +68,24 @@ enum RenderNodeParser {
         // 第二遍：在剩余的 `.text` 节点里识别 P1 `<status>` 块，递归切分。
         // 第三遍：对仍为 `.text` 的节点做宏切分（含 `{{…}}` 才转 macroText，否则保持 .text 直通）。
         let firstPass = parseP3Blocks(input, statData: statData, applyPatches: applyPatches, depth: depth)
-        // 第二遍：对每个 .text 节点再走 P1 的 status 解析；第三遍：宏切分。
+        // 第二遍：对每个 .text 节点再走 P1 的 status 解析；第三遍：宏切分；第四遍：P8 HTML/Script 静态分析。
         let finalNodes = firstPass.nodes.flatMap { node -> [RenderNode] in
             if case let .text(s) = node {
                 return parseStatusBlocks(in: s).flatMap { statusNode -> [RenderNode] in
-                    guard case let .text(t) = statusNode,
-                          TavernMacroParser.containsMacroToken(t) else {
+                    guard case let .text(t) = statusNode else {
                         return [statusNode]
                     }
-                    return [.macroText(TavernMacroParser.parse(t))]
+                    // P8：HTML/Script 静态分析（在宏切分之前 —— 标签 vs 宏互斥，
+                    // HTML 优先；纯文本里的 jQuery load / fetch / iframe src 等也走这一层）。
+                    let htmlPass = HTMLTranspiler.transpile(t)
+                    if htmlPass.count == 1, case .text = htmlPass[0] {
+                        // HTMLTranspiler 退回纯文本（无 HTML / Script） → 走宏切分
+                        if TavernMacroParser.containsMacroToken(t) {
+                            return [.macroText(TavernMacroParser.parse(t))]
+                        }
+                        return [.text(t)]
+                    }
+                    return htmlPass
                 }
             }
             return [node]

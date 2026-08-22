@@ -106,6 +106,31 @@ enum RenderNodeTranspiler {
                 whenTrue: node.whenTrue.map(transpile),
                 whenFalse: node.whenFalse.map(transpile)
             )
+
+        case let .htmlContainer(children):
+            // P8 通用容器：把 children 转译成 IR list，整体再裹一层 container。
+            // **不**替 children 赋业务语义 —— container 不绑定任何 Pyramid 组件名。
+            return .container(
+                title: nil,
+                children: children.map(transpile),
+                animation: nil
+            )
+
+        case let .htmlImage(src, alt):
+            // P8 通用图像：透传到 NativeIR.image（**不**下载、不绑定 Character avatar）。
+            return .image(src: src, alt: alt)
+
+        case let .htmlLink(label, href):
+            // P8 通用链接：透传到 NativeIR.link（**不**跳转，renderer 决定）。
+            return .link(label: label, href: href)
+
+        case let .htmlScript(residual):
+            // P8 不可执行脚本：原文完整保留在 raw，**永不执行**。
+            return .scriptPlaceholder(raw: residual.replacement, reason: "script block (not executed)")
+
+        case let .htmlExternalResource(ir):
+            // P8 外部资源：URL 意图记录，**永不加载**。
+            return .externalResource(ir)
         }
     }
 
