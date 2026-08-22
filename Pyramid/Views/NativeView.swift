@@ -561,15 +561,6 @@ private struct NativeSelectionView: View {
 
 // MARK: - SwiftUI Preview
 //
-// 临时移除 #Preview 块 —— Swift 6 编译器对 #Preview macro + 含有 `@ObservedObject`
-// + 私有 generic 子 view 的组合存在已知诊断差异（参见 Xcode 16.2 release notes）。
-// NativeView 在 ChatView / MessageCard 迁移到 NativeIR 后会被实际装配使用，
-// 这里留出空间以便后续加回 Preview。
-
-#if false
-#Preview("NativeView - text") {
-    NativeView(node: .text(content: "hello pyramid"))
-        .padding()
-        .background(Color(.systemBackground))
-}
-#endif
+// 暂时不挂 #Preview —— SwiftUI #Preview macro + 私有 generic 子 view 的组合
+// 在 Xcode 16.2 上偶发类型检查问题；NativeView 在 ChatView / MessageCard 迁移到
+// NativeIR 后会通过实际装配触发，Preview 等迁移完成再加回。
