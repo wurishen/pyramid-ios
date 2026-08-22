@@ -73,12 +73,12 @@ final class TavernConditionTests: XCTestCase {
 
         let nodes = parse("前缀\(raw)后缀", tree: rich)
         XCTAssertEqual(nodes.count, 3, "前缀文本 + 条件节点 + 后缀文本")
-        guard case let .condition(node)? = nodes[1] else {
+        guard case let .condition(node) = nodes[1] else {
             return XCTFail("中间应为 .condition 节点")
         }
         XCTAssertEqual(render(node.activeBranch(in: rich).nodes, in: rich), "够钱买药水")
         XCTAssertEqual(render(node.activeBranch(in: poor).nodes, in: poor), "钱不够")
-        XCTAssertEqual(node.dependencies, ["/金币"])
+        XCTAssertEqual(node.condition.dependencies, ["/金币"])
     }
 
     func testStructuredCombinatorNesting() {
@@ -102,7 +102,7 @@ final class TavernConditionTests: XCTestCase {
         guard case let .condition(node)? = parse(raw, tree: openForce).first else {
             return XCTFail("应为 .condition 节点")
         }
-        XCTAssertEqual(node.dependencies.sorted(), ["/开门", "/力量", "/有钥匙"], "组合条件收集全部叶子路径并去重")
+        XCTAssertEqual(node.condition.dependencies.sorted(), ["/开门", "/力量", "/有钥匙"], "组合条件收集全部叶子路径并去重")
         XCTAssertEqual(render(node.activeBranch(in: openForce).nodes, in: openForce), "门开了",
                        "无钥匙但力量≥10 → OR 成立 → AND 成立")
         XCTAssertEqual(render(node.activeBranch(in: openWeakKeyless).nodes, in: openWeakKeyless), "门没开",
@@ -196,7 +196,7 @@ final class TavernConditionTests: XCTestCase {
         guard case let .condition(node)? = parse(raw, tree: .object(["hp": .int(10)])).first else {
             return XCTFail("应为 .condition 节点")
         }
-        guard case let .branch(condition, whenTrue, whenFalse)? =
+        guard case let .branch(condition, whenTrue, whenFalse) =
             RenderNodeTranspiler.transpile(.condition(node)) else {
             return XCTFail("应桥接为 .branch IR")
         }
@@ -244,12 +244,13 @@ final class TavernConditionTests: XCTestCase {
         let nodes = parse(doc, tree: tree)
 
         // 初始：暗分支。
+        var condNode: NativeConditionNode?
+        for n in nodes {
+            if case let .condition(c) = n { condNode = c }
+        }
         guard case let .nativeAction(_, action)? = nodes.first,
               case let .updateVariable(path, value) = action,
-              case let .condition(cond)? = nodes.compactMap({ n -> NativeConditionNode? in
-                  if case let .condition(c) = n { return c }
-                  return nil
-              }).first else {
+              let cond = condNode else {
             return XCTFail("应为 按钮 + 条件节点")
         }
         XCTAssertEqual(path, "/火把")
@@ -257,7 +258,7 @@ final class TavernConditionTests: XCTestCase {
         XCTAssertEqual(render(cond.whenFalse, in: tree), "一片漆黑")
 
         // 点击按钮 → dispatcher patch → 新树。
-        try JSONPatch.apply([JSONPatchOperation(op: .replace, path: path, value: value)], to: &tree)
+        try JSONPatchApplier.apply([JSONPatchOperation(op: .replace, path: path, value: value)], to: &tree)
 
         // 重算（不重解析）→ 亮分支。
         XCTAssertTrue(cond.condition.evaluate(in: tree))
