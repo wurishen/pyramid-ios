@@ -236,12 +236,13 @@ final class TavernChainIntegrationTests: XCTestCase {
         ))
         XCTAssertEqual(try store.apply(ops, to: sid), 1)
 
-        // 第二轮渲染：同一 raw、同一规则 —— 变量变化后 IR 重新生成（HP=60）。
+        // 第二轮渲染：同一 raw、同一规则 —— 变量变化后 IR 重新生成。
+        // updateVariable 是**绝对替换**语义：点击后 HP == 10（按钮携带的值）。
         let second = renderAssistant(raw, rules: [skinRule], store: store, sessionId: sid)
         let irAfter = TavernTranspiler.transpile(.statusPlaceholder(store.raw(forSession: sid)))
         let numsAfter = irNumbers(irAfter)
-        XCTAssertTrue(numsAfter.contains(where: { $0.value == 60 && $0.label == "HP" }),
-                      "点击后 IR 应反映 HP=60，实际 \(numsAfter)")
+        XCTAssertTrue(numsAfter.contains(where: { $0.value == 10 && $0.label == "HP" }),
+                      "点击后 IR 应反映 HP 被替换为 10，实际 \(numsAfter)")
         XCTAssertFalse(numsAfter.contains(where: { $0.value == 50 }))
     }
 
