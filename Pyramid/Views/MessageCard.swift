@@ -243,11 +243,15 @@ struct MessageCard: View {
     }
 
     /// 条件分支：对当前变量树求值选支，递归渲染分支内的预解析节点（可含嵌套条件）。
-    private func conditionBranchView(_ node: NativeConditionNode, isLong: Bool, scale: CGFloat) -> some View {
+    /// 返回 `AnyView` 而非 `some View` —— 本函数与 renderNode 互相递归，
+    /// 不透明类型会让 Release 全模块优化展开无穷类型（Debug 可过、Archive 崩）。
+    private func conditionBranchView(_ node: NativeConditionNode, isLong: Bool, scale: CGFloat) -> AnyView {
         let (branch, _) = node.activeBranch(in: currentVariableTree)
-        return ForEach(Array(branch.enumerated()), id: \.offset) { _, sub in
-            renderNode(sub, isLong: isLong, scale: scale)
-        }
+        return AnyView(
+            ForEach(Array(branch.enumerated()), id: \.offset) { _, sub in
+                renderNode(sub, isLong: isLong, scale: scale)
+            }
+        )
     }
 
     private var currentVariableTree: JSONValue {
