@@ -115,28 +115,12 @@ struct RenderInspectorView: View {
                                 .font(.system(.caption, design: .monospaced))
                                 .foregroundStyle(.secondary)
                         }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(8)
-            .background(Color(.systemGray6))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-        case let .condition(node):
-            // 调试视图：条件分支 —— 原文截断 + 依赖的变量路径 + 双分支节点数。
-            VStack(alignment: .leading, spacing: 2) {
-                Text("[\(idx)] .condition (T:\(node.whenTrue.count)/F:\(node.whenFalse.count))")
-                    .font(.caption.weight(.medium))
-                Text(node.raw.prefix(60).replacingOccurrences(of: "\n", with: " "))
-                    .font(.system(.caption, design: .monospaced))
-                    .lineLimit(2)
-                Text("deps: \(node.condition.dependencies.sorted().joined(separator: ", "))")
-                    .font(.system(.caption2, design: .monospaced))
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(8)
-            .background(Color(.systemGray6))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-        }
-    }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                        .background(Color(.systemGray6))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                    }
+                }
             }
         }
     }
@@ -278,6 +262,22 @@ struct RenderInspectorView: View {
                 }.joined(separator: " + ")
                 Text(summary)
                     .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        case let .condition(node):
+            // 调试视图：条件分支 —— 原文截断 + 依赖路径 + 双分支节点数。
+            VStack(alignment: .leading, spacing: 2) {
+                Text("[\(idx)] .condition (T:\(node.whenTrue.count)/F:\(node.whenFalse.count))")
+                    .font(.caption.weight(.medium))
+                Text(node.raw.prefix(60).replacingOccurrences(of: "\n", with: " "))
+                    .font(.system(.caption, design: .monospaced))
+                    .lineLimit(2)
+                Text("deps: \(node.condition.dependencies.sorted().joined(separator: ", "))")
+                    .font(.system(.caption2, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
