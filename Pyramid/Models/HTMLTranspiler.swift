@@ -125,7 +125,8 @@ enum HTMLTranspiler {
                 }
             }
 
-            guard let gtRange = ns.range(of: ">", range: NSRange(location: ltRange.location, length: length - ltRange.location)) else {
+            let gtRange = ns.range(of: ">", range: NSRange(location: ltRange.location, length: length - ltRange.location))
+            if gtRange.location == NSNotFound {
                 let tail = ns.substring(from: textStart)
                 if !tail.isEmpty {
                     tokens.append(Token(kind: .text, raw: tail, tagName: "", attrs: [:], textContent: tail))
