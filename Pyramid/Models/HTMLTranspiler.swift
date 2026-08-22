@@ -317,11 +317,19 @@ enum HTMLTranspiler {
                 flushPending(&pending, into: &out)
                 let closingIdx = findMatchingClose(in: tokens, from: index + 1, tag: token.tagName)
                 if closingIdx == -1 {
-                    // 没找到闭合 → 整段降级为 residual（保真）
+                    // 没找到闭合 → 整段降级为 residual（保真）。
+                    // 例外：Pyramid P1/P3 保留标签（`<status>` 等）—— 它们不是 HTML 语义，
+                    // 已由 RenderNodeParser.parseStatusBlocks / parseP3Blocks 先吃一遍，
+                    // 此处若再降级为 unknown-tag residual，会把 `before <status>...未闭合`
+                    // 这类 raw fallback 拆散成多节点，破坏 RenderNodeParserTests.test15。
                     let raw = tokens[index..<total].map(\.raw).joined()
-                    out.append(.htmlScript(residual: MessageRendererCore.DeferredResidual(
-                        ruleName: nil, sourcePattern: "", replacement: raw
-                    )))
+                    if isPyramidReservedTag(token.tagName) {
+                        out.append(.text(raw))
+                    } else {
+                        out.append(.htmlScript(residual: MessageRendererCore.DeferredResidual(
+                            ruleName: nil, sourcePattern: "", replacement: raw
+                        )))
+                    }
                     index = total
                 } else {
                     let inner = Array(tokens[(index + 1)..<closingIdx])
@@ -436,6 +444,20 @@ enum HTMLTranspiler {
         let attrs = openToken.attrs
 
         switch name {
+        case "status":
+            // Pyramid P1 `<status>` 块不属于通用 HTML 语义；不要降级成 unknown-tag residual。
+            // 由 RenderNodeParser.parseStatusBlocks 先吃，吃不下的（空 / 非法 body）会以
+            // `.text("<status>…</status>")` 形态重新流回本层 —— 这里必须原样保留，
+            // 否则 test14 / test15 这类「status 块未解析 → 整段 .text」断言会被误分类为
+            // `.htmlScript(residual)` 而失败。
+            return .text(rawBody(open: openToken, inner: innerTokens, close: closeToken))
+
+        case "statusplaceholderimpl", "updatevariable",
+             "nativeaction", "nativeinput", "nativeselect", "nativeif":
+            // 其它 Pyramid P1/P3 保留标签 —— parseP3Blocks 漏过（body 非空 / 配对形态
+            // 略有出入）时，本层也只透传 .text，绝不当 unknown HTML 标签降级。
+            return .text(rawBody(open: openToken, inner: innerTokens, close: closeToken))
+
         case "script":
             if let url = attrs["src"], isSafeURL(url) {
                 let raw = rawBody(open: openToken, inner: innerTokens, close: closeToken)
@@ -715,6 +737,20 @@ enum HTMLTranspiler {
             return false
         }
         return true
+    }
+
+    /// Pyramid P1 / P3 保留标签 —— 不是 HTML 语义，不归 HTMLTranspiler 管。
+    /// RenderNodeParser.parseStatusBlocks / parseP3Blocks 先吃，吃不下的会以 raw `.text`
+    /// 形态流回本层（测试 14 / 15 等）。这些标签**绝不**应该被降级为
+    /// `htmlScript(residual)`，否则会破坏测试断言。
+    fileprivate static func isPyramidReservedTag(_ name: String) -> Bool {
+        switch name.lowercased() {
+        case "status", "statusplaceholderimpl", "updatevariable",
+             "nativeaction", "nativeinput", "nativeselect", "nativeif":
+            return true
+        default:
+            return false
+        }
     }
 }
 
