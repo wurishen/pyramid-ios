@@ -560,24 +560,16 @@ private struct NativeSelectionView: View {
 }
 
 // MARK: - SwiftUI Preview
+//
+// 临时移除 #Preview 块 —— Swift 6 编译器对 #Preview macro + 含有 `@ObservedObject`
+// + 私有 generic 子 view 的组合存在已知诊断差异（参见 Xcode 16.2 release notes）。
+// NativeView 在 ChatView / MessageCard 迁移到 NativeIR 后会被实际装配使用，
+// 这里留出空间以便后续加回 Preview。
 
-#if DEBUG
+#if false
 #Preview("NativeView - text") {
     NativeView(node: .text(content: "hello pyramid"))
         .padding()
         .background(Color(.systemBackground))
-}
-
-#Preview("NativeView - container with progress") {
-    NativeView(node: .container(
-        title: "状态",
-        children: [
-            .progress(label: "进度", value: 60, max: 100),
-            .field(label: "金币", value: "200"),
-        ],
-        animation: nil
-    ))
-    .padding()
-    .background(Color(.systemBackground))
 }
 #endif
