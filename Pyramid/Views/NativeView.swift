@@ -166,24 +166,28 @@ struct NativeNodeRenderer: View {
 
 /// 把 VariableStore 作为依赖注入到 body —— 仅为触发刷新；不修改数据。
 /// store == nil（fixture）时退化为 passthrough，不订阅任何对象。
+///
+/// 实现要点：SwiftUI 的 `@ObservedObject` 触发刷新的前提是 **属性在 view body
+/// 路径上被读取**。把 `store` 作为实例属性 + 在 body 里调 `store.raw(...)`，
+/// 当 store 变化时 SwiftUI 自动重绘本 view。
 private struct VariableStoreObserver<Content: View>: View {
     let store: VariableStore?
-    @ViewBuilder var content: () -> Content
+    let content: () -> Content
 
     var body: some View {
         if let store {
-            // @ObservedObject 在 store.stores 变化时重绘整个子树 —— 这是状态
-            // 变化触发 NativeView 重渲染的唯一入口。
-            ObservedPassthrough(store: store, content: content)
+            // 用 `@ObservedObject` 持有 store：当 store.stores 变化时重绘子树。
+            // 这是状态变化触发 NativeView 重渲染的唯一入口。
+            PassthroughView(store: store, content: content)
         } else {
             content()
         }
     }
 }
 
-private struct ObservedPassthrough<Content: View>: View {
+private struct PassthroughView<Content: View>: View {
     @ObservedObject var store: VariableStore
-    @ViewBuilder var content: () -> Content
+    let content: () -> Content
     var body: some View { content() }
 }
 
