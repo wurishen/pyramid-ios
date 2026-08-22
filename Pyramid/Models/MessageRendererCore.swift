@@ -323,7 +323,7 @@ enum MessageRendererCore {
             switch seg {
             case .text(let t):
                 if t.isEmpty { continue }
-                if case .text(let last) = merged.last {
+                if case .text(let last)? = merged.last {
                     merged[merged.count - 1] = .text(last + t)
                 } else {
                     merged.append(.text(t))
