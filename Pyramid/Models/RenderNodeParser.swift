@@ -197,7 +197,7 @@ enum RenderNodeParser {
     /// 隐藏 → `.text("")` 占位；任何解析失败 / 超深 → `.text(整段)` 保真。
     private static func parseConditionBlock(
         _ raw: String,
-        statData: @autoclosure () -> JSONValue,
+        statData: () -> JSONValue,
         applyPatches: ([JSONPatchOperation]) throws -> Int,
         depth: Int
     ) -> [RenderNode] {
