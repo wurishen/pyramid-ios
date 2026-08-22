@@ -108,14 +108,13 @@ enum RenderNodeParser {
             "(?is)" +
             "(<NativeAction|<NativeInput|<NativeSelect)\\b[^>]*>\\s*</(?:NativeAction|NativeInput|NativeSelect)\\s*>" +
             "|<(?:NativeAction|NativeInput|NativeSelect)\\b[^>]*/>"
-        // `<NativeIf …>…</NativeIf>`：非贪婪首个闭合。命中后由 NativeConditionParser
-        // 做严格形状 + 属性校验；不命中（畸形 / 无闭合）留在文本流逐字保真。
-        let conditionPattern = "(?is)<NativeIf\\b[^>]*>[\\s\\S]*?</NativeIf\\s*>"
+        // `<NativeIf …>…</NativeIf>`：配平扫描命中（正确处理嵌套同名标签）。
+        // 命中后由 NativeConditionParser 做属性校验；未配对 / 畸形留在文本流逐字保真。
+        let conditionRanges = NativeConditionParser.balancedRanges(in: input)
 
         guard let placeholderRegex = try? NSRegularExpression(pattern: placeholderPattern),
               let updateRegex = try? NSRegularExpression(pattern: updatePattern),
-              let actionRegex = try? NSRegularExpression(pattern: actionPattern),
-              let conditionRegex = try? NSRegularExpression(pattern: conditionPattern) else {
+              let actionRegex = try? NSRegularExpression(pattern: actionPattern) else {
             return RenderTree(nodes: [.text(input)])
         }
 
@@ -138,8 +137,8 @@ enum RenderNodeParser {
         for m in actionRegex.matches(in: input, options: [], range: fullRange) {
             hits.append(Hit(range: m.range, kind: .action))
         }
-        for m in conditionRegex.matches(in: input, options: [], range: fullRange) {
-            hits.append(Hit(range: m.range, kind: .condition))
+        for r in conditionRanges {
+            hits.append(Hit(range: r, kind: .condition))
         }
         hits.sort { $0.range.location < $1.range.location }
 

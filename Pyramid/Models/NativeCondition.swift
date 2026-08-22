@@ -140,20 +140,64 @@ enum NativeConditionParser {
     /// 最大嵌套深度（防病态嵌套；超限按畸形保真）。
     static let maxDepth = 8
 
-    /// 提取开标签属性串 + body。贪婪 body + 锚定最后一个闭合标签 ——
-    /// 嵌套同名标签时外层尽量吃满，残余退化由递归 + 保真兜底。
+    private static let tokenPattern = "(?is)<NativeIf\\b[^>]*>|</NativeIf\\s*>"
+    private static let openPattern = "(?is)^<NativeIf\\b([^>]*)>"
+
+    /// 提取开标签属性串 + body —— **配平扫描**：逐 token 计数开 / 闭标签，
+    /// 深度归零的闭合才是本块的闭合（正确处理嵌套同名标签）。
+    /// 无配对闭合 / 开标签不在开头 → nil（调用方整段原文保真）。
     static func extract(_ raw: String) -> (attrsString: String, body: String)? {
-        let pattern = "(?is)^<NativeIf\\b([^>]*)>([\\s\\S]*)</NativeIf\\s*>$"
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
-        let ns = raw as NSString
-        guard let m = regex.firstMatch(
-            in: raw,
-            options: [],
-            range: NSRange(location: 0, length: ns.length)
-        ), m.range(at: 1).location != NSNotFound, m.range(at: 2).location != NSNotFound else {
+        guard let openRegex = try? NSRegularExpression(pattern: openPattern),
+              let tokenRegex = try? NSRegularExpression(pattern: tokenPattern) else {
             return nil
         }
-        return (ns.substring(with: m.range(at: 1)), ns.substring(with: m.range(at: 2)))
+        let ns = raw as NSString
+        let full = NSRange(location: 0, length: ns.length)
+        guard let open = openRegex.firstMatch(in: raw, options: [], range: full),
+              open.range.location == 0 else {
+            return nil
+        }
+        let bodyStart = open.range.location + open.range.length
+        var depth = 0
+        let scanRange = NSRange(location: bodyStart, length: ns.length - bodyStart)
+        for m in tokenRegex.matches(in: raw, options: [], range: scanRange) {
+            if ns.substring(with: m.range).hasPrefix("</") {
+                depth -= 1
+                if depth < 0 {
+                    let bodyRange = NSRange(location: bodyStart, length: m.range.location - bodyStart)
+                    return (ns.substring(with: open.range(at: 1)), ns.substring(with: bodyRange))
+                }
+            } else {
+                depth += 1
+            }
+        }
+        return nil
+    }
+
+    /// 在整段输入里找出所有**配平完成**的 `<NativeIf>…</NativeIf>` 区间（含嵌套外层整体）。
+    /// 未配对的开 / 闭标签不产出区间 —— 留在文本流逐字保真。
+    static func balancedRanges(in input: String) -> [NSRange] {
+        guard let tokenRegex = try? NSRegularExpression(pattern: tokenPattern) else { return [] }
+        let ns = input as NSString
+        var ranges: [NSRange] = []
+        var openLocation: Int?
+        var depth = 0
+        for m in tokenRegex.matches(in: input, options: [], range: NSRange(location: 0, length: ns.length)) {
+            if ns.substring(with: m.range).lowercased().hasPrefix("<nativeif") {
+                if openLocation == nil { openLocation = m.range.location }
+                depth += 1
+            } else if openLocation != nil {
+                depth -= 1
+                if depth == 0 {
+                    ranges.append(NSRange(
+                        location: openLocation!,
+                        length: m.range.location + m.range.length - openLocation!
+                    ))
+                    openLocation = nil
+                }
+            }
+        }
+        return ranges
     }
 
     /// 属性串 → 小写 key 字典（与 RenderNodeParser.tokenAttributes 同一规则）。
