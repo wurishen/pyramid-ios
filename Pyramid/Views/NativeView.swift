@@ -95,28 +95,28 @@ private struct NodeRenderer: View {
         case .number(let value, let label):
             return AnyView(NumberView(value: value, label: label, scale: scale))
         case .progress(let label, let value, let max):
-            return AnyView(ProgressView_(label: label, value: value, max: max, scale: scale))
+            return AnyView(NatProgressView(label: label, value: value, max: max, scale: scale))
         case .field(let label, let value):
-            return AnyView(FieldView_(label: label, value: value, scale: scale))
+            return AnyView(NatFieldView(label: label, value: value, scale: scale))
         case .list(let items):
-            return AnyView(ListView_(items: items, variableStore: variableStore,
+            return AnyView(NatListView(items: items, variableStore: variableStore,
                                      sessionId: sessionId, scale: scale))
         case .container(let title, let children, let animation):
-            return AnyView(ContainerView_(title: title, children: children,
+            return AnyView(NatContainerView(title: title, children: children,
                                           animation: animation,
                                           variableStore: variableStore,
                                           sessionId: sessionId, scale: scale))
         case .button(let label, let action):
-            return AnyView(ButtonView_(label: label, action: action,
+            return AnyView(NatButtonView(label: label, action: action,
                                        variableStore: variableStore,
                                        sessionId: sessionId, scale: scale))
         case .textInput(let label, let path, let placeholder):
-            return AnyView(InputView_(label: label, path: path,
+            return AnyView(NatInputView(label: label, path: path,
                                       placeholder: placeholder,
                                       variableStore: variableStore,
                                       sessionId: sessionId, scale: scale))
         case .selection(let label, let path, let options):
-            return AnyView(SelectionView_(label: label, path: path, options: options,
+            return AnyView(NatSelectionView(label: label, path: path, options: options,
                                           variableStore: variableStore,
                                           sessionId: sessionId, scale: scale))
         case .boundText(let segments):
@@ -125,17 +125,17 @@ private struct NodeRenderer: View {
         case .branch(let condition, let whenTrue, let whenFalse):
             let isTrue = condition.evaluate(in: currentTree)
             let active = isTrue ? whenTrue : whenFalse
-            return AnyView(BranchView_(activeBranch: active, isTrue: isTrue,
+            return AnyView(NatBranchView(activeBranch: active, isTrue: isTrue,
                                        variableStore: variableStore,
                                        sessionId: sessionId, scale: scale))
         case .image(let src, let alt):
-            return AnyView(ImageView_(src: src, alt: alt, scale: scale))
+            return AnyView(NatImageView(src: src, alt: alt, scale: scale))
         case .link(let label, let href):
-            return AnyView(LinkView_(label: label, href: href, scale: scale))
+            return AnyView(NatLinkView(label: label, href: href, scale: scale))
         case .externalResource(let ir):
-            return AnyView(ExternalResourceView_(ir: ir, scale: scale))
+            return AnyView(NatExternalResourceView(ir: ir, scale: scale))
         case .scriptPlaceholder(let raw, let reason):
-            return AnyView(ScriptPlaceholderView_(raw: raw, reason: reason, scale: scale))
+            return AnyView(NatScriptPlaceholderView(raw: raw, reason: reason, scale: scale))
         }
     }
 }
@@ -199,7 +199,7 @@ private struct NumberView: View {
     }
 }
 
-private struct ProgressView_: View {
+private struct NatProgressView: View {
     let label: String
     let value: Double
     let max: Double?
@@ -227,7 +227,7 @@ private struct ProgressView_: View {
     }
 }
 
-private struct FieldView_: View {
+private struct NatFieldView: View {
     let label: String
     let value: String
     let scale: CGFloat
@@ -241,7 +241,7 @@ private struct FieldView_: View {
     }
 }
 
-private struct ImageView_: View {
+private struct NatImageView: View {
     let src: String
     let alt: String?
     let scale: CGFloat
@@ -250,7 +250,7 @@ private struct ImageView_: View {
     }
 }
 
-private struct LinkView_: View {
+private struct NatLinkView: View {
     let label: String
     let href: String
     let scale: CGFloat
@@ -262,7 +262,7 @@ private struct LinkView_: View {
     }
 }
 
-private struct ExternalResourceView_: View {
+private struct NatExternalResourceView: View {
     let ir: ExternalResourceIR
     let scale: CGFloat
     var body: some View {
@@ -271,7 +271,7 @@ private struct ExternalResourceView_: View {
     }
 }
 
-private struct ScriptPlaceholderView_: View {
+private struct NatScriptPlaceholderView: View {
     let raw: String
     let reason: String
     let scale: CGFloat
@@ -286,7 +286,7 @@ private struct ScriptPlaceholderView_: View {
 
 // MARK: - 容器 / 列表 / 分支
 
-private struct ListView_: View {
+private struct NatListView: View {
     let items: [NativeIRNode]
     var variableStore: VariableStore?
     var sessionId: UUID?
@@ -301,7 +301,7 @@ private struct ListView_: View {
     }
 }
 
-private struct ContainerView_: View {
+private struct NatContainerView: View {
     let title: String
     let children: [NativeIRNode]
     let animation: NativeAnimation?
@@ -329,7 +329,7 @@ private struct ContainerView_: View {
             RoundedRectangle(cornerRadius: 10 * scale)
                 .stroke(Color(.systemGray4), lineWidth: 0.5)
         )
-        .modifier(ContainerAnimationModifier_(animation: animation))
+        .modifier(NatContainerAnimationModifier(animation: animation))
     }
 }
 
@@ -337,7 +337,7 @@ private struct ContainerView_: View {
 ///
 /// 不持有状态、不做时间轴 —— 只把 animation.kind 翻译成 SwiftUI `.transition`。
 /// 真正按 trigger 播放的能力留给 P11+（用 `AnimationModifier(anim:)` 替换）。
-private struct ContainerAnimationModifier_: ViewModifier {
+private struct NatContainerAnimationModifier: ViewModifier {
     let animation: NativeAnimation?
     @ViewBuilder
     func body(content: Content) -> some View {
@@ -358,7 +358,7 @@ private struct ContainerAnimationModifier_: ViewModifier {
     }
 }
 
-private struct BranchView_: View {
+private struct NatBranchView: View {
     let activeBranch: [NativeIRNode]
     let isTrue: Bool
     var variableStore: VariableStore?
@@ -380,7 +380,7 @@ private struct BranchView_: View {
 
 // MARK: - 交互节点
 
-private struct ButtonView_: View {
+private struct NatButtonView: View {
     let label: String
     let action: NativeAction
     var variableStore: VariableStore?
@@ -412,7 +412,7 @@ private struct ButtonView_: View {
     }
 }
 
-private struct InputView_: View {
+private struct NatInputView: View {
     let label: String?
     let path: String
     let placeholder: String?
@@ -469,7 +469,7 @@ private struct InputView_: View {
     }
 }
 
-private struct SelectionView_: View {
+private struct NatSelectionView: View {
     let label: String?
     let path: String
     let options: [NativeControlOption]
