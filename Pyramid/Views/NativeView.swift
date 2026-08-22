@@ -258,7 +258,7 @@ private struct LinkView_: View {
         Text("🔗 \(label)")
             .font(.system(size: 13 * scale))
             .foregroundStyle(.secondary)
-            .help(href)
+            .accessibilityLabel("\(label), \(href)")
     }
 }
 
@@ -388,7 +388,7 @@ private struct ButtonView_: View {
     let scale: CGFloat
 
     /// 单调递增的 dispatch token：变化时驱动 .onAction 动画重放（SwiftUI 原生）。
-    @State private var dispatchToken: Int = 0
+    @State private var dispatchToken = 0
 
     var body: some View {
         Button {
@@ -420,7 +420,7 @@ private struct InputView_: View {
     var sessionId: UUID?
     let scale: CGFloat
 
-    @State private var draft: String = ""
+    @State private var draft = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4 * scale) {
