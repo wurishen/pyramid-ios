@@ -58,14 +58,14 @@ private struct NodeRenderer: View {
         case .branch(_, let whenTrue, let whenFalse):
             let active = currentTree == .object([:]) ? whenFalse : whenTrue
             return AnyView(NodeRenderer(node: .text(content: "branch"), variableStore: variableStore, sessionId: sessionId, scale: scale))
-        case .image(let src, _):
-            return AnyView(Text("image \(src)"))
-        case .link(let label, _):
-            return AnyView(Text("link \(label)"))
-        case .externalResource:
-            return AnyView(Text("ext"))
-        case .scriptPlaceholder:
-            return AnyView(Text("placeholder"))
+        case .image(let src, let alt):
+            return AnyView(NatImageView(src: src, alt: alt, scale: scale))
+        case .link(let label, let href):
+            return AnyView(NatLinkView(label: label, href: href, scale: scale))
+        case .externalResource(let resource):
+            return AnyView(NatExternalResourceView(resource: resource, scale: scale))
+        case .scriptPlaceholder(let raw, _):
+            return AnyView(NatScriptPlaceholderView(hint: raw, scale: scale))
         }
     }
 }
@@ -155,5 +155,49 @@ private struct NatFieldView: View {
                 .font(.system(size: 14 * scale))
                 .textSelection(.enabled)
         }
+    }
+}
+
+// MARK: - Batch 2: 占位 view（image / link / external / scriptPlaceholder）
+private struct NatImageView: View {
+    let src: String
+    let alt: String?
+    let scale: CGFloat
+    var body: some View {
+        Text(alt ?? src)
+            .font(.system(size: 13 * scale))
+            .foregroundStyle(.secondary)
+    }
+}
+
+private struct NatLinkView: View {
+    let label: String
+    let href: String
+    let scale: CGFloat
+    var body: some View {
+        Text(label)
+            .font(.system(size: 14 * scale))
+            .foregroundStyle(Color.accentColor)
+            .accessibilityLabel(href)
+    }
+}
+
+private struct NatExternalResourceView: View {
+    let resource: ExternalResourceIR
+    let scale: CGFloat
+    var body: some View {
+        Text("[ext:\(resource.kind.rawValue)] \(resource.url)")
+            .font(.system(size: 12 * scale))
+            .foregroundStyle(.secondary)
+    }
+}
+
+private struct NatScriptPlaceholderView: View {
+    let hint: String
+    let scale: CGFloat
+    var body: some View {
+        Text("[placeholder] \(hint)")
+            .font(.system(size: 11 * scale))
+            .foregroundStyle(.tertiary)
     }
 }
