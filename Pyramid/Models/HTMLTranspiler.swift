@@ -436,6 +436,20 @@ enum HTMLTranspiler {
 
         switch name {
         case "script":
+            if let url = attrs["src"], isSafeURL(url) {
+                let raw = rawBody(open: openToken, inner: innerTokens, close: closeToken)
+                return .htmlExternalResource(ExternalResourceIR(kind: .script, url: url, raw: raw))
+            }
+            let raw = rawBody(open: openToken, inner: innerTokens, close: closeToken)
+            return .htmlScript(residual: MessageRendererCore.DeferredResidual(
+                ruleName: nil, sourcePattern: "", replacement: raw
+            ))
+
+        case "iframe":
+            if let url = attrs["src"], isSafeURL(url) {
+                let raw = rawBody(open: openToken, inner: innerTokens, close: closeToken)
+                return .htmlExternalResource(ExternalResourceIR(kind: .iframe, url: url, raw: raw))
+            }
             let raw = rawBody(open: openToken, inner: innerTokens, close: closeToken)
             return .htmlScript(residual: MessageRendererCore.DeferredResidual(
                 ruleName: nil, sourcePattern: "", replacement: raw
@@ -586,12 +600,19 @@ enum HTMLTranspiler {
         }
         var values: [String] = []
         for node in innerNodes {
-            guard case .htmlContainer(let kids) = node else { continue }
-            for k in kids {
-                if case let .text(s) = k {
-                    let v = s.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !v.isEmpty { values.append(v) }
+            switch node {
+            case .text(let s):
+                let v = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !v.isEmpty { values.append(v) }
+            case .htmlContainer(let kids):
+                for k in kids {
+                    if case let .text(s) = k {
+                        let v = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !v.isEmpty { values.append(v) }
+                    }
                 }
+            default:
+                break
             }
         }
         guard !values.isEmpty else {
