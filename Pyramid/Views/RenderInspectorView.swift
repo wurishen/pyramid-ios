@@ -227,6 +227,31 @@ struct RenderInspectorView: View {
             .padding(8)
             .background(Color(.systemGray6))
             .clipShape(RoundedRectangle(cornerRadius: 6))
+        case let .nativeAction(label, action):
+            // 调试视图：交互原语 —— label + 动作摘要。
+            VStack(alignment: .leading, spacing: 2) {
+                Text("[\(idx)] .nativeAction").font(.caption.weight(.medium))
+                Text("\"\(label)\" → \(actionDebugSummary(action))")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+    }
+
+    private func actionDebugSummary(_ action: NativeAction) -> String {
+        switch action {
+        case let .updateVariable(path, value):
+            return "updateVariable \(path) = \(value)"
+        case let .toggle(path):
+            return "toggle \(path)"
+        case let .navigate(target):
+            return "navigate \(target)"
+        case let .custom(key, payload):
+            return "custom \(key) [\(payload.count) 项]"
         }
     }
 

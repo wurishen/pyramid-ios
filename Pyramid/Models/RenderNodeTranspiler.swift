@@ -80,6 +80,11 @@ enum RenderNodeTranspiler {
                 ],
                 animation: nil
             )
+
+        case let .nativeAction(label, action):
+            // P6 交互原语：直接落到 Native IR 的 button —— SwiftUI renderer 把
+            // action 交给 NativeActionDispatcher，形成「点击 → 变量 → 新 IR」闭环。
+            return .button(label: label, action: action)
         }
     }
 

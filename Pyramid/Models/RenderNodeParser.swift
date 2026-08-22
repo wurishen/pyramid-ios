@@ -93,9 +93,15 @@ enum RenderNodeParser {
         let updatePattern =
             "(?is)<UpdateVariable\\b[^>]*>[\\s\\S]*?</UpdateVariable>" +
             "|<<UpdateVariable[^>]*>>[\\s\\S]*?<</UpdateVariable>>"
+        // 只命中「完整合法形态」（自闭合 / 空 body 配对）。带 body 或裸开标签的畸形
+        // token 不命中 —— 整段留在文本流里逐字可见，绝不会被拆散。
+        let actionPattern =
+            "(?is)<NativeAction\\b[^>]*>\\s*</NativeAction\\s*>" +
+            "|<NativeAction\\b[^>]*/>"
 
         guard let placeholderRegex = try? NSRegularExpression(pattern: placeholderPattern),
-              let updateRegex = try? NSRegularExpression(pattern: updatePattern) else {
+              let updateRegex = try? NSRegularExpression(pattern: updatePattern),
+              let actionRegex = try? NSRegularExpression(pattern: actionPattern) else {
             return RenderTree(nodes: [.text(input)])
         }
 
@@ -106,7 +112,7 @@ enum RenderNodeParser {
         struct Hit {
             var range: NSRange
             var kind: Kind
-            enum Kind { case placeholder, update }
+            enum Kind { case placeholder, update, action }
         }
         var hits: [Hit] = []
         for m in placeholderRegex.matches(in: input, options: [], range: fullRange) {
@@ -114,6 +120,9 @@ enum RenderNodeParser {
         }
         for m in updateRegex.matches(in: input, options: [], range: fullRange) {
             hits.append(Hit(range: m.range, kind: .update))
+        }
+        for m in actionRegex.matches(in: input, options: [], range: fullRange) {
+            hits.append(Hit(range: m.range, kind: .action))
         }
         hits.sort { $0.range.location < $1.range.location }
 
@@ -137,6 +146,8 @@ enum RenderNodeParser {
                 nodes.append(.statusPlaceholder(statData: statData()))
             case .update:
                 nodes.append(parseUpdateVariableBlock(rawBlock, applyPatches: applyPatches))
+            case .action:
+                nodes.append(parseNativeActionBlock(rawBlock))
             }
             cursor = hit.range.location + hit.range.length
         }
@@ -290,5 +301,70 @@ enum RenderNodeParser {
             return ns.substring(with: g2)
         }
         return nil
+    }
+
+    // MARK: - NativeAction
+
+    /// `<NativeAction label="…" kind="updateVariable|toggle" path="/a/b" value="…"/>`。
+    ///
+    /// Pyramid 定义的声明式交互原语（非 HTML / 无 JS / 无 CSS）：
+    /// - `label` 必填非空（UI 按钮文案）
+    /// - `kind=updateVariable`：必填 `path` + `value`；value 解析为 JSON 标量
+    ///   （整数 → 小数 → true/false → 字符串，依次尝试）
+    /// - `kind=toggle`：必填 `path`；目标必须是 bool（执行期由 dispatcher 校验）
+    /// - 自闭合与「空 body 配对」两种形态都接受；**带非空 body 的配对形态不识别**
+    ///   （整段降级 `.text(原文)` —— 不静默吞掉 body）
+    /// - 任何属性缺失 / 未知 kind / value 非标量 → `.text(raw)`，绝不丢内容、不崩溃
+    static func parseNativeActionBlock(_ raw: String) -> RenderNode {
+        // 整体形状校验：自闭合，或空 body 的配对写法。group 1 = 属性串。
+        let shapePattern =
+            "(?is)^<NativeAction\\b([^>]*?)/?\\s*>\\s*(?:</NativeAction\\s*>)?$"
+        guard let shapeRegex = try? NSRegularExpression(pattern: shapePattern),
+              let attrRegex = try? NSRegularExpression(pattern: "([A-Za-z_][\\w-]*)\\s*=\\s*\"([^\"]*)\"") else {
+            return .text(raw)
+        }
+        let ns = raw as NSString
+        let full = NSRange(location: 0, length: ns.length)
+        guard let m = shapeRegex.firstMatch(in: raw, options: [], range: full),
+              m.range(at: 1).location != NSNotFound else {
+            return .text(raw)
+        }
+        let attrsString = ns.substring(with: m.range(at: 1))
+        var attrs: [String: String] = [:]
+        for am in attrRegex.matches(in: attrsString, options: [], range: NSRange(location: 0, length: (attrsString as NSString).length)) {
+            let key = (attrsString as NSString).substring(with: am.range(at: 1)).lowercased()
+            attrs[key] = (attrsString as NSString).substring(with: am.range(at: 2))
+        }
+        guard let label = attrs["label"], !label.isEmpty,
+              let kind = attrs["kind"], !kind.isEmpty,
+              let path = attrs["path"], path.hasPrefix("/") else {
+            return .text(raw)
+        }
+        switch kind.lowercased() {
+        case "updatevariable":
+            guard let rawValue = attrs["value"], !rawValue.isEmpty,
+                  let value = parseActionScalar(rawValue) else {
+                return .text(raw)
+            }
+            return .nativeAction(label: label, action: .updateVariable(path: path, value: value))
+        case "toggle":
+            return .nativeAction(label: label, action: .toggle(path: path))
+        default:
+            return .text(raw)
+        }
+    }
+
+    /// JSON 标量解析：整数 → 小数 → bool → 字符串。数组 / 对象不是合法动作值。
+    static func parseActionScalar(_ s: String) -> JSONValue? {
+        let trimmed = s.trimmingCharacters(in: .whitespaces)
+        if let i = Int(trimmed) { return .int(i) }
+        if let d = Double(trimmed), d.isFinite { return .double(d) }
+        switch trimmed.lowercased() {
+        case "true": return .bool(true)
+        case "false": return .bool(false)
+        default: break
+        }
+        guard !trimmed.isEmpty, trimmed != "null" else { return nil }
+        return .string(trimmed)
     }
 }

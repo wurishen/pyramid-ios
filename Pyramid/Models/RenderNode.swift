@@ -41,6 +41,14 @@ enum RenderNode: Equatable, Sendable {
     /// （HTML / CSS / 远程脚本标记等）。**原文完整保留** —— 绝不静默丢弃；UI 以折叠块
     /// 展示。内容不进入文本流、不参与后续 regex / Markdown / transpile（防重复处理）。
     case deferredResidual(MessageRendererCore.DeferredResidual)
+    /// P6 通用交互表达：`<NativeAction label kind path value/>` 自闭合 token。
+    ///
+    /// **非 HTML、无 JS/CSS** —— 这是 Pyramid 定义的声明式交互原语，让角色卡 /
+    /// Regex replacement 能在不引入浏览器执行环境的前提下表达「按钮 → 动作」。
+    /// `action` 交给 `NativeActionDispatcher` 执行，形成
+    /// 「点击 → NativeAction → 变量树 mutation → 重新投影 Native IR」闭环。
+    /// 解析失败（缺属性 / 未知 kind）降级为 `.text(原文)`，绝不丢内容。
+    case nativeAction(label: String, action: NativeAction)
 
     /// `.variableUpdate` 的摘要内容。
     struct VariableUpdateSummary: Equatable, Sendable {

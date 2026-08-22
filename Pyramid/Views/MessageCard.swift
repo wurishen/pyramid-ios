@@ -214,6 +214,8 @@ struct MessageCard: View {
             StatusPlaceholderView(model: model, scale: scale)
         case let .deferredResidual(residual):
             DeferredResidualView(residual: residual, scale: scale)
+        case let .nativeAction(label, action):
+            nativeActionButton(label: label, action: action, scale: scale)
         case let .variableUpdate(summary):
             // P3 native transpile：`<UpdateVariable>…</UpdateVariable>` 块 → 可折叠摘要。
             VariableUpdateView(summary: summary, scale: scale)
@@ -239,6 +241,26 @@ struct MessageCard: View {
             }
         }
         .foregroundStyle(.primary)
+    }
+
+    /// `<NativeAction/>` 按钮：点击 → `NativeActionDispatcher` 算等价 patch →
+    /// `VariableStore.apply` 持久化（触发 @Published 刷新 → 重渲染 → 新 Native IR）。
+    /// store / sessionId 缺失（fixture 场景）或 action 不可执行 → 无操作，不崩溃。
+    private func nativeActionButton(label: String, action: NativeAction, scale: CGFloat) -> some View {
+        Button {
+            guard let store = variableStore, let sid = sessionId else { return }
+            let dispatcher = NativeActionDispatcher()
+            guard let ops = dispatcher.patches(for: action, currentTree: store.raw(forSession: sid)) else {
+                return
+            }
+            try? store.apply(ops, to: sid)
+        } label: {
+            Label(label, systemImage: "hand.tap")
+                .font(.system(size: 14 * scale, weight: .medium))
+        }
+        .buttonStyle(.bordered)
+        .tint(.accentColor)
+        .padding(.vertical, 2)
     }
 
     @ViewBuilder

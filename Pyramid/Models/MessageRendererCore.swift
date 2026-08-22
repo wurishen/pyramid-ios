@@ -256,7 +256,10 @@ enum MessageRendererCore {
         "(?is)<StatusPlaceHolderImpl\\s*/?>",
         "(?is)<UpdateVariable\\b[^>]*>[\\s\\S]*?</UpdateVariable>",
         "(?is)<<UpdateVariable[^>]*>>[\\s\\S]*?<</UpdateVariable>>",
-        "(?is)<status\\b[^>]*>[\\s\\S]*?</status\\s*>"
+        "(?is)<status\\b[^>]*>[\\s\\S]*?</status\\s*>",
+        // Pyramid 声明式交互原语：自闭合或空 body 配对（与 RenderNodeParser 命中范围一致；
+        // 畸形形态不进白名单 —— 留在片段里按标记冻结为残留，逐字保留）。
+        "(?is)<NativeAction\\b[^>]*>\\s*</NativeAction\\s*>|<NativeAction\\b[^>]*/>"
     ]
 
     /// 片段是否含标签式标记（`<tag …>` / `</tag>`）。只在 `splitReplacement`

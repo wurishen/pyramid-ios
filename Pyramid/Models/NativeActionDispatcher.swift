@@ -19,34 +19,29 @@ struct NativeActionDispatcher {
     /// 应用 action 到 `tree`（in-place 写入）。
     @discardableResult
     func dispatch(_ action: NativeAction, to tree: inout JSONValue) -> Bool {
+        guard let ops = patches(for: action, currentTree: tree) else { return false }
+        do {
+            try JSONPatchApplier.apply(ops, to: &tree)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// 把可执行的 `NativeAction` 翻成等价 patch 序列（与 `dispatch` 同语义、同一事实源）。
+    /// 供需要经 `VariableStore.apply` 持久化的调用方（SwiftUI renderer）复用；
+    /// 返回 `nil` 表示 action 未实现 / 不适用当前树（`.navigate` / `.custom` / toggle 非 bool）。
+    func patches(for action: NativeAction, currentTree: JSONValue) -> [JSONPatchOperation]? {
         switch action {
         case .updateVariable(let path, let value):
-            do {
-                try JSONPatchApplier.apply(
-                    [JSONPatchOperation(op: .replace, path: path, value: value)],
-                    to: &tree
-                )
-                return true
-            } catch {
-                return false
-            }
+            return [JSONPatchOperation(op: .replace, path: path, value: value)]
         case .toggle(let path):
-            // 读取 path 处的当前值；非 bool → 不处理。
-            guard case .bool(let current) = readAt(tree: tree, path: path) else {
-                return false
+            guard case .bool(let current) = readAt(tree: currentTree, path: path) else {
+                return nil
             }
-            do {
-                try JSONPatchApplier.apply(
-                    [JSONPatchOperation(op: .replace, path: path, value: .bool(!current))],
-                    to: &tree
-                )
-                return true
-            } catch {
-                return false
-            }
+            return [JSONPatchOperation(op: .replace, path: path, value: .bool(!current))]
         case .navigate, .custom:
-            // 本期 renderer 不实现；返回 false 让调用方决定 fallback。
-            return false
+            return nil
         }
     }
 
