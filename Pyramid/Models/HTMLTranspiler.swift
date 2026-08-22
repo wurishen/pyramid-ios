@@ -318,8 +318,8 @@ enum HTMLTranspiler {
                 if closingIdx == -1 {
                     // 没找到闭合 → 整段降级为 residual（保真）
                     let raw = tokens[index..<total].map(\.raw).joined()
-                    out.append(.htmlScript(residual: DeferredResidual(
-                        ruleName: nil, sourcePattern: nil, replacement: raw
+                    out.append(.htmlScript(residual: MessageRendererCore.DeferredResidual(
+                        ruleName: nil, sourcePattern: "", replacement: raw
                     )))
                     index = total
                 } else {
@@ -390,29 +390,29 @@ enum HTMLTranspiler {
             if let url = token.attrs["src"], isSafeURL(url) {
                 return .htmlExternalResource(ExternalResourceIR(kind: .script, url: url, raw: token.raw))
             }
-            return .htmlScript(residual: DeferredResidual(
-                ruleName: nil, sourcePattern: nil, replacement: token.raw
+            return .htmlScript(residual: MessageRendererCore.DeferredResidual(
+                ruleName: nil, sourcePattern: "", replacement: token.raw
             ))
         case "iframe":
             if let url = token.attrs["src"], isSafeURL(url) {
                 return .htmlExternalResource(ExternalResourceIR(kind: .iframe, url: url, raw: token.raw))
             }
-            return .htmlScript(residual: DeferredResidual(
-                ruleName: nil, sourcePattern: nil, replacement: token.raw
+            return .htmlScript(residual: MessageRendererCore.DeferredResidual(
+                ruleName: nil, sourcePattern: "", replacement: token.raw
             ))
         case "object", "embed":
             if let url = token.attrs["src"] ?? token.attrs["data"], isSafeURL(url) {
                 return .htmlExternalResource(ExternalResourceIR(kind: .object, url: url, raw: token.raw))
             }
-            return .htmlScript(residual: DeferredResidual(
-                ruleName: nil, sourcePattern: nil, replacement: token.raw
+            return .htmlScript(residual: MessageRendererCore.DeferredResidual(
+                ruleName: nil, sourcePattern: "", replacement: token.raw
             ))
         case "link":
             if let url = token.attrs["href"], isSafeURL(url) {
                 return .htmlExternalResource(ExternalResourceIR(kind: .link, url: url, raw: token.raw))
             }
-            return .htmlScript(residual: DeferredResidual(
-                ruleName: nil, sourcePattern: nil, replacement: token.raw
+            return .htmlScript(residual: MessageRendererCore.DeferredResidual(
+                ruleName: nil, sourcePattern: "", replacement: token.raw
             ))
         case "input":
             return mapInput(token)
@@ -437,14 +437,14 @@ enum HTMLTranspiler {
         switch name {
         case "script":
             let raw = rawBody(open: openToken, inner: innerTokens, close: closeToken)
-            return .htmlScript(residual: DeferredResidual(
-                ruleName: nil, sourcePattern: nil, replacement: raw
+            return .htmlScript(residual: MessageRendererCore.DeferredResidual(
+                ruleName: nil, sourcePattern: "", replacement: raw
             ))
 
         case "style":
             let raw = rawBody(open: openToken, inner: innerTokens, close: closeToken)
-            return .htmlScript(residual: DeferredResidual(
-                ruleName: nil, sourcePattern: nil, replacement: raw
+            return .htmlScript(residual: MessageRendererCore.DeferredResidual(
+                ruleName: nil, sourcePattern: "", replacement: raw
             ))
 
         case "a":
@@ -455,8 +455,8 @@ enum HTMLTranspiler {
             }
             // 危险 URL（javascript: 等）→ 保真
             let raw = openToken.raw + innerTokens.map(\.raw).joined() + closeToken.raw
-            return .htmlScript(residual: DeferredResidual(
-                ruleName: nil, sourcePattern: nil, replacement: raw
+            return .htmlScript(residual: MessageRendererCore.DeferredResidual(
+                ruleName: nil, sourcePattern: "", replacement: raw
             ))
 
         case "button":
@@ -483,8 +483,8 @@ enum HTMLTranspiler {
 
         default:
             let raw = rawBody(open: openToken, inner: innerTokens, close: closeToken)
-            return .htmlScript(residual: DeferredResidual(
-                ruleName: nil, sourcePattern: nil, replacement: raw
+            return .htmlScript(residual: MessageRendererCore.DeferredResidual(
+                ruleName: nil, sourcePattern: "", replacement: raw
             ))
         }
     }
@@ -566,8 +566,8 @@ enum HTMLTranspiler {
             return .nativeAction(label: label.isEmpty ? "按钮" : label, action: .toggle(path: path))
         }
         let raw = rawBody(open: openToken, inner: innerTokens, close: closeToken)
-        return .htmlScript(residual: DeferredResidual(
-            ruleName: nil, sourcePattern: nil, replacement: raw
+        return .htmlScript(residual: MessageRendererCore.DeferredResidual(
+            ruleName: nil, sourcePattern: "", replacement: raw
         ))
     }
 
@@ -579,8 +579,8 @@ enum HTMLTranspiler {
         closeToken: Token
     ) -> RenderNode {
         guard let path = attrs["bind"] ?? attrs["path"], path.hasPrefix("/") else {
-            return .htmlScript(residual: DeferredResidual(
-                ruleName: nil, sourcePattern: nil,
+            return .htmlScript(residual: MessageRendererCore.DeferredResidual(
+                ruleName: nil, sourcePattern: "",
                 replacement: rawBody(open: openToken, inner: innerTokens, close: closeToken)
             ))
         }
@@ -595,8 +595,8 @@ enum HTMLTranspiler {
             }
         }
         guard !values.isEmpty else {
-            return .htmlScript(residual: DeferredResidual(
-                ruleName: nil, sourcePattern: nil,
+            return .htmlScript(residual: MessageRendererCore.DeferredResidual(
+                ruleName: nil, sourcePattern: "",
                 replacement: rawBody(open: openToken, inner: innerTokens, close: closeToken)
             ))
         }

@@ -331,7 +331,7 @@ final class HTMLTranspilerTests: XCTestCase {
     func test27_htmlScriptMapsToScriptPlaceholder() {
         let ir = RenderNodeTranspiler.transpile(
             .htmlScript(residual: MessageRendererCore.DeferredResidual(
-                ruleName: nil, sourcePattern: nil, replacement: "<script>x</script>"
+                ruleName: nil, sourcePattern: "", replacement: "<script>x</script>"
             ))
         )
         guard case let .scriptPlaceholder(raw, _) = ir else {
