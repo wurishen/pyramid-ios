@@ -366,17 +366,21 @@ private struct NativeContainerView: View {
 /// trigger 形式，本 modifier 一对一替换为 `AnimationModifier(anim:)`。
 private struct ContainerAnimationModifier: ViewModifier {
     let animation: NativeAnimation?
+    @ViewBuilder
     func body(content: Content) -> some View {
-        guard let animation else { return AnyView(content) }
-        switch animation.kind {
-        case .fade:
-            return AnyView(content.transition(.opacity))
-        case .slide:
-            return AnyView(content.transition(.move(edge: .leading).combined(with: .opacity)))
-        case .scale:
-            return AnyView(content.transition(.scale.combined(with: .opacity)))
-        case .transition:
-            return AnyView(content.transition(.opacity))
+        if let animation = animation {
+            switch animation.kind {
+            case .fade:
+                content.transition(.opacity)
+            case .slide:
+                content.transition(.move(edge: .leading).combined(with: .opacity))
+            case .scale:
+                content.transition(.scale.combined(with: .opacity))
+            case .transition:
+                content.transition(.opacity)
+            }
+        } else {
+            content
         }
     }
 }
@@ -391,18 +395,15 @@ private struct NativeBranchView: View {
     var body: some View {
         // 用 withAnimation + .id(isTrue) 触发分支切换的视觉过渡。
         // .id 切换让 SwiftUI 把前后分支视作不同身份，触发 transition。
-        let content = VStack(alignment: .leading, spacing: 6 * scale) {
+        VStack(alignment: .leading, spacing: 6 * scale) {
             ForEach(Array(activeBranch.enumerated()), id: \.offset) { _, child in
                 NativeNodeRenderer(node: child, variableStore: variableStore,
                                    sessionId: sessionId, scale: scale)
             }
         }
-        return AnyView(
-            content
-                .id(isTrue)
-                .transition(.opacity.combined(with: .move(edge: .top)))
-                .animation(.easeInOut(duration: 0.25), value: isTrue)
-        )
+        .id(isTrue)
+        .transition(.opacity.combined(with: .move(edge: .top)))
+        .animation(.easeInOut(duration: 0.25), value: isTrue)
     }
 }
 
