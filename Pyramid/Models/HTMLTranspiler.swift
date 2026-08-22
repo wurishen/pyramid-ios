@@ -314,24 +314,28 @@ enum HTMLTranspiler {
                 index += 1
 
             case .openTag:
-                flushPending(&pending, into: &out)
                 let closingIdx = findMatchingClose(in: tokens, from: index + 1, tag: token.tagName)
                 if closingIdx == -1 {
-                    // 没找到闭合 → 整段降级为 residual（保真）。
-                    // 例外：Pyramid P1/P3 保留标签（`<status>` 等）—— 它们不是 HTML 语义，
-                    // 已由 RenderNodeParser.parseStatusBlocks / parseP3Blocks 先吃一遍，
-                    // 此处若再降级为 unknown-tag residual，会把 `before <status>...未闭合`
-                    // 这类 raw fallback 拆散成多节点，破坏 RenderNodeParserTests.test15。
-                    let raw = tokens[index..<total].map(\.raw).joined()
                     if isPyramidReservedTag(token.tagName) {
-                        out.append(.text(raw))
+                        // 没找到闭合 + Pyramid P1/P3 保留标签（`<status>` 等）→ 不是 HTML 语义，
+                        // RenderNodeParser.parseStatusBlocks / parseP3Blocks 已经先吃；这里要把
+                        // pending 里累积的 plain text + 整段 raw 合并成**单个** .text，否则
+                        // `before <status>...未闭合` 这类 fallback 会被拆成两段 .text，
+                        // 破坏 RenderNodeParserTests.test15（断言整段 input == 1 个 .text）。
+                        let tailRaw = tokens[index..<total].map(\.raw).joined()
+                        let headText = pending.map { $0.textContent.isEmpty ? $0.raw : $0.textContent }.joined()
+                        pending.removeAll()
+                        out.append(.text(headText + tailRaw))
                     } else {
+                        flushPending(&pending, into: &out)
+                        let raw = tokens[index..<total].map(\.raw).joined()
                         out.append(.htmlScript(residual: MessageRendererCore.DeferredResidual(
                             ruleName: nil, sourcePattern: "", replacement: raw
                         )))
                     }
                     index = total
                 } else {
+                    flushPending(&pending, into: &out)
                     let inner = Array(tokens[(index + 1)..<closingIdx])
                     let innerNodes = buildNodes(from: inner)
                     let node = buildContainerOrLeaf(
