@@ -255,7 +255,10 @@ private struct LinkView_: View {
     let href: String
     let scale: CGFloat
     var body: some View {
-        Text("🔗 \(label)").font(.system(size: 13 * scale)).foregroundStyle(.secondary)
+        Text("🔗 \(label)")
+            .font(.system(size: 13 * scale))
+            .foregroundStyle(.secondary)
+            .help(href)
     }
 }
 
