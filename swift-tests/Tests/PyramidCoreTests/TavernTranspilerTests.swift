@@ -441,6 +441,8 @@ final class TavernTranspilerTests: XCTestCase {
             case let .button(label, _): out.append("[button:\(label)]")
             case let .textInput(label, path, _): out.append("[input:\(label ?? "")→\(path)]")
             case let .selection(label, path, _): out.append("[select:\(label ?? "")→\(path)]")
+            case let .boundText(segments):
+                out.append("[bound \(segments.count)段]")
             }
             if case let .container(_, children, _) = n {
                 for c in children { visit(c) }

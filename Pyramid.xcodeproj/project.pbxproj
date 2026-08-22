@@ -63,6 +63,8 @@
 		AB0000000000000000000418 /* NativeIRProjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000419 /* NativeIRProjector.swift */; };
 		AB000000000000000000041A /* TavernTranspiler.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000041B /* TavernTranspiler.swift */; };
 		AB000000000000000000041C /* RenderNodeTranspiler.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000041D /* RenderNodeTranspiler.swift */; };
+		AB0000000000000000000420 /* NativeCondition.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000421 /* NativeCondition.swift */; };
+		AB000000000000000000041E /* TavernMacro.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000041F /* TavernMacro.swift */; };
 		AB0000000000000000000313 /* VariableStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000312 /* VariableStore.swift */; };
 		AB000000000000000000029E /* StatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000029F /* StatusView.swift */; };
 		AB0000000000000000000280 /* AvatarImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000281 /* AvatarImageCache.swift */; };
@@ -128,6 +130,8 @@
 		AB0000000000000000000419 /* NativeIRProjector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeIRProjector.swift; sourceTree = "<group>"; };
 		AB000000000000000000041B /* TavernTranspiler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TavernTranspiler.swift; sourceTree = "<group>"; };
 		AB000000000000000000041D /* RenderNodeTranspiler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderNodeTranspiler.swift; sourceTree = "<group>"; };
+		AB0000000000000000000421 /* NativeCondition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeCondition.swift; sourceTree = "<group>"; };
+		AB000000000000000000041F /* TavernMacro.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TavernMacro.swift; sourceTree = "<group>"; };
 		AB000000000000000000029F /* StatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusView.swift; sourceTree = "<group>"; };
 		AB0000000000000000000296 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
 		AB0000000000000000000298 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
@@ -206,6 +210,8 @@
 				AB0000000000000000000419 /* NativeIRProjector.swift */,
 				AB000000000000000000041B /* TavernTranspiler.swift */,
 				AB000000000000000000041D /* RenderNodeTranspiler.swift */,
+				AB0000000000000000000421 /* NativeCondition.swift */,
+				AB000000000000000000041F /* TavernMacro.swift */,
 				AB0000000000000000000415 /* NativeActionDispatcher.swift */,
 				AB0000000000000000000221 /* MacroExpander.swift */,
 			);
@@ -418,6 +424,8 @@
 					AB0000000000000000000418 /* NativeIRProjector.swift in Sources */,
 					AB000000000000000000041A /* TavernTranspiler.swift in Sources */,
 					AB000000000000000000041C /* RenderNodeTranspiler.swift in Sources */,
+					AB0000000000000000000420 /* NativeCondition.swift in Sources */,
+					AB000000000000000000041E /* TavernMacro.swift in Sources */,
 				AB000000000000000000029E /* StatusView.swift in Sources */,
 				AB0000000000000000000501 /* PersistenceSchema.swift in Sources */,
 				AB0000000000000000000502 /* PersistenceController.swift in Sources */,

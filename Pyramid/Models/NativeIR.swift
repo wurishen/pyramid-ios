@@ -57,4 +57,8 @@ indirect enum NativeIRNode: Equatable, Sendable {
     /// 通用单选：选中项的 value 字符串写到 `path`。
     /// **零业务语义** —— 选项集合完全由角色卡数据提供。
     case selection(label: String?, path: String, options: [NativeControlOption])
+    /// 宏绑定文本：解析一次的 `MacroSegment` 有序片段（literal / 变量绑定），
+    /// 结构完整进入 IR。渲染层对当前变量树求值（变量更新 → 重算 → 新内容）；
+    /// 未识别 / 缺失的绑定回退原文 —— 信息不丢。
+    case boundText(segments: [MacroSegment])
 }

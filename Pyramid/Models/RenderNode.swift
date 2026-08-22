@@ -53,6 +53,11 @@ enum RenderNode: Equatable, Sendable {
     /// 与 nativeAction 同一原则 —— path 即 JSON Pointer，提交写入 VariableStore；
     /// 零业务语义、无固定模板。解析失败降级 `.text(原文)` 保真。
     case nativeControl(NativeControl)
+    /// P6 宏绑定文本：`{{getvar::…}}` 等宏经 TavernMacroParser 切成的**有序片段**
+    /// （解析一次的产物，与变量值解耦）。渲染 / IR 层对当前 VariableStore 树求值；
+    /// 无法识别或无法解析的宏在片段里以字面量原样保留 —— 绝不静默删除。
+    /// 无宏的普通文本仍是 `.text(String)`（零开销直通）。
+    case macroText([MacroSegment])
 
     /// `.variableUpdate` 的摘要内容。
     struct VariableUpdateSummary: Equatable, Sendable {

@@ -218,15 +218,33 @@ struct MessageCard: View {
             nativeActionButton(label: label, action: action, scale: scale)
         case let .nativeControl(control):
             nativeControlView(control, scale: scale)
+        case let .macroText(segments):
+            // 宏绑定文本：解析产物对**当前**变量树求值。store 是 @ObservedObject ——
+            // 任意交互 / patch 写入触发刷新 → 重算片段（不重新解析）→ 文本同步更新。
+            // store 缺失（fixture）→ 空树求值，缺失变量回退原文，内容不丢。
+            macroTextView(segments, isLong: isLong, scale: scale)
         case let .variableUpdate(summary):
             // P3 native transpile：`<UpdateVariable>…</UpdateVariable>` 块 → 可折叠摘要。
             VariableUpdateView(summary: summary, scale: scale)
         }
     }
 
+    /// 宏绑定文本：对当前会话变量树求值后复用普通文本渲染。
+    private func macroTextView(_ segments: [MacroSegment], isLong: Bool, scale: CGFloat) -> some View {
+        textNodeView(
+            MacroRenderer.render(segments: segments, tree: currentVariableTree),
+            isLong: isLong,
+            scale: scale
+        )
+    }
+
+    private var currentVariableTree: JSONValue {
+        guard let store = variableStore, let sid = sessionId else { return .object([:]) }
+        return store.raw(forSession: sid)
+    }
+
     @ViewBuilder
-    private func textNodeView(_ text: String, isLong: Bool, scale: CGFloat) -> some View {
-        // 长文折叠时截断 .text 节点；保留所有节点原顺序。
+    private func textNodeView(_ text: String, isLong: Bool, scale: CGFloat) -> some View {        // 长文折叠时截断 .text 节点；保留所有节点原顺序。
         let visibleText: String = (isLong && !expanded)
             ? String(text.prefix(Self.collapseThreshold)) + "…"
             : text

@@ -264,7 +264,9 @@ enum MessageRendererCore {
         // 畸形形态不进白名单 —— 留在片段里按标记冻结为残留，逐字保留）。
         "(?is)" +
             "(<NativeAction|<NativeInput|<NativeSelect)\\b[^>]*>\\s*</(?:NativeAction|NativeInput|NativeSelect)\\s*>" +
-            "|<(?:NativeAction|NativeInput|NativeSelect)\\b[^>]*/>"
+            "|<(?:NativeAction|NativeInput|NativeSelect)\\b[^>]*/>",
+        // P6 条件原语：配对形态整体进文本流交给 parser 求值；畸形不命中 → 残留保真。
+        "(?is)<NativeIf\\b[^>]*>[\\s\\S]*?</NativeIf\\s*>"
     ]
 
     /// 片段是否含标签式标记（`<tag …>` / `</tag>`）。只在 `splitReplacement`

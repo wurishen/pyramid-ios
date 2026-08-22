@@ -28,6 +28,9 @@ enum TavernExpression: Equatable, Sendable {
     case variableUpdate(appliedCount: Int, affectedPaths: [String])
     /// 纯文本片段。
     case text(String)
+    /// P6 宏绑定文本：解析一次的宏片段（literal / 变量绑定），转成 boundText IR；
+    /// 求值发生在渲染层对当前变量树 —— 变量更新只重算，不重新解析。
+    case macroText([MacroSegment])
     /// 按钮 hint（label + 关联动作）。来自角色卡可识别的"按钮"语义。
     case buttonHint(label: String, action: NativeAction)
     /// 动画意图 hint（fade / slide / scale / transition + 可选 durationMs）。
@@ -94,6 +97,10 @@ enum TavernTranspiler {
 
         case .text(let s):
             return .text(content: s)
+
+        case .macroText(let segments):
+            // 宏绑定文本：结构完整透传进 IR；未知宏已在片段内保真为字面量。
+            return .boundText(segments: segments)
 
         case .buttonHint(let label, let action):
             return .button(label: label, action: action)

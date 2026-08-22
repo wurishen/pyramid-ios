@@ -57,19 +57,27 @@ enum RenderNodeParser {
     ///     UI 走 `NativeDisplayModelProjector.project(statData:)` 投影；**不**拍平。
     ///   - applyPatches: 把 JSON Patch ops 应用到当前会话，返回 applied 计数。
     ///     抛错时该块降级为 `.text`（不丢内容）。
+    ///   - depth: `<NativeIf>` 递归深度（防病态嵌套；生产入口恒为 0）。
     static func parse(
         _ input: String,
         statData: () -> JSONValue,
-        applyPatches: ([JSONPatchOperation]) throws -> Int
+        applyPatches: ([JSONPatchOperation]) throws -> Int,
+        depth: Int = 0
     ) -> RenderTree {
-        // 第一遍：识别 P3 新增块（StatusPlaceHolderImpl / UpdateVariable），按位置插入节点。
+        // 第一遍：识别 P3 新增块（StatusPlaceHolderImpl / UpdateVariable / NativeIf），按位置插入节点。
         // 第二遍：在剩余的 `.text` 节点里识别 P1 `<status>` 块，递归切分。
-        // 这种 pass 设计避免用一个 union 正则同时匹配三类块带来的 group index 混乱。
-        let firstPass = parseP3Blocks(input, statData: statData, applyPatches: applyPatches)
-        // 第二遍：对每个 .text 节点再走 P1 的 status 解析
+        // 第三遍：对仍为 `.text` 的节点做宏切分（含 `{{…}}` 才转 macroText，否则保持 .text 直通）。
+        let firstPass = parseP3Blocks(input, statData: statData, applyPatches: applyPatches, depth: depth)
+        // 第二遍：对每个 .text 节点再走 P1 的 status 解析；第三遍：宏切分。
         let finalNodes = firstPass.nodes.flatMap { node -> [RenderNode] in
             if case let .text(s) = node {
-                return parseStatusBlocks(in: s)
+                return parseStatusBlocks(in: s).flatMap { statusNode -> [RenderNode] in
+                    guard case let .text(t) = statusNode,
+                          TavernMacroParser.containsMacroToken(t) else {
+                        return [statusNode]
+                    }
+                    return [.macroText(TavernMacroParser.parse(t))]
+                }
             }
             return [node]
         }
@@ -84,7 +92,8 @@ enum RenderNodeParser {
     private static func parseP3Blocks(
         _ input: String,
         statData: () -> JSONValue,
-        applyPatches: ([JSONPatchOperation]) throws -> Int
+        applyPatches: ([JSONPatchOperation]) throws -> Int,
+        depth: Int = 0
     ) -> RenderTree {
         let placeholderPattern = "(?is)<StatusPlaceHolderImpl\\s*/?>"
         // canonical：单 `<UpdateVariable>`（酒馆 / MVU 源码一致）；
@@ -99,10 +108,14 @@ enum RenderNodeParser {
             "(?is)" +
             "(<NativeAction|<NativeInput|<NativeSelect)\\b[^>]*>\\s*</(?:NativeAction|NativeInput|NativeSelect)\\s*>" +
             "|<(?:NativeAction|NativeInput|NativeSelect)\\b[^>]*/>"
+        // `<NativeIf …>…</NativeIf>`：非贪婪首个闭合。命中后由 NativeConditionParser
+        // 做严格形状 + 属性校验；不命中（畸形 / 无闭合）留在文本流逐字保真。
+        let conditionPattern = "(?is)<NativeIf\\b[^>]*>[\\s\\S]*?</NativeIf\\s*>"
 
         guard let placeholderRegex = try? NSRegularExpression(pattern: placeholderPattern),
               let updateRegex = try? NSRegularExpression(pattern: updatePattern),
-              let actionRegex = try? NSRegularExpression(pattern: actionPattern) else {
+              let actionRegex = try? NSRegularExpression(pattern: actionPattern),
+              let conditionRegex = try? NSRegularExpression(pattern: conditionPattern) else {
             return RenderTree(nodes: [.text(input)])
         }
 
@@ -113,7 +126,7 @@ enum RenderNodeParser {
         struct Hit {
             var range: NSRange
             var kind: Kind
-            enum Kind { case placeholder, update, action }
+            enum Kind { case placeholder, update, action, condition }
         }
         var hits: [Hit] = []
         for m in placeholderRegex.matches(in: input, options: [], range: fullRange) {
@@ -125,6 +138,9 @@ enum RenderNodeParser {
         for m in actionRegex.matches(in: input, options: [], range: fullRange) {
             hits.append(Hit(range: m.range, kind: .action))
         }
+        for m in conditionRegex.matches(in: input, options: [], range: fullRange) {
+            hits.append(Hit(range: m.range, kind: .condition))
+        }
         hits.sort { $0.range.location < $1.range.location }
 
         if hits.isEmpty {
@@ -133,7 +149,7 @@ enum RenderNodeParser {
 
         var nodes: [RenderNode] = []
         var cursor = 0
-        for hit in hits {
+        for hit in hits where hit.range.location >= cursor {
             if hit.range.location > cursor {
                 let prefixRange = NSRange(location: cursor, length: hit.range.location - cursor)
                 let prefix = nsInput.substring(with: prefixRange)
@@ -153,6 +169,17 @@ enum RenderNodeParser {
                 } else {
                     nodes.append(parseNativeControlBlock(rawBlock))
                 }
+            case .condition:
+                // 条件块：成立 → body 递归解析后的节点序列；隐藏 → 空 text 占位
+                // （防整树为空触发「整体回退原文」把隐藏内容复活）；畸形 → 原文保真。
+                nodes.append(
+                    contentsOf: parseConditionBlock(
+                        rawBlock,
+                        statData: statData,
+                        applyPatches: applyPatches,
+                        depth: depth
+                    )
+                )
             }
             cursor = hit.range.location + hit.range.length
         }
@@ -163,6 +190,27 @@ enum RenderNodeParser {
             }
         }
         return RenderTree(nodes: nodes)
+    }
+
+    /// `<NativeIf path op value?>body</NativeIf>` —— 通用条件原语。
+    /// 成立 → body 以 depth+1 递归走完整解析（可嵌套 token / 宏）；
+    /// 隐藏 → `.text("")` 占位；任何解析失败 / 超深 → `.text(整段)` 保真。
+    private static func parseConditionBlock(
+        _ raw: String,
+        statData: @autoclosure () -> JSONValue,
+        applyPatches: ([JSONPatchOperation]) throws -> Int,
+        depth: Int
+    ) -> [RenderNode] {
+        guard depth < NativeConditionParser.maxDepth,
+              let (attrsString, body) = NativeConditionParser.extract(raw),
+              let predicate = NativePredicate(attrs: NativeConditionParser.attributes(from: attrsString)) else {
+            return [.text(raw)]
+        }
+        guard predicate.evaluate(in: statData()) else {
+            return [.text("")]
+        }
+        let childTree = parse(body, statData: statData, applyPatches: applyPatches, depth: depth + 1)
+        return childTree.nodes.isEmpty ? [.text("")] : childTree.nodes
     }
 
     // MARK: - 第二遍：P1 <status>

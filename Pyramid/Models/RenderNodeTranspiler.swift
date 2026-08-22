@@ -94,6 +94,10 @@ enum RenderNodeTranspiler {
             case .select:
                 return .selection(label: control.label, path: control.path, options: control.options)
             }
+
+        case let .macroText(segments):
+            // 宏绑定文本：结构完整进入 IR（boundText）；求值由渲染层对当前变量树执行。
+            return .boundText(segments: segments)
         }
     }
 
