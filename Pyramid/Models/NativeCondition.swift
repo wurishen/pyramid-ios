@@ -372,7 +372,7 @@ enum NativeConditionTokenParser {
         for (tag, builder) in [("NativeAll", NativeCondition.all), ("NativeAny", NativeCondition.any)] {
             if trimmed.hasPrefix("<\(tag)") {
                 guard let block = balancedSelfBlock(trimmed, tag: tag) else { return nil }
-                let children = splitTopLevel(block.body)
+                let children = splitTopLevel(block)
                 guard !children.isEmpty else { return nil }
                 var parsed: [NativeCondition] = []
                 for child in children {
@@ -384,13 +384,13 @@ enum NativeConditionTokenParser {
         }
         if trimmed.hasPrefix("<NativeNot") {
             guard let block = balancedSelfBlock(trimmed, tag: "NativeNot") else { return nil }
-            return condition(from: block.body).map { .not($0) }
+            return condition(from: block).map { .not($0) }
         }
         return nil
     }
 
-    /// `<Tag …>…</Tag>` 且块占满整个输入（配平）；否则 nil。
-    private static func balancedSelfBlock(_ raw: String, tag: String) -> (body: String)? {
+    /// `<Tag …>…</Tag>` 且块占满整个输入（配平）；否则 nil。返回 body。
+    private static func balancedSelfBlock(_ raw: String, tag: String) -> String? {
         guard let tokenRegex = regex("(?is)<\(tag)\\b[^>]*>|</\(tag)\\s*>") else { return nil }
         let ns = raw as NSString
         guard let first = tokenRegex.firstMatch(in: raw, options: [], range: NSRange(location: 0, length: ns.length)),
@@ -409,7 +409,7 @@ enum NativeConditionTokenParser {
                     let open = first.range
                     let bodyRange = NSRange(location: open.location + open.length,
                                             length: m.range.location - (open.location + open.length))
-                    return (ns.substring(with: bodyRange))
+                    return ns.substring(with: bodyRange)
                 }
             }
         }
