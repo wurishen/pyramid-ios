@@ -640,7 +640,7 @@ enum HTMLTranspiler {
         // 静态 pattern：编译期常量、永不抛错 —— 退回到 `try?` + nil fallback。
         let loadPattern: NSRegularExpression? = {
             try? NSRegularExpression(
-                pattern: #"(?i)\$\(["']([^"']+)["']\)\.load\(["']([^"']+)["']\)|\bload\(["']([^"']+)["']\)"#
+                pattern: #"(?i)\$\s*\(\s*["']([^"']+)["']\s*\)\s*\.load\s*\(\s*["']([^"']+)["']\s*\)|\bload\s*\(\s*["']([^"']+)["']\s*\)"#
             )
         }()
         guard let loadPattern else { return analyzeMacroAndPlain(text) }
