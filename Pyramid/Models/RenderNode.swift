@@ -40,7 +40,7 @@ enum RenderNode: Equatable, Sendable {
     /// P6 deferred 显示层产物：角色卡 Regex Script 替换结果中无法安全原生转换的部分
     /// （HTML / CSS / 远程脚本标记等）。**原文完整保留** —— 绝不静默丢弃；UI 以折叠块
     /// 展示。内容不进入文本流、不参与后续 regex / Markdown / transpile（防重复处理）。
-    case deferredResidual(DeferredResidual)
+    case deferredResidual(MessageRendererCore.DeferredResidual)
 
     /// `.variableUpdate` 的摘要内容。
     struct VariableUpdateSummary: Equatable, Sendable {

@@ -52,6 +52,7 @@ let package = Package(
                 "BackupServiceTests.swift",
                 "PromptOnlyRegexTests.swift",
                 "TavernTranspilerTests.swift",
+                "DeferredDisplayRegexTests.swift",
             ]
         ),
     ]

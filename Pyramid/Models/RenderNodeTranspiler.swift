@@ -68,6 +68,18 @@ enum RenderNodeTranspiler {
                 ],
                 animation: nil
             )
+
+        case .deferredResidual(let residual):
+            // 残留块：无法安全原生转换的显示脚本产物。**原文完整保留**为 field，
+            // 不做任何业务判断 —— 与 Transpiler 未知通道同款"未识别 + raw"形态。
+            return .container(
+                title: "未识别",
+                children: [
+                    .field(label: "rule", value: residual.ruleName ?? ""),
+                    .field(label: "raw", value: residual.replacement),
+                ],
+                animation: nil
+            )
         }
     }
 

@@ -256,7 +256,7 @@ enum MessageRendererCore {
         "(?is)<StatusPlaceHolderImpl\\s*/?>",
         "(?is)<UpdateVariable\\b[^>]*>[\\s\\S]*?</UpdateVariable>",
         "(?is)<<UpdateVariable[^>]*>>[\\s\\S]*?<</UpdateVariable>>",
-        "(?is)<status\\b[^>]*>[\\s\\S]*?</status\\s*>",
+        "(?is)<status\\b[^>]*>[\\s\\S]*?</status\\s*>"
     ]
 
     /// 片段是否含标签式标记（`<tag …>` / `</tag>`）。只在 `splitReplacement`
