@@ -71,7 +71,8 @@ enum MessageRendererCore {
         presetDisplayRegexIds: [UUID],
         all: [DisplayRegex]
     ) -> [DisplayRegex] {
-        let byID: [UUID: DisplayRegex] = Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })
+        // 重复 id（导入异常 / 用户复制）不崩溃 —— 保留首个，其余去重。
+        let byID: [UUID: DisplayRegex] = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         var ordered: [DisplayRegex] = []
         var seen = Set<UUID>()
         for id in presetDisplayRegexIds {
@@ -144,7 +145,8 @@ enum MessageRendererCore {
         presetDisplayRegexIds: [UUID],
         all: [DisplayRegex]
     ) -> [DisplayRegex] {
-        let byID: [UUID: DisplayRegex] = Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })
+        // 重复 id（导入异常 / 用户复制）不崩溃 —— 保留首个，其余去重。
+        let byID: [UUID: DisplayRegex] = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         var ordered: [DisplayRegex] = []
         var seen = Set<UUID>()
         for id in presetDisplayRegexIds {
@@ -236,7 +238,8 @@ enum MessageRendererCore {
         presetDisplayRegexIds: [UUID],
         all: [DisplayRegex]
     ) -> [DisplayRegex] {
-        let byID: [UUID: DisplayRegex] = Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })
+        // 重复 id（导入异常 / 用户复制）不崩溃 —— 保留首个，其余去重。
+        let byID: [UUID: DisplayRegex] = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         var ordered: [DisplayRegex] = []
         var seen = Set<UUID>()
         for id in presetDisplayRegexIds {

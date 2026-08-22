@@ -34,7 +34,10 @@ struct NativeActionDispatcher {
     func patches(for action: NativeAction, currentTree: JSONValue) -> [JSONPatchOperation]? {
         switch action {
         case .updateVariable(let path, let value):
-            return [JSONPatchOperation(op: .replace, path: path, value: value)]
+            // upsert 语义：路径已存在 → replace；不存在 → add（RFC 6902 对象成员新增）。
+            // 控件 / 按钮常需要写入卡面首次声明的新键；中间路径缺失仍会失败（返回 false）。
+            let op: JSONPatchOperation.Op = readAt(tree: currentTree, path: path) != nil ? .replace : .add
+            return [JSONPatchOperation(op: op, path: path, value: value)]
         case .toggle(let path):
             guard case .bool(let current) = readAt(tree: currentTree, path: path) else {
                 return nil
