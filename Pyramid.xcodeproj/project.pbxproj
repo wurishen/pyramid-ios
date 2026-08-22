@@ -57,6 +57,8 @@
 		AB0000000000000000000311 /* JSONPatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000310 /* JSONPatch.swift */; };
 		AB0000000000000000000410 /* NativeDisplayModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000400 /* NativeDisplayModel.swift */; };
 		AB0000000000000000000411 /* NativeDisplayModelProjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000401 /* NativeDisplayModelProjector.swift */; };
+		AB0000000000000000000412 /* NativeActionTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000413 /* NativeActionTypes.swift */; };
+		AB0000000000000000000414 /* NativeActionDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000415 /* NativeActionDispatcher.swift */; };
 		AB0000000000000000000313 /* VariableStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000312 /* VariableStore.swift */; };
 		AB000000000000000000029E /* StatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000029F /* StatusView.swift */; };
 		AB0000000000000000000280 /* AvatarImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000281 /* AvatarImageCache.swift */; };
@@ -116,6 +118,8 @@
 		AB0000000000000000000312 /* VariableStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VariableStore.swift; sourceTree = "<group>"; };
 		AB0000000000000000000400 /* NativeDisplayModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeDisplayModel.swift; sourceTree = "<group>"; };
 		AB0000000000000000000401 /* NativeDisplayModelProjector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeDisplayModelProjector.swift; sourceTree = "<group>"; };
+		AB0000000000000000000413 /* NativeActionTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeActionTypes.swift; sourceTree = "<group>"; };
+		AB0000000000000000000415 /* NativeActionDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeActionDispatcher.swift; sourceTree = "<group>"; };
 		AB000000000000000000029F /* StatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusView.swift; sourceTree = "<group>"; };
 		AB0000000000000000000296 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
 		AB0000000000000000000298 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
@@ -189,6 +193,8 @@
 				AB0000000000000000000312 /* VariableStore.swift */,
 				AB0000000000000000000400 /* NativeDisplayModel.swift */,
 				AB0000000000000000000401 /* NativeDisplayModelProjector.swift */,
+				AB0000000000000000000413 /* NativeActionTypes.swift */,
+				AB0000000000000000000415 /* NativeActionDispatcher.swift */,
 				AB0000000000000000000221 /* MacroExpander.swift */,
 			);
 			path = Models;
@@ -394,6 +400,8 @@
 				AB0000000000000000000313 /* VariableStore.swift in Sources */,
 					AB0000000000000000000410 /* NativeDisplayModel.swift in Sources */,
 					AB0000000000000000000411 /* NativeDisplayModelProjector.swift in Sources */,
+					AB0000000000000000000412 /* NativeActionTypes.swift in Sources */,
+					AB0000000000000000000414 /* NativeActionDispatcher.swift in Sources */,
 				AB000000000000000000029E /* StatusView.swift in Sources */,
 				AB0000000000000000000501 /* PersistenceSchema.swift in Sources */,
 				AB0000000000000000000502 /* PersistenceController.swift in Sources */,
