@@ -57,6 +57,7 @@ let package = Package(
                 "DeferredDisplayRegexTests.swift",
                 "TavernChainIntegrationTests.swift",
                 "HTMLTranspilerTests.swift",
+                "AnimationIntentAnalyzerTests.swift",
             ]
         ),
     ]

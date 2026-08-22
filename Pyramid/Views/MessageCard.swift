@@ -247,6 +247,11 @@ struct MessageCard: View {
         case let .htmlExternalResource(ir):
             // P8 外部资源：URL 折叠提示，绝不下载。
             HTMLExternalResourceView(ir: ir, scale: scale)
+        case let .htmlAnimation(anim):
+            // P9 动画意图：本身不承载可视内容，renderer 把它当作下一个 concrete 节点的修饰信息。
+            // 为避免丢失数据，先吞下；上层动画 modifier 由 htmlContainerView 等统一接管。
+            // 具体转换见 HTMLContainerView / nativeActionButton —— 在那边触发 AnimationIR 的应用。
+            EmptyView().modifier(AnimationSidecarModifier(anim: anim))
         }
     }
 

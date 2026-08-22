@@ -1,0 +1,1 @@
+../../../Pyramid/Models/AnimationIR.swift

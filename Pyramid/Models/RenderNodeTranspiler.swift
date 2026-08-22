@@ -133,6 +133,13 @@ enum RenderNodeTranspiler {
         case let .htmlExternalResource(ir):
             // P8 外部资源：URL 意图记录，**永不加载**。
             return .externalResource(ir)
+
+        case let .htmlAnimation(anim):
+            // P9 动画意图：纯元数据节点，不承载可视内容。
+            // 桥接到 NativeIR 时暂以 `.text("[anim:prop]")` 占位 —— 真正的动画意图
+            // 已经从 RenderTree 透传到 NativeIR，未来 NativeIRProjector / Renderer 接管。
+            // 此处不引入业务模板、不强行映射到具体 NativeAction / 控件。
+            return .text(content: "[anim:\(anim.property.rawValue)]")
         }
     }
 

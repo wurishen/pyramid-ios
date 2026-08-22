@@ -331,6 +331,18 @@ struct RenderInspectorView: View {
             .padding(8)
             .background(Color(.systemGray6))
             .clipShape(RoundedRectangle(cornerRadius: 6))
+        case let .htmlAnimation(anim):
+            // P9 调试视图：动画意图 —— property + timing。
+            VStack(alignment: .leading, spacing: 2) {
+                Text("[\(idx)] .htmlAnimation (\(anim.property.rawValue))").font(.caption.weight(.medium))
+                Text("\(anim.from) → \(anim.to) · \(anim.durationMs)ms · \(anim.delayMs)ms delay · \(anim.curve.label)")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
         }
     }
 

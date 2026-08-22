@@ -344,6 +344,12 @@ enum HTMLTranspiler {
                         innerTokens: inner,
                         closeToken: tokens[closingIdx]
                     )
+                    // P9: 解析 style 属性 → 在结果节点之前挂 `.htmlAnimation` 元数据节点。
+                    // 解析失败 / 无 style → 不挂（也��丢 —— 失败路径由 buildContainerOrLeaf 内部走 htmlScript residual）。
+                    if let styleAttr = token.attrs["style"], !styleAttr.isEmpty,
+                       let anims = AnimationIntentAnalyzer.parseInlineStyle(styleAttr) {
+                        for anim in anims { out.append(.htmlAnimation(anim)) }
+                    }
                     out.append(node)
                     index = closingIdx + 1
                 }

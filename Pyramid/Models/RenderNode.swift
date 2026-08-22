@@ -81,6 +81,13 @@ enum RenderNode: Equatable, Sendable {
     /// P8 外部资源（`<script src>` / `<iframe src>` / `$(...).load(url)` / 等）——
     /// 仅描述「存在一个远程 URL」，**永不下载**。UI 可选展示（默认不加载、不跳转）。
     case htmlExternalResource(ExternalResourceIR)
+    /// P9 动画意图：CSS / 内联 style / script class-toggle 静态识别后挂出的
+    /// AnimationIR。renderer 把它翻译成 SwiftUI `.animation` / `.transition` /
+    /// `withAnimation` —— 不引入 WebView / 不执行 JS。
+    ///
+    /// 节点本身**不**承载可视内容；renderer 用作"下一个 concrete 节点的修饰信息"。
+    /// 失败 / 无法识别 → 走 `htmlScript(residual:)` 路径，原始表达完整保留。
+    case htmlAnimation(AnimationIR)
 
     /// `.variableUpdate` 的摘要内容。
     struct VariableUpdateSummary: Equatable, Sendable {
