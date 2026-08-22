@@ -262,7 +262,7 @@ enum HTMLTranspiler {
                                 code = Int(body)
                             }
                             if let scalar = code, let u = Unicode.Scalar(scalar) {
-                                out.append(Character(u))
+                                out.append(String(u))
                             } else {
                                 out.append("&" + entity + ";")
                             }
