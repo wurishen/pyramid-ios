@@ -68,24 +68,6 @@ struct RenderInspectorView: View {
             .padding(8)
             .background(Color(.systemGray6))
             .clipShape(RoundedRectangle(cornerRadius: 6))
-        case let .macroText(segments):
-            // 调试视图：宏绑定文本 —— 片段数 + 各片段摘要（绑定显示 path，字面量截断展示）。
-            VStack(alignment: .leading, spacing: 2) {
-                Text("[\(idx)] .macroText (\(segments.count) 段)").font(.caption.weight(.medium))
-                let summary = segments.map { seg -> String in
-                    switch seg {
-                    case .literal(let s): return "\"\(s.prefix(24))\""
-                    case .binding(let b): return "getvar→\(b.path)"
-                    }
-                }.joined(separator: " + ")
-                Text(summary)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(8)
-            .background(Color(.systemGray6))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
         }
     }
 
@@ -265,6 +247,20 @@ struct RenderInspectorView: View {
                 Text(control.options.isEmpty
                      ? control.path
                      : "\(control.path) · \(control.options.map { $0.label ?? $0.value }.joined(separator: "|"))")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+        case let .macroText(segments):
+            // 调试视图：宏绑定文本 —— 片段数 + 各片段摘要（绑定显示 path，字面量截断展示）。
+            VStack(alignment: .leading, spacing: 2) {
+                Text("[\(idx)] .macroText (\(segments.count) 段)").font(.caption.weight(.medium))
+                let summary = segments.map { seg -> String in
+                    switch seg {
+                    case .literal(let s): return "\"\(s.prefix(24))\""
+                    case .binding(let b): return "getvar→\(b.path)"
+                    }
+                }.joined(separator: " + ")
+                Text(summary)
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
