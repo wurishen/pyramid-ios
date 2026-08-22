@@ -484,21 +484,35 @@ final class TavernChainIntegrationTests: XCTestCase {
             currentTree: store.raw(forSession: sid)))
         XCTAssertEqual(try store.apply(ops3, to: sid), 1)
 
-        // IR 重新生成后包含全部三处变化的投影。
-        let ir = TavernTranspiler.transpile(.statusPlaceholder(store.raw(forSession: sid)))
-        func flatten(_ node: NativeIRNode) -> [NativeIRNode] {
-            switch node {
-            case let .container(_, children, _):
-                return [node] + children.flatMap(flatten)
-            case let .list(items):
-                return [node] + items.flatMap(flatten)
-            default:
-                return [node]
-            }
+        // 三处写入全部落库（变量树是通用 JSON Pointer 数据，不生成业务组件）。
+        guard case .object(let treeAfter) = store.raw(forSession: sid) else {
+            return XCTFail("变量树应是 object")
         }
-        let all = flatten(ir)
-        XCTAssertTrue(all.contains(where: { if case .textInput(_, let p, _) = $0 { return p == "/草稿" }; return false }))
-        XCTAssertTrue(all.contains(where: { if case .selection(_, let p, _) = $0 { return p == "/选择" }; return false }))
+        XCTAssertEqual(treeAfter["开关"], .bool(true), "toggle 应翻转")
+        XCTAssertEqual(treeAfter["选择"], .string("blue"), "select 应写入选中值")
+        XCTAssertEqual(treeAfter["草稿"], .string("你好"), "input 应写入提交文本")
+
+        // 同一 raw 重渲染：三种交互节点重新产出（UI 可继续操作 —— 闭环成立）。
+        let rerendered = renderAssistant(raw, rules: [rule], store: store, sessionId: sid)
+        XCTAssertEqual(actions(in: rerendered).count, 1)
+        var kinds = Set<NativeControl.Kind>()
+        for node in rerendered.tree.nodes {
+            if case let .nativeControl(c) = node { kinds.insert(c.kind) }
+        }
+        XCTAssertEqual(kinds, [.input, .select])
+
+        // 控件桥接到新 IR 的形态：RenderNodeTranspiler 把控制原语映射为 textInput / selection。
+        if case let .textInput(_, inputPath, _) = RenderNodeTranspiler.transpile(.nativeControl(inp)) {
+            XCTAssertEqual(inputPath, inp.path)
+        } else {
+            XCTFail("input 控件应桥接为 .textInput")
+        }
+        if case let .selection(_, selPath, selOpts) = RenderNodeTranspiler.transpile(.nativeControl(sel)) {
+            XCTAssertEqual(selPath, sel.path)
+            XCTAssertEqual(selOpts, sel.options)
+        } else {
+            XCTFail("select 控件应桥接为 .selection")
+        }
     }
 
     /// 第三条（动态数据）：深层嵌套结构经 patch 变化后，IR 重新投影出更新值；
