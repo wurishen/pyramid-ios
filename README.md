@@ -9,7 +9,7 @@ Pyramid 的最小原生 iOS 应用 —— 纯 SwiftUI，不依赖 WKWebView / �
 3. 选择 `Pyramid` scheme 与任意 iOS Simulator，⌘R 运行即可。
 4. 首次打开若提示 scheme，选 **Pyramid**（工程内已共享 scheme，正常应直接可用）。
 
-## 使用（v0.7.1）
+## 使用（v0.8）
 
 应用为两 Tab 结构：**聊天** 与 **设置**。设置项以二级页面组织（点设置里任意行进入子页，导航栏「<」返回）。
 
@@ -18,6 +18,13 @@ Pyramid 的最小原生 iOS 应用 —— 纯 SwiftUI，不依赖 WKWebView / �
 > **v0.7.1 新增**：渲染管线升级为 **RenderNode 架构**——`Raw → DisplayRegex → HideTags → RenderNodeParser → RenderTree → MessageCard`。模型原始输出里的 `<status>HP: 80\n好感度: 65</status>` 块会被解析成原生 SwiftUI `StatusView`（HP + 好感度面板，含 HP 颜色梯度：≥60 绿 / 30-60 橙 / <30 红），不再显示原始标签或纯文本。**长按消息卡片** 0.5s 弹出 **Render Inspector** 调试覆盖层（仅展示，不修改 raw）：原文 / 处理后 / RenderNode 树 / 命中的 DisplayRegex / 隐藏标签剥离状态。解析失败的 status 块自动降级为普通文本，不会丢内容。
 >
 > 设置 → 界面 新增 **界面缩放**（小 0.85 / 中 1.0 / 大 1.25，默认中），统一作用于消息卡片正文字号、楼层/时间辅助字号、头像尺寸、卡片内边距、列表间距与 Markdown 块级 padding；与「紧凑模式」叠加（先按缩放调基准，再叠加紧凑模式的间距减项）。`StatusView` 通过 `MessageCard` 调用处的 `.scaleEffect(scale)` 整体缩放，不修改内部字面量。切换档位立即生效（`@AppStorage` → SwiftUI 自动重绘）。
+>
+> **v0.8 新增：原生交互渲染层（变量树 + 原生控件 + 条件分支）**
+> ① **变量树**：每个会话一棵 JSON 变量树（角色卡的 `initStatData` 作种子，按会话隔离并持久化）。卡片正文里的 `{{getvar::path}}` 宏在**显示期**对当前变量树实时取值渲染（大小写不敏感、空白容忍，裸名视为根级字段）；其余宏（`{{setvar}}` 等）不在此范围，原样透传。出站宏 `{{user}}` / `{{char}}` 行为不变。
+> ② **原生控件**：按钮 `<NativeAction label="…" kind="updateVariable|toggle" path="/…" value="…"/>`（写入走 JSON Patch 语义）、输入框 `<NativeInput label? placeholder? path="/…"/>`、下拉选择 `<NativeSelect label? path="/…" values="v1,v2" labels?="甲,乙"/>`；`<UpdateVariable>` 块渲染为变量更新摘要面板（兼容旧 `<<UpdateVariable>>` 双尖括号拼写）。
+> ③ **条件分支 `<NativeIf>`**：解析一次、**显示期求值**。两种形态——叶形态 `<NativeIf path op value?>真体[<NativeElse/>假体]</NativeIf>`；结构化形态 `<NativeIf><NativeAll|NativeAny|NativeNot>组合条件</…><NativeThen>真体</NativeThen>[<NativeElse>假体</NativeElse>]</NativeIf>`。操作符：`eq / ne / gt / gte / lt / lte / exists / notexists / truthy / isempty / nonempty`。支持任意嵌套；变量一变即重算并自动切换分支，无需重发消息或重新解析。
+>
+> **保真规则不变**：任何畸形 / 未配对的交互标签整段留在文本流逐字可见，绝不拆散或吞内容。长按 Inspector 的 RenderNode 树新增 condition 节点行，显示条件表达式与当前命中的分支。
 
 ### 设置
 
@@ -66,7 +73,7 @@ Pyramid 的最小原生 iOS 应用 —— 纯 SwiftUI，不依赖 WKWebView / �
 - 预设：模型 / 系统提示词 / 世界书绑定 / 启用 Markdown / 显示用正则 ID 一键应用到会话。
 - 会话：多会话本地持久化、置顶、重命名、按角色 1:N 绑定、长按头像删除。
 - 消息操作：长按菜单（复制 / 编辑 / 重新生成 / 删除 / **包含在上下文切换**）+ 流式停止 + 错误重试；排除消息在 UI 显示但不进 API。
-- 显示管线：原始 → 显示用正则（仅助手；含角色内嵌 ST Regex Script 自动转出的条目）→ 隐藏标签剥离 → **RenderNode 解析**（`<status>` 块转原生 `StatusView`）→ Markdown / 原生面板渲染（仅作用于卡片，`MarkdownTextView` 块级排版 + `StatusView` 原生面板）。
+- 显示管线：原始 → 显示用正则（仅助手；含角色内嵌 ST Regex Script 自动转出的条目）→ 隐藏标签剥离 → **RenderNode 解析**（`<status>` 块转原生 `StatusView`；v0.8 起还解析 `{{getvar::}}` 宏绑定、`<UpdateVariable>`、`<NativeAction>/<NativeInput>/<NativeSelect>` 控件与 `<NativeIf>` 条件分支，见「使用」) → Markdown / 原生面板渲染（仅作用于卡片，`MarkdownTextView` 块级排版 + `StatusView` 原生面板）。
 - 宏：`{{user}}` / `{{User}}` / `{{char}}` / `{{Char}}`，仅作用于发送给 API 的文本。
 - 不含：云同步、第三方渲染（WKWebView / SFSafariViewController）、正则脚本热更新。
 - **数据兼容**：所有「v0.6 新增字段」（Character 的 8 个 ST 字段 + ChatMessage.isIncluded）走 `init(from:) decodeIfPresent` 给默认值，旧 v0.5 JSON / UserDefaults 数据 load 时自动补齐，**无需主动迁移、不会丢任何旧数据**。
@@ -79,10 +86,11 @@ Pyramid/
   PyramidApp.swift     App 入口（@main）
   ContentView.swift    Tab 容器（聊天 / 设置 + 长按聊天的悬浮气泡条）
   AppSettings.swift    API 配置（@AppStorage 本地持久化）
-  Models/              ChatMessage（含 isIncluded）、ChatSession、ChatCompletionRequest/Response、
-                       Character（含 SillyTavern 兼容字段）、WorldBook/Entry、Preset、
-                       DisplayRegex、ContextTrimMode、
-                       RenderNode / RenderNodeParser / RenderEngine（v0.7.1 渲染管线）
+   Models/              ChatMessage（含 isIncluded）、ChatSession、ChatCompletionRequest/Response、
+                        Character（含 SillyTavern 兼容字段）、WorldBook/Entry、Preset、
+                        DisplayRegex、ContextTrimMode、JSONValue / VariableStore（会话变量树）、
+                        TavernMacro、NativeCondition、NativeIR / TavernTranspiler、
+                        RenderNode / RenderNodeParser / RenderEngine（v0.7.1 渲染管线 + v0.8 原生交互层）
   Services/            OpenAIClient、WorldBookService（关键词匹配与注入）、
                        ImportSupport（原生 + SillyTavern JSON/PNG 解析）、Markdown 渲染
   Stores/              ChatStore、WorldBookStore、CharacterStore、PresetStore、DisplayRegexStore
