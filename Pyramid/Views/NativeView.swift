@@ -47,12 +47,18 @@ private struct NodeRenderer: View {
             return AnyView(Text("\(items.count) items"))
         case .container(let title, let children, _):
             return AnyView(Text("container \(title) \(children.count)"))
-        case .button(let label, _):
-            return AnyView(Text("button \(label)"))
-        case .textInput(let label, let path, _):
-            return AnyView(Text("input \(label ?? "") \(path)"))
+        case .button(let label, let action):
+            return AnyView(NatButtonView(label: label, action: action,
+                                        variableStore: variableStore,
+                                        sessionId: sessionId, scale: scale))
+        case .textInput(let label, let path, let placeholder):
+            return AnyView(NatInputView(label: label, path: path, placeholder: placeholder,
+                                       variableStore: variableStore,
+                                       sessionId: sessionId, scale: scale))
         case .selection(let label, let path, let options):
-            return AnyView(Text("selection \(label ?? "") \(path) \(options.count)"))
+            return AnyView(NatSelectionView(label: label, path: path, options: options,
+                                           variableStore: variableStore,
+                                           sessionId: sessionId, scale: scale))
         case .boundText:
             return AnyView(Text("bound"))
         case .branch(_, let whenTrue, let whenFalse):
@@ -199,5 +205,150 @@ private struct NatScriptPlaceholderView: View {
         Text("[placeholder] \(hint)")
             .font(.system(size: 11 * scale))
             .foregroundStyle(.tertiary)
+    }
+}
+
+// MARK: - Batch 3: 交互 view（button / input / select）
+private struct NatButtonView: View {
+    let label: String
+    let action: NativeAction
+    var variableStore: VariableStore? = nil
+    var sessionId: UUID? = nil
+    let scale: CGFloat
+
+    @State private var dispatchToken: Int = 0
+
+    var body: some View {
+        Button {
+            guard let store = variableStore, let sid = sessionId else { return }
+            let dispatcher = NativeActionDispatcher()
+            guard let ops = dispatcher.patches(
+                for: action,
+                currentTree: store.raw(forSession: sid)
+            ) else { return }
+            try? store.apply(ops, to: sid)
+            dispatchToken = dispatchToken &+ 1
+        } label: {
+            Label(label, systemImage: "hand.tap")
+                .font(.system(size: 14 * scale, weight: .medium))
+        }
+        .buttonStyle(.bordered)
+        .tint(.accentColor)
+        .padding(.vertical, 2)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: dispatchToken)
+    }
+}
+
+private struct NatInputView: View {
+    let label: String?
+    let path: String
+    let placeholder: String?
+    var variableStore: VariableStore? = nil
+    var sessionId: UUID? = nil
+    let scale: CGFloat
+
+    @State private var draft: String = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4 * scale) {
+            if let label = label {
+                Text(label)
+                    .font(.system(size: 13 * scale))
+                    .foregroundStyle(.secondary)
+            }
+            HStack(spacing: 6 * scale) {
+                TextField(placeholder ?? "",
+                          text: Binding<String>(
+                            get: { draft.isEmpty ? currentValueText : draft },
+                            set: { draft = $0 }
+                          ))
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 15 * scale))
+                Button("提交") {
+                    let text = draft.isEmpty ? currentValueText : draft
+                    applyValue(.string(text))
+                    draft = ""
+                }
+                .buttonStyle(.bordered)
+                .font(.system(size: 13 * scale, weight: .medium))
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var currentValueText: String {
+        guard let store = variableStore, let sid = sessionId,
+              let v = NativeActionDispatcher().value(at: path, in: store.raw(forSession: sid)),
+              case let .string(s) = v else {
+            return ""
+        }
+        return s
+    }
+
+    private func applyValue(_ v: JSONValue) {
+        guard let store = variableStore, let sid = sessionId else { return }
+        let dispatcher = NativeActionDispatcher()
+        guard let ops = dispatcher.patches(
+            for: .updateVariable(path: path, value: v),
+            currentTree: store.raw(forSession: sid)
+        ) else { return }
+        try? store.apply(ops, to: sid)
+    }
+}
+
+private struct NatSelectionView: View {
+    let label: String?
+    let path: String
+    let options: [NativeControlOption]
+    var variableStore: VariableStore? = nil
+    var sessionId: UUID? = nil
+    let scale: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4 * scale) {
+            if let label = label {
+                Text(label)
+                    .font(.system(size: 13 * scale))
+                    .foregroundStyle(.secondary)
+            }
+            Menu {
+                ForEach(options, id: \.value) { option in
+                    Button(option.label ?? option.value) {
+                        applyValue(.string(option.value))
+                    }
+                }
+            } label: {
+                Label(currentLabel, systemImage: "chevron.up.chevron.down")
+                    .font(.system(size: 14 * scale, weight: .medium))
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var currentValueText: String {
+        guard let store = variableStore, let sid = sessionId,
+              let v = NativeActionDispatcher().value(at: path, in: store.raw(forSession: sid)),
+              case let .string(s) = v else {
+            return ""
+        }
+        return s
+    }
+
+    private var currentLabel: String {
+        let current = currentValueText
+        if !current.isEmpty {
+            return options.first(where: { $0.value == current })?.label ?? current
+        }
+        return label ?? "选择"
+    }
+
+    private func applyValue(_ v: JSONValue) {
+        guard let store = variableStore, let sid = sessionId else { return }
+        let dispatcher = NativeActionDispatcher()
+        guard let ops = dispatcher.patches(
+            for: .updateVariable(path: path, value: v),
+            currentTree: store.raw(forSession: sid)
+        ) else { return }
+        try? store.apply(ops, to: sid)
     }
 }
