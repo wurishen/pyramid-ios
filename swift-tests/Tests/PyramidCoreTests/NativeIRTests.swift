@@ -324,6 +324,8 @@ final class NativeIRTests: XCTestCase {
                 out.append(title)
                 if anim != nil { out.append("anim") }
             case let .button(label, _): out.append("[button:\(label)]")
+            case let .textInput(label, path, _): out.append("[input:\(label ?? "")→\(path)]")
+            case let .selection(label, path, _): out.append("[select:\(label ?? "")→\(path)]")
             }
         }
         return out.joined(separator: " ")
