@@ -110,8 +110,10 @@ enum RenderNodeTranspiler {
         case let .htmlContainer(children):
             // P8 通用容器：把 children 转译成 IR list，整体再裹一层 container。
             // **不**替 children 赋业务语义 —— container 不绑定任何 Pyramid 组件名。
+            // 通用容器无标题（与 `.status`/`.statusFields` 的 "状态" 标题区分），
+            // 用空串占位 —— NativeIRNodeContainer.title 是 String，不是 String?。
             return .container(
-                title: nil,
+                title: "",
                 children: children.map(transpile),
                 animation: nil
             )
