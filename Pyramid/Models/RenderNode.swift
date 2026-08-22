@@ -58,6 +58,10 @@ enum RenderNode: Equatable, Sendable {
     /// 无法识别或无法解析的宏在片段里以字面量原样保留 —— 绝不静默删除。
     /// 无宏的普通文本仍是 `.text(String)`（零开销直通）。
     case macroText([MacroSegment])
+    /// P7 条件分支：**解析一次**的组合条件 + 预解析双分支。显示期对当前变量树
+    /// 求值选支 —— VariableStore 变化 → 分支自动切换，无需重发消息。
+    /// 解析失败不产生本节点（整段降级 `.text(原文)` residual —— 「无法解析」≠ false）。
+    case condition(NativeConditionNode)
 
     /// `.variableUpdate` 的摘要内容。
     struct VariableUpdateSummary: Equatable, Sendable {

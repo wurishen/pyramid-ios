@@ -12,6 +12,10 @@ struct NativePredicate: Equatable, Sendable {
         case notExists = "notexists"
         /// 通用真值：非 null 且按类型非空 / 非零 / 非 false。
         case truthy
+        /// 存在且为「空」（null / 空串 / 空数组 / 空对象）；路径缺失 → false。
+        case isEmpty = "isempty"
+        /// 存在且有内容；路径缺失 → false。
+        case nonEmpty = "nonempty"
     }
 
     let path: String
@@ -41,7 +45,7 @@ struct NativePredicate: Equatable, Sendable {
                 return nil
             }
             self.operand = scalar
-        case .exists, .notExists, .truthy:
+        case .exists, .notExists, .truthy, .isEmpty, .nonEmpty:
             self.operand = nil
         }
     }
@@ -69,6 +73,24 @@ struct NativePredicate: Equatable, Sendable {
             case .string(let s): return !s.isEmpty
             case .array(let a): return !a.isEmpty
             case .object(let o): return !o.isEmpty
+            }
+        case .isEmpty:
+            guard let v = current else { return false }
+            switch v {
+            case .null: return true
+            case .string(let s): return s.isEmpty
+            case .array(let a): return a.isEmpty
+            case .object(let o): return o.isEmpty
+            default: return false
+            }
+        case .nonEmpty:
+            guard let v = current else { return false }
+            switch v {
+            case .null: return false
+            case .string(let s): return !s.isEmpty
+            case .array(let a): return !a.isEmpty
+            case .object(let o): return !o.isEmpty
+            default: return true
             }
         case .eq:
             guard let current else { return false }
@@ -215,5 +237,233 @@ enum NativeConditionParser {
             attrs[ns.substring(with: m.range(at: 1)).lowercased()] = ns.substring(with: m.range(at: 2))
         }
         return attrs
+    }
+}
+
+// MARK: - 组合条件（NOT / AND / OR）
+
+/// 通用条件表达式 —— 叶子谓词 + 布尔组合子。**间接枚举**支持任意嵌套。
+///
+/// **零业务语义**：叶子只含 JSON Pointer + 比较符；不存在 HP / 好感度 等字段名分支。
+/// **安全**：只有查表 + 标量比较，无表达式语言、无脚本执行。
+indirect enum NativeCondition: Equatable, Sendable {
+    /// 叶子：单条路径谓词。
+    case predicate(NativePredicate)
+    case not(NativeCondition)
+    /// AND —— 全部成立才成立；空数组恒 true（单位元）。
+    case all([NativeCondition])
+    /// OR —— 任一成立即成立；空数组恒 false（单位元）。
+    case any([NativeCondition])
+
+    func evaluate(in tree: JSONValue) -> Bool {
+        switch self {
+        case .predicate(let p):
+            return p.evaluate(in: tree)
+        case .not(let inner):
+            return !inner.evaluate(in: tree)
+        case .all(let sub):
+            return sub.allSatisfy { $0.evaluate(in: tree) }
+        case .any(let sub):
+            return sub.contains { $0.evaluate(in: tree) }
+        }
+    }
+
+    /// 本条件引用的全部 JSON Pointer（依赖记录：仅这些路径变化才需要重算）。
+    var dependencies: Set<String> {
+        switch self {
+        case .predicate(let p):
+            return [p.path]
+        case .not(let inner):
+            return inner.dependencies
+        case .all(let sub), .any(let sub):
+            return sub.reduce(into: Set<String>()) { $0.formUnion($1.dependencies) }
+        }
+    }
+}
+
+/// `<NativeIf>` 的**解析一次**产物：条件 + 预解析双分支 + 原文。
+///
+/// 分支内容在解析期递归切成 `RenderNode`（可含 Text / Container / 宏绑定 /
+/// Input / Select / Button / 嵌套 Condition）；**求值发生在显示期**对当前变量树
+/// 执行 —— VariableStore 变化 → 重算 → 分支切换，无需重发消息、无需重新解析。
+struct NativeConditionNode: Equatable, Sendable {
+    let condition: NativeCondition
+    /// 原始 token（residual 溯源 / 调试）。
+    let raw: String
+    let whenTrue: [RenderNode]
+    let whenFalse: [RenderNode]
+
+    /// 对当前变量树选择应显示的分支。纯函数 —— UI / 测试共用同一判定。
+    func activeBranch(in tree: JSONValue) -> (nodes: [RenderNode], isTrue: Bool) {
+        condition.evaluate(in: tree) ? (whenTrue, true) : (whenFalse, false)
+    }
+}
+
+// MARK: - 结构化条件 token 解析
+
+/// 结构化条件语法（与 `<NativeAction>` 同族的声明式原语，非 HTML / 无 JS）：
+///
+/// ```xml
+/// <NativeIf>
+///   <NativeAll>
+///     <NativeWhen path="/state/a" op="gt" value="1"/>
+///     <NativeAny>
+///       <NativeWhen path="/state/b" op="eq" value="true"/>
+///       <NativeNot><NativeWhen path="/state/c" op="ne" value="0"/></NativeNot>
+///     </NativeAny>
+///   </NativeAll>
+///   <NativeThen>true 分支内容</NativeThen>
+///   <NativeElse>false 分支内容</NativeElse>
+/// </NativeIf>
+/// ```
+///
+/// 兼容第六阶段叶形态：`<NativeIf path op value?>body[<NativeElse/>body]</NativeIf>`。
+enum NativeConditionTokenParser {
+    private static func regex(_ pattern: String) -> NSRegularExpression? {
+        try? NSRegularExpression(pattern: pattern)
+    }
+
+    /// 自闭合或空 body 配对的 `<Tag …/>` 叶子属性。
+    static func leafAttrs(_ raw: String, tag: String) -> [String: String]? {
+        guard let shape = regex("(?is)^<\(tag)\\b([^>]*?)/?\\s*>\\s*(?:</\(tag)\\s*>)?$"),
+              let m = shape.firstMatch(in: raw, options: [], range: NSRange(location: 0, length: (raw as NSString).length)),
+              m.range(at: 1).location != NSNotFound else {
+            return nil
+        }
+        return NativeConditionParser.attributes(from: (raw as NSString).substring(with: m.range(at: 1)))
+    }
+
+    /// 第一个配平的 `<Tag …>…</Tag>` 块（同名嵌套安全）。返回 body 与整体 range。
+    static func firstBalancedBlock(in string: String, tag: String) -> (body: String, range: NSRange)? {
+        guard let tokenRegex = regex("(?is)<\(tag)\\b[^>]*>|</\(tag)\\s*>") else { return nil }
+        let ns = string as NSString
+        var openRange: NSRange?
+        var depth = 0
+        for m in tokenRegex.matches(in: string, options: [], range: NSRange(location: 0, length: ns.length)) {
+            if ns.substring(with: m.range).lowercased().hasPrefix("<\(tag.lowercased())") {
+                if openRange == nil { openRange = m.range }
+                depth += 1
+            } else if openRange != nil {
+                depth -= 1
+                if depth == 0 {
+                    let open = openRange!
+                    let bodyRange = NSRange(location: open.location + open.length,
+                                            length: m.range.location - (open.location + open.length))
+                    return (ns.substring(with: bodyRange),
+                            NSRange(location: open.location,
+                                    length: m.range.location + m.range.length - open.location))
+                }
+            }
+        }
+        return nil
+    }
+
+    /// 把一段结构化文本解析为 `NativeCondition`。任何畸形 → nil（调用方整段 residual）。
+    ///
+    /// 递归下降：`<NativeWhen/>` 叶子；`<NativeAll>/<NativeAny>/<NativeNot>` 配平块组合；
+    /// 块之间的裸文本一律非法（防静默吞内容）。
+    static func condition(from string: String) -> NativeCondition? {
+        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return nil }
+
+        if let attrs = leafAttrs(trimmed, tag: "NativeWhen"), let p = NativePredicate(attrs: attrs) {
+            return .predicate(p)
+        }
+        for (tag, builder) in [("NativeAll", NativeCondition.all), ("NativeAny", NativeCondition.any)] {
+            if trimmed.hasPrefix("<\(tag)") {
+                guard let block = balancedSelfBlock(trimmed, tag: tag) else { return nil }
+                let children = splitTopLevel(block.body)
+                guard !children.isEmpty else { return nil }
+                var parsed: [NativeCondition] = []
+                for child in children {
+                    guard let c = condition(from: child) else { return nil }
+                    parsed.append(c)
+                }
+                return builder(parsed)
+            }
+        }
+        if trimmed.hasPrefix("<NativeNot") {
+            guard let block = balancedSelfBlock(trimmed, tag: "NativeNot") else { return nil }
+            return condition(from: block.body).map { .not($0) }
+        }
+        return nil
+    }
+
+    /// `<Tag …>…</Tag>` 且块占满整个输入（配平）；否则 nil。
+    private static func balancedSelfBlock(_ raw: String, tag: String) -> (body: String)? {
+        guard let tokenRegex = regex("(?is)<\(tag)\\b[^>]*>|</\(tag)\\s*>") else { return nil }
+        let ns = raw as NSString
+        guard let first = tokenRegex.firstMatch(in: raw, options: [], range: NSRange(location: 0, length: ns.length)),
+              first.range.location == 0 else {
+            return nil
+        }
+        var depth = 0
+        for m in tokenRegex.matches(in: raw, options: [], range: NSRange(location: 0, length: ns.length)) {
+            if ns.substring(with: m.range).lowercased().hasPrefix("<\(tag.lowercased())") {
+                depth += 1
+            } else {
+                depth -= 1
+                if depth == 0 {
+                    // 必须恰好吃满输入。
+                    guard m.range.location + m.range.length == ns.length else { return nil }
+                    let open = first.range
+                    let bodyRange = NSRange(location: open.location + open.length,
+                                            length: m.range.location - (open.location + open.length))
+                    return (ns.substring(with: bodyRange))
+                }
+            }
+        }
+        return nil
+    }
+
+    /// 按顶层 token 切分子块（嵌套深度归零处切分）。纯空白间隙跳过；
+    /// 非空白裸文本保留为独立片段 —— 上层解析该片段必然失败 → 整段 residual（严格非法信号）。
+    static func splitTopLevel(_ string: String) -> [String] {
+        guard let tokenRegex = regex("(?is)<Native(?:When|All|Any|Not)\\b[^>]*>|</Native(?:All|Any|Not)\\s*>") else {
+            return []
+        }
+        let ns = string as NSString
+        var pieces: [String] = []
+        var depth = 0
+        var pieceStart = 0
+
+        func flushGap(_ upTo: Int) {
+            guard upTo > pieceStart else { return }
+            let gap = ns.substring(with: NSRange(location: pieceStart, length: upTo - pieceStart))
+            if !gap.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                pieces.append(gap)
+            }
+        }
+
+        for m in tokenRegex.matches(in: string, options: [], range: NSRange(location: 0, length: ns.length)) {
+            let tok = ns.substring(with: m.range)
+            let low = tok.lowercased()
+            let isClose = low.hasPrefix("</")
+            // 自闭合叶子：`<NativeWhen …/>`。配对形 `<NativeWhen…></NativeWhen>` 走开/闭计数。
+            let isSelfClosing = !isClose && tok.hasSuffix("/>")
+            if isClose {
+                depth -= 1
+                if depth == 0 {
+                    pieces.append(ns.substring(with: NSRange(location: pieceStart,
+                                                             length: m.range.location + m.range.length - pieceStart)))
+                    pieceStart = m.range.location + m.range.length
+                }
+            } else if isSelfClosing {
+                if depth == 0 {
+                    flushGap(m.range.location)
+                    pieces.append(tok)
+                    pieceStart = m.range.location + m.range.length
+                }
+            } else {
+                if depth == 0 {
+                    flushGap(m.range.location)
+                    pieceStart = m.range.location
+                }
+                depth += 1
+            }
+        }
+        if depth != 0 { return [] }
+        flushGap(ns.length)
+        return pieces
     }
 }

@@ -223,6 +223,10 @@ struct MessageCard: View {
             // 任意交互 / patch 写入触发刷新 → 重算片段（不重新解析）→ 文本同步更新。
             // store 缺失（fixture）→ 空树求值，缺失变量回退原文，内容不丢。
             macroTextView(segments, isLong: isLong, scale: scale)
+        case let .condition(node):
+            // 条件分支：对当前变量树求值选支，递归渲染该分支的预解析节点。
+            // store 变化 → 重算 → 分支自动切换（无需重发消息）。
+            conditionBranchView(node, isLong: isLong, scale: scale)
         case let .variableUpdate(summary):
             // P3 native transpile：`<UpdateVariable>…</UpdateVariable>` 块 → 可折叠摘要。
             VariableUpdateView(summary: summary, scale: scale)
@@ -236,6 +240,14 @@ struct MessageCard: View {
             isLong: isLong,
             scale: scale
         )
+    }
+
+    /// 条件分支：对当前变量树求值选支，递归渲染分支内的预解析节点（可含嵌套条件）。
+    private func conditionBranchView(_ node: NativeConditionNode, isLong: Bool, scale: CGFloat) -> some View {
+        let (branch, _) = node.activeBranch(in: currentVariableTree)
+        return ForEach(Array(branch.enumerated()), id: \.offset) { _, sub in
+            renderNode(sub, isLong: isLong, scale: scale)
+        }
     }
 
     private var currentVariableTree: JSONValue {

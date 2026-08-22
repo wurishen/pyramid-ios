@@ -191,24 +191,35 @@ final class TavernMacroTests: XCTestCase {
         RenderNodeParser.parse(body, statData: { tree }, applyPatches: { _ in 0 }).nodes
     }
 
-    /// 要求 10：通用 true/false 分支 —— 成立显示、隐藏即消失（原始 raw 消息仍在）。
+    /// 要求 10：通用 true/false 分支 —— 解析产出携带双分支的 `.condition` 节点，
+    /// 显示期对当前树求值选支（P7 起：同一解析产物随变量变化自动切换）。
     func testConditionTrueFalseBranches() {
-        let tree: JSONValue = .object(["开关": .bool(true), "金币": .int(30)])
-
-        let truthy = parseCondition("<NativeIf path=\"/开关\" op=\"truthy\">开着的</NativeIf>", tree: tree)
+        let raw = "<NativeIf path=\"/开关\" op=\"truthy\">开着的</NativeIf>"
+        let truthy = parseCondition(raw, tree: .object(["开关": .bool(true), "金币": .int(30)]))
         XCTAssertEqual(truthy.count, 1)
-        XCTAssertEqual(truthy[0], .text("开着的"))
+        guard case let .condition(node)? = truthy.first else {
+            return XCTFail("应为 .condition 节点")
+        }
+        XCTAssertEqual(node.whenFalse, [], "无 Else 的叶形态：false 分支为空（隐藏）")
 
-        let hidden = parseCondition("<NativeIf path=\"/开关\" op=\"truthy\">不该出现</NativeIf>",
-                                    tree: .object(["开关": .bool(false)]))
-        // 隐藏分支 → 空 text 占位（内容不渲染；原文在 raw 消息里永不丢）。
-        XCTAssertEqual(hidden, [.text("")])
+        // 同一解析产物，不同变量树 → 不同分支选中（显示期求值，无需重新解析）。
+        let (trueBranch, isTrue) = node.activeBranch(in: .object(["开关": .bool(true)]))
+        XCTAssertTrue(isTrue)
+        XCTAssertEqual(trueBranch.count, 1)
+        if case let .text(t)? = trueBranch.first { XCTAssertEqual(t, "开着的") } else {
+            XCTFail("true 分支应为文本节点")
+        }
+        let (falseBranch, isTrue2) = node.activeBranch(in: .object(["开关": .bool(false)]))
+        XCTAssertFalse(isTrue2)
+        XCTAssertEqual(falseBranch, [])
 
-        let eqNumeric = parseCondition("<NativeIf path=\"/金币\" op=\"gte\" value=\"25\">够钱</NativeIf>", tree: tree)
-        XCTAssertEqual(eqNumeric, [.text("够钱")])
-
-        let eqFail = parseCondition("<NativeIf path=\"/金币\" op=\"lt\" value=\"25\">穷</NativeIf>", tree: tree)
-        XCTAssertEqual(eqFail, [.text("")])
+        let eqNumeric = parseCondition("<NativeIf path=\"/金币\" op=\"gte\" value=\"25\">够钱</NativeIf>",
+                                       tree: .object(["金币": .int(30)]))
+        guard case let .condition(gte)? = eqNumeric.first else {
+            return XCTFail("gte 条件应为 .condition 节点")
+        }
+        XCTAssertTrue(gte.condition.evaluate(in: .object(["金币": .int(30)])))
+        XCTAssertFalse(gte.condition.evaluate(in: .object(["金币": .int(5)])))
     }
 
     /// 条件谓词单元语义：数值互通、字符串序、exists/notExists、ne 缺失路径为 false。
@@ -294,7 +305,7 @@ final class TavernMacroTests: XCTestCase {
         }
     }
 
-    /// 条件块嵌套宏 + 嵌套条件：成立分支里的宏照常求值。
+    /// 条件块嵌套宏 + 嵌套条件：成立分支预解析后，显示期求值渲染出完整内容。
     func testConditionBodyContainsMacrosAndNesting() {
         let tree: JSONValue = .object([
             "开着": .bool(true),
@@ -304,14 +315,27 @@ final class TavernMacroTests: XCTestCase {
         let raw = "<NativeIf path=\"/开着\" op=\"truthy\">灯亮着，{{getvar::/宝藏}} 金币" +
             "<NativeIf path=\"/层数\" op=\"gte\" value=\"2\">，楼梯向下</NativeIf></NativeIf>"
         let nodes = parseCondition(raw, tree: tree)
-        let joined = nodes.map { node -> String in
-            switch node {
-            case .text(let t): return t
-            case .macroText(let segs): return MacroRenderer.render(segments: segs, tree: tree)
-            default: return ""
-            }
-        }.joined()
-        XCTAssertEqual(joined, "灯亮着，9 金币，楼梯向下")
+        XCTAssertEqual(nodes.count, 1)
+        guard case let .condition(node)? = nodes.first else {
+            return XCTFail("应为 .condition 节点")
+        }
+        // 嵌套：true 分支里含 macroText + 内层 .condition。
+        XCTAssertEqual(node.whenTrue.count, 2)
+
+        func render(_ ns: [RenderNode], in t: JSONValue) -> String {
+            ns.map { n -> String in
+                switch n {
+                case .text(let s): return s
+                case .macroText(let segs): return MacroRenderer.render(segments: segs, tree: t)
+                case .condition(let c): return render(c.activeBranch(in: t).nodes, in: t)
+                default: return ""
+                }
+            }.joined()
+        }
+        XCTAssertEqual(render(node.whenTrue, in: tree), "灯亮着，9 金币，楼梯向下")
+        // 变量翻转 → 同一解析产物切到 false 分支（动态更新语义）。
+        let flipped: JSONValue = .object(["开着": .bool(false), "层数": .int(2), "宝藏": .int(9)])
+        XCTAssertEqual(render(node.activeBranch(in: flipped).nodes, in: flipped), "")
     }
 
     /// deferred 层把 `<NativeIf>` 整体路由进文本流（parser 可见），畸形不命中 → 冻结残留。

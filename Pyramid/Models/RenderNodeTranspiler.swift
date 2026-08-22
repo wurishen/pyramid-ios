@@ -98,6 +98,14 @@ enum RenderNodeTranspiler {
         case let .macroText(segments):
             // 宏绑定文本：结构完整进入 IR（boundText）；求值由渲染层对当前变量树执行。
             return .boundText(segments: segments)
+
+        case let .condition(node):
+            // 条件分支：条件 + 双分支各自转译为 IR 子树；求值发生在渲染层。
+            return .branch(
+                condition: node.condition,
+                whenTrue: node.whenTrue.map(transpile),
+                whenFalse: node.whenFalse.map(transpile)
+            )
         }
     }
 

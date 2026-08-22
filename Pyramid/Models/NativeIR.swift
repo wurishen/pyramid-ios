@@ -61,4 +61,7 @@ indirect enum NativeIRNode: Equatable, Sendable {
     /// 结构完整进入 IR。渲染层对当前变量树求值（变量更新 → 重算 → 新内容）；
     /// 未识别 / 缺失的绑定回退原文 —— 信息不丢。
     case boundText(segments: [MacroSegment])
+    /// 条件分支：解析一次的组合条件 + 预转译双分支。渲染层对当前变量树求值选支
+    /// （变量更新 → 重算 → 分支切换）；两支内容都是任意 NativeIRNode 子树。
+    case branch(condition: NativeCondition, whenTrue: [NativeIRNode], whenFalse: [NativeIRNode])
 }

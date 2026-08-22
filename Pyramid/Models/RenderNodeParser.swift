@@ -169,12 +169,11 @@ enum RenderNodeParser {
                     nodes.append(parseNativeControlBlock(rawBlock))
                 }
             case .condition:
-                // 条件块：成立 → body 递归解析后的节点序列；隐藏 → 空 text 占位
-                // （防整树为空触发「整体回退原文」把隐藏内容复活）；畸形 → 原文保真。
+                // 条件块：**解析一次**成携带预解析双分支的节点；求值在显示期对当前
+                // 变量树执行（变量变化 → 分支切换，无需重发消息）。畸形 → 原文保真。
                 nodes.append(
                     contentsOf: parseConditionBlock(
                         rawBlock,
-                        statData: statData,
                         applyPatches: applyPatches,
                         depth: depth
                     )
@@ -191,25 +190,104 @@ enum RenderNodeParser {
         return RenderTree(nodes: nodes)
     }
 
-    /// `<NativeIf path op value?>body</NativeIf>` —— 通用条件原语。
-    /// 成立 → body 以 depth+1 递归走完整解析（可嵌套 token / 宏）；
-    /// 隐藏 → `.text("")` 占位；任何解析失败 / 超深 → `.text(整段)` 保真。
+    /// `<NativeIf>` —— 通用条件分支原语（解析一次 / 显示期求值）。
+    ///
+    /// 两种形态：
+    /// 1. 叶（第六阶段兼容）：`<NativeIf path op value?>trueBody[<NativeElse/>falseBody]</NativeIf>`
+    /// 2. 结构化：`<NativeIf><NativeAll|NativeAny|NativeNot>…组合…</…>
+    ///    <NativeThen>trueBody</NativeThen>[<NativeElse>falseBody</NativeElse>]</NativeIf>`
+    ///
+    /// 产出 `.condition` 节点，携带条件 + 预解析双分支 + 原文；任何解析失败
+    /// （缺属性 / 未知 op / 组合畸形 / 超深）→ 整段 `.text(原文)` residual 保真
+    /// —— 「无法解析」绝不等于 false。
     private static func parseConditionBlock(
         _ raw: String,
-        statData: () -> JSONValue,
         applyPatches: ([JSONPatchOperation]) throws -> Int,
         depth: Int
     ) -> [RenderNode] {
         guard depth < NativeConditionParser.maxDepth,
-              let (attrsString, body) = NativeConditionParser.extract(raw),
-              let predicate = NativePredicate(attrs: NativeConditionParser.attributes(from: attrsString)) else {
+              let (attrsString, body) = NativeConditionParser.extract(raw) else {
             return [.text(raw)]
         }
-        guard predicate.evaluate(in: statData()) else {
-            return [.text("")]
+        let attrs = NativeConditionParser.attributes(from: attrsString)
+
+        let condition: NativeCondition
+        var trueBody = body
+        var falseBody = ""
+        if attrs["path"] != nil, attrs["op"] != nil {
+            // 叶形态：谓词来自属性；body 按顶层 <NativeElse/> 切双分支。
+            guard let predicate = NativePredicate(attrs: attrs) else {
+                return [.text(raw)]
+            }
+            condition = .predicate(predicate)
+            if let (t, f) = splitTopLevelElse(body) {
+                trueBody = t
+                falseBody = f
+            }
+        } else {
+            // 结构化形态：<NativeThen>/<NativeElse> 块 + 其余部分为条件组合。
+            let thenBlock = NativeConditionTokenParser.firstBalancedBlock(in: body, tag: "NativeThen")
+            let elseBlock = NativeConditionTokenParser.firstBalancedBlock(in: body, tag: "NativeElse")
+            guard thenBlock != nil || elseBlock != nil else {
+                return [.text(raw)]
+            }
+            trueBody = thenBlock?.body ?? ""
+            falseBody = elseBlock?.body ?? ""
+            let condString = remainder(of: body, removing: [thenBlock?.range, elseBlock?.range].compactMap { $0 })
+            guard let parsed = NativeConditionTokenParser.condition(from: condString) else {
+                return [.text(raw)]
+            }
+            condition = parsed
         }
-        let childTree = parse(body, statData: statData, applyPatches: applyPatches, depth: depth + 1)
-        return childTree.nodes.isEmpty ? [.text("")] : childTree.nodes
+
+        func branchNodes(_ bodyText: String) -> [RenderNode] {
+            let tree = parse(bodyText, statData: { .object([:]) }, applyPatches: applyPatches, depth: depth + 1)
+            return tree.nodes
+        }
+
+        return [.condition(NativeConditionNode(
+            condition: condition,
+            raw: raw,
+            whenTrue: branchNodes(trueBody),
+            whenFalse: branchNodes(falseBody)
+        ))]
+    }
+
+    /// 分支递归解析共用的空树闭包（分支内不再需要 parse 期变量值）。
+    /// 叶形态 body 按**不在嵌套 NativeIf 内**的首个 `<NativeElse/>` 切分。
+    private static func splitTopLevelElse(_ body: String) -> (String, String)? {
+        guard let marker = try? NSRegularExpression(pattern: "(?is)<NativeElse\\s*/?>") else { return nil }
+        let ns = body as NSString
+        // 嵌套（完整配平的）子 If 块内的 Else 不属于本层。
+        let nested = NativeConditionParser.balancedRanges(in: body)
+        for m in marker.matches(in: body, options: [], range: NSRange(location: 0, length: ns.length)) {
+            if !nested.contains(where: { $0.lowerBound <= m.range.location && NSMaxRange($0) > m.range.location }) {
+                let head = ns.substring(with: NSRange(location: 0, length: m.range.location))
+                let tailLoc = m.range.location + m.range.length
+                let tail = ns.substring(with: NSRange(location: tailLoc, length: ns.length - tailLoc))
+                return (head, tail)
+            }
+        }
+        return nil
+    }
+
+    /// 从原文中移除给定区间后的剩余文本（保序拼接）。
+    private static func remainder(of text: String, removing ranges: [NSRange]) -> String {
+        guard !ranges.isEmpty else { return text }
+        let sorted = ranges.sorted { $0.location < $1.location }
+        let ns = text as NSString
+        var out = ""
+        var cursor = 0
+        for r in sorted where r.location >= cursor {
+            if r.location > cursor {
+                out += ns.substring(with: NSRange(location: cursor, length: r.location - cursor))
+            }
+            cursor = r.location + r.length
+        }
+        if cursor < ns.length {
+            out += ns.substring(from: cursor)
+        }
+        return out
     }
 
     // MARK: - 第二遍：P1 <status>

@@ -53,6 +53,7 @@ let package = Package(
                 "PromptOnlyRegexTests.swift",
                 "TavernTranspilerTests.swift",
                 "TavernMacroTests.swift",
+                "TavernConditionTests.swift",
                 "DeferredDisplayRegexTests.swift",
                 "TavernChainIntegrationTests.swift",
             ]

@@ -443,6 +443,8 @@ final class TavernTranspilerTests: XCTestCase {
             case let .selection(label, path, _): out.append("[select:\(label ?? "")→\(path)]")
             case let .boundText(segments):
                 out.append("[bound \(segments.count)段]")
+            case let .branch(condition, whenTrue, whenFalse):
+                out.append("[cond deps:\(condition.dependencies.count) T:\(whenTrue.count)/F:\(whenFalse.count)]")
             }
             if case let .container(_, children, _) = n {
                 for c in children { visit(c) }
