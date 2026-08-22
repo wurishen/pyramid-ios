@@ -386,7 +386,7 @@ final class TavernChainIntegrationTests: XCTestCase {
 
         // 状态一：HP=1
         let r1 = renderAssistant(raw, rules: [rule], store: store, sessionId: sid)
-        XCTAssertEqual(placeholders(r1).count, 1)
+        XCTAssertEqual(placeholders(in: r1).count, 1)
         let ir1 = TavernTranspiler.transpile(.statusPlaceholder(store.raw(forSession: sid)))
         XCTAssertTrue(irNumbers(ir1).contains(where: { $0.value == 1 && $0.label == "HP" }))
 
@@ -394,7 +394,7 @@ final class TavernChainIntegrationTests: XCTestCase {
         let ops = [JSONPatchOperation(op: .replace, path: "/HP", value: .int(99))]
         XCTAssertEqual(try store.apply(ops, to: sid), 1)
         let r2 = renderAssistant(raw, rules: [rule], store: store, sessionId: sid)
-        XCTAssertEqual(placeholders(r2).count, 1)
+        XCTAssertEqual(placeholders(in: r2).count, 1)
         let ir2 = TavernTranspiler.transpile(.statusPlaceholder(store.raw(forSession: sid)))
         XCTAssertTrue(irNumbers(ir2).contains(where: { $0.value == 99 && $0.label == "HP" }),
                       "变量更新后应重新投影出 HP=99")
