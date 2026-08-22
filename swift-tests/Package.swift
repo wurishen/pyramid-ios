@@ -58,6 +58,7 @@ let package = Package(
                 "TavernChainIntegrationTests.swift",
                 "HTMLTranspilerTests.swift",
                 "AnimationIntentAnalyzerTests.swift",
+                "ClosureLoopTests.swift",
             ]
         ),
     ]

@@ -52,6 +52,7 @@
 		AB0000000000000000000521 /* AnimationIR.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000522 /* AnimationIR.swift */; };
 		AB0000000000000000000523 /* AnimationRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000524 /* AnimationRenderer.swift */; };
 		AB0000000000000000000525 /* AnimationIntentAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000526 /* AnimationIntentAnalyzer.swift */; };
+		AB0000000000000000000530 /* NativeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000531 /* NativeView.swift */; };
 		AB0000000000000000000282 /* SillyTavernRegexScript.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000283 /* SillyTavernRegexScript.swift */; };
 		AB0000000000000000000290 /* MessageRendererCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000291 /* MessageRendererCore.swift */; };
 		AB0000000000000000000292 /* RenderEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000293 /* RenderEngine.swift */; };
@@ -147,6 +148,7 @@
 		AB0000000000000000000522 /* AnimationIR.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimationIR.swift; sourceTree = "<group>"; };
 		AB0000000000000000000524 /* AnimationRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimationRenderer.swift; sourceTree = "<group>"; };
 		AB0000000000000000000526 /* AnimationIntentAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimationIntentAnalyzer.swift; sourceTree = "<group>"; };
+		AB0000000000000000000531 /* NativeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeView.swift; sourceTree = "<group>"; };
 		AB0000000000000000000281 /* AvatarImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarImageCache.swift; sourceTree = "<group>"; };
 		AB0000000000000000000222 /* DisplayRegexListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayRegexListView.swift; sourceTree = "<group>"; };
 		AB00000000000000000000A1 /* ImportSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportSupport.swift; sourceTree = "<group>"; };
@@ -287,6 +289,7 @@
 				AB0000000000000000000295 /* RenderInspectorView.swift */,
 				AB000000000000000000029F /* StatusView.swift */,
 				AB0000000000000000000524 /* AnimationRenderer.swift */,
+				AB0000000000000000000531 /* NativeView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -440,6 +443,7 @@
 				AB0000000000000000000521 /* AnimationIR.swift in Sources */,
 				AB0000000000000000000525 /* AnimationIntentAnalyzer.swift in Sources */,
 				AB0000000000000000000523 /* AnimationRenderer.swift in Sources */,
+				AB0000000000000000000530 /* NativeView.swift in Sources */,
 					AB0000000000000000000420 /* NativeCondition.swift in Sources */,
 					AB000000000000000000041E /* TavernMacro.swift in Sources */,
 				AB000000000000000000029E /* StatusView.swift in Sources */,
