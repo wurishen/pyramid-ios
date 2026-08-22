@@ -182,7 +182,7 @@ final class HTMLTranspilerTests: XCTestCase {
         }
         // children 里应有 macroText（绑定到 /hp）
         XCTAssertTrue(children.contains { node in
-            if case .macroText = node { return true } else return false
+            if case .macroText = node { return true } else { return false }
         }, "expected macroText binding inside container, got \(children)")
     }
 
@@ -241,7 +241,7 @@ final class HTMLTranspilerTests: XCTestCase {
         )
         // 应该至少含一个 htmlContainer
         let hasContainer = tree.nodes.contains { node in
-            if case .htmlContainer = node { return true } else return false
+            if case .htmlContainer = node { return true } else { return false }
         }
         XCTAssertTrue(hasContainer, "expected htmlContainer in tree, got \(tree.nodes)")
     }
@@ -273,7 +273,7 @@ final class HTMLTranspilerTests: XCTestCase {
         XCTAssertTrue(residual.replacement.contains("attacker.example.com"))
         // 不应产出任何 .htmlExternalResource —— .load() 在 <script> 体内被视作脚本内容，整段降级
         XCTAssertFalse(nodes.contains { node in
-            if case .htmlExternalResource = node { return true } else return false
+            if case .htmlExternalResource = node { return true } else { return false }
         })
     }
 
@@ -313,10 +313,10 @@ final class HTMLTranspilerTests: XCTestCase {
         """
         let nodes = HTMLTranspiler.transpile(input)
         // 应有：text, htmlLink, htmlScript, nativeControl, text
-        XCTAssertTrue(nodes.contains { if case .text = $0 { return true } else return false })
-        XCTAssertTrue(nodes.contains { if case .htmlLink = $0 { return true } else return false })
-        XCTAssertTrue(nodes.contains { if case .htmlScript = $0 { return true } else return false })
-        XCTAssertTrue(nodes.contains { if case .nativeControl = $0 { return true } else return false })
+        XCTAssertTrue(nodes.contains { if case .text = $0 { return true } else { return false } })
+        XCTAssertTrue(nodes.contains { if case .htmlLink = $0 { return true } else { return false } })
+        XCTAssertTrue(nodes.contains { if case .htmlScript = $0 { return true } else { return false } })
+        XCTAssertTrue(nodes.contains { if case .nativeControl = $0 { return true } else { return false } })
     }
 
     // MARK: - 13. RenderNodeTranspiler 桥接正确性
