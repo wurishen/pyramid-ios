@@ -246,7 +246,7 @@ enum NativeConditionParser {
 ///
 /// **零业务语义**：叶子只含 JSON Pointer + 比较符；不存在 HP / 好感度 等字段名分支。
 /// **安全**：只有查表 + 标量比较，无表达式语言、无脚本执行。
-indirect enum NativeCondition: Equatable, Sendable {
+indirect enum NativeCondition: Sendable {
     /// 叶子：单条路径谓词。
     case predicate(NativePredicate)
     case not(NativeCondition)
@@ -286,7 +286,7 @@ indirect enum NativeCondition: Equatable, Sendable {
 /// 分支内容在解析期递归切成 `RenderNode`（可含 Text / Container / 宏绑定 /
 /// Input / Select / Button / 嵌套 Condition）；**求值发生在显示期**对当前变量树
 /// 执行 —— VariableStore 变化 → 重算 → 分支切换，无需重发消息、无需重新解析。
-struct NativeConditionNode: Equatable, Sendable {
+struct NativeConditionNode: Sendable {
     let condition: NativeCondition
     /// 原始 token（residual 溯源 / 调试）。
     let raw: String
@@ -296,6 +296,35 @@ struct NativeConditionNode: Equatable, Sendable {
     /// 对当前变量树选择应显示的分支。纯函数 —— UI / 测试共用同一判定。
     func activeBranch(in tree: JSONValue) -> (nodes: [RenderNode], isTrue: Bool) {
         condition.evaluate(in: tree) ? (whenTrue, true) : (whenFalse, false)
+    }
+}
+
+// MARK: - 手写 Equatable
+
+/// 递归值类型（NativeCondition ↔ NativeConditionNode ↔ RenderNode）的相等性
+/// **手写实现**，不走编译器合成 —— 全模块优化下深层递归合成是已知的
+/// 编译器崩溃 / 爆栈路径，且合成版本无行为差异。
+extension NativeCondition: Equatable {
+    static func == (lhs: NativeCondition, rhs: NativeCondition) -> Bool {
+        switch (lhs, rhs) {
+        case let (.predicate(a), .predicate(b)):
+            return a == b
+        case let (.not(a), .not(b)):
+            return a == b
+        case let (.all(a), .all(b)), let (.any(a), .any(b)):
+            return a.count == b.count && zip(a, b).allSatisfy { $0 == $1 }
+        default:
+            return false
+        }
+    }
+}
+
+extension NativeConditionNode: Equatable {
+    static func == (lhs: NativeConditionNode, rhs: NativeConditionNode) -> Bool {
+        lhs.condition == rhs.condition
+            && lhs.raw == rhs.raw
+            && lhs.whenTrue == rhs.whenTrue
+            && lhs.whenFalse == rhs.whenFalse
     }
 }
 
@@ -369,7 +398,8 @@ enum NativeConditionTokenParser {
         if let attrs = leafAttrs(trimmed, tag: "NativeWhen"), let p = NativePredicate(attrs: attrs) {
             return .predicate(p)
         }
-        for (tag, builder) in [("NativeAll", NativeCondition.all), ("NativeAny", NativeCondition.any)] {
+        // 组合块：显式逐标签处理（不用枚举 case 当函数值，保持类型检查路径平凡）。
+        for tag in ["NativeAll", "NativeAny"] {
             if trimmed.hasPrefix("<\(tag)") {
                 guard let block = balancedSelfBlock(trimmed, tag: tag) else { return nil }
                 let children = splitTopLevel(block)
@@ -379,7 +409,7 @@ enum NativeConditionTokenParser {
                     guard let c = condition(from: child) else { return nil }
                     parsed.append(c)
                 }
-                return builder(parsed)
+                return tag == "NativeAll" ? .all(parsed) : .any(parsed)
             }
         }
         if trimmed.hasPrefix("<NativeNot") {
