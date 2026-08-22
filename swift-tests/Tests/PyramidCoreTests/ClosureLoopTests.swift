@@ -315,4 +315,165 @@ final class ClosureLoopTests: XCTestCase {
             XCTFail("fade-in 应配 .onAction(class-toggle:fade-in)")
         }
     }
+
+    // MARK: - Test K：onPathChange —— store 变化 → path token bump
+
+    /// Test K: 协调器对 watched path 做值对比；变化 +1，未变 / 无关 path 不动。
+    /// 这是「状态变化 → 动画重放」的调度语义核心。
+    func testKPathChangeBumpsToken() {
+        let coordinator = AnimationTriggerCoordinator()
+        let anims = [
+            AnimationIR(property: .opacity, from: 0, to: 1, durationMs: 300,
+                        trigger: .onPathChange(path: "/HP")),
+            AnimationIR(property: .scale, from: 0.9, to: 1, durationMs: 200,
+                        trigger: .onPathChange(path: "/MP")),
+        ]
+        let initial: JSONValue = .object(["HP": .int(30), "MP": .int(10)])
+        coordinator.watch(anims, initialTree: initial)
+
+        // 初始快照不触发。
+        XCTAssertEqual(coordinator.token(for: .onPathChange(path: "/HP")), AnyHashable(0))
+        XCTAssertEqual(coordinator.token(for: .onPathChange(path: "/MP")), AnyHashable(0))
+
+        // HP 30→100：HP token +1，MP 不动。
+        coordinator.storeDidChange(tree: .object(["HP": .int(100), "MP": .int(10)]))
+        XCTAssertEqual(coordinator.token(for: .onPathChange(path: "/HP")), AnyHashable(1))
+        XCTAssertEqual(coordinator.token(for: .onPathChange(path: "/MP")), AnyHashable(0))
+
+        // 同值再报：不重复 bump（值对比而非通知计数）。
+        coordinator.storeDidChange(tree: .object(["HP": .int(100), "MP": .int(10)]))
+        XCTAssertEqual(coordinator.token(for: .onPathChange(path: "/HP")), AnyHashable(1))
+
+        // MP 10→99：只有 MP 动。
+        coordinator.storeDidChange(tree: .object(["HP": .int(100), "MP": .int(99)]))
+        XCTAssertEqual(coordinator.token(for: .onPathChange(path: "/HP")), AnyHashable(1))
+        XCTAssertEqual(coordinator.token(for: .onPathChange(path: "/MP")), AnyHashable(1))
+
+        // onAppear/onDisappear 不归协调器管 → nil token。
+        XCTAssertNil(coordinator.token(for: .onAppear))
+        XCTAssertNil(coordinator.token(for: .onDisappear))
+    }
+
+    // MARK: - Test L：onAction —— action key 匹配规则
+
+    /// Test L: fire(action) 按 key 规则 bump —— updateVariable / toggle /
+    /// custom(key) 各自命中；navigate 无 key；脚本派生 key（class-toggle:*）
+    /// 在原生运行时没有生产者，保持 inert（数据保真、不被伪造触发）。
+    func testLActionKeyMappingAndFiring() {
+        let coordinator = AnimationTriggerCoordinator()
+        coordinator.watch([
+            AnimationIR(property: .opacity, from: 0, to: 1, durationMs: 300,
+                        trigger: .onAction(key: "updateVariable")),
+            AnimationIR(property: .scale, from: 0.8, to: 1, durationMs: 250,
+                        trigger: .onAction(key: "toggle")),
+            AnimationIR(property: .rotation, from: 0, to: 90, durationMs: 400,
+                        trigger: .onAction(key: "class-toggle:fade-in")),
+        ], initialTree: .object([:]))
+
+        coordinator.fire(.updateVariable(path: "/HP", value: JSONValue.int(100)))
+        XCTAssertEqual(coordinator.token(for: .onAction(key: "updateVariable")), AnyHashable(1))
+        XCTAssertEqual(coordinator.token(for: .onAction(key: "toggle")), AnyHashable(0))
+        XCTAssertEqual(coordinator.token(for: .onAction(key: "class-toggle:fade-in")), AnyHashable(0),
+                       "脚本派生 key 没有原生生产者，不应被无关 action 触发")
+
+        coordinator.fire(.toggle(path: "/open"))
+        XCTAssertEqual(coordinator.token(for: .onAction(key: "toggle")), AnyHashable(1))
+
+        coordinator.fire(.custom(key: "class-toggle:fade-in", payload: [:]))
+        XCTAssertEqual(coordinator.token(for: .onAction(key: "class-toggle:fade-in")), AnyHashable(1))
+
+        coordinator.fire(.navigate(target: "elsewhere"))
+        XCTAssertEqual(coordinator.token(for: .onAction(key: "updateVariable")), AnyHashable(1),
+                       "navigate 不产生任何 key")
+    }
+
+    // MARK: - Test M：sidecar 配对 —— html style → IR → group 归附兄弟节点
+
+    /// Test M: `<div style="transition:...">` 全链路 —— HTMLTranspiler 产
+    /// `.htmlAnimation` sidecar → RenderNodeTranspiler 转 `.animation` IR 节点 →
+    /// NativeIRAnimationPlanner.group 把动画归附到同级下一个非 animation 兄弟
+    /// （即那个 container），形成「元素级」动画挂载计划。
+    func testMSidecarGroupingPairsAnimationWithNextSibling() {
+        let nodes = HTMLTranspiler.transpile("<div style=\"transition: opacity 0.3s ease-in-out\">hi</div>")
+        guard case let .list(irItems) = RenderNodeTranspiler.transpile(RenderTree(nodes: nodes)) else {
+            return XCTFail("transpile(tree) 应得 .list")
+        }
+
+        // 树里应有一个 .animation 元数据节点（不再是 "[anim:...]" 文本占位）。
+        let animNodes = irItems.filter { node in
+            if case .animation = node { return true }
+            return false
+        }
+        XCTAssertEqual(animNodes.count, 1)
+
+        // 配对：animation 归附到它后面最近的非 animation 兄弟（htmlContainer）。
+        let groups = NativeIRAnimationPlanner.group(irItems)
+        let paired = groups.first { !$0.animations.isEmpty }
+        XCTAssertNotNil(paired, "sidecar 应配对到后续兄弟")
+        guard let pairedNode = paired?.node, case .container = pairedNode else {
+            return XCTFail("动画应挂在 htmlContainer 对应的 IR 上")
+        }
+        XCTAssertEqual(paired?.animations.first?.property, .opacity)
+
+        // collect 与 group 一致：树内全部动画都能被收集（watch 用）。
+        let collected = NativeIRAnimationPlanner.collect(in: .list(items: irItems))
+        XCTAssertEqual(collected.count, 1)
+        XCTAssertEqual(collected.first?.property, .opacity)
+    }
+
+    // MARK: - Test N：真实 VariableStore 端到端 —— button 写库 → token bump
+
+    /// Test N: 收口闭环 —— watch 从 IR 树收集的 trigger；button action 经
+    /// VariableStore.apply 真实落库；storeDidChange 读回新树 → onPathChange token
+    /// bump；同一 action fire 后 onAction key 也 bump。SwiftUI 侧由 token 变化
+    /// 驱动 TriggeredAnimModifier 重放（view body 不在 SPM 测）。
+    func testNVariableStoreApplyBumpsTriggerTokens() {
+        var tree: JSONValue = .object(["HP": .int(30)])
+
+        // 卡面表达：opacity 动画跟 HP 走；scale 动画跟 updateVariable 类 action 走。
+        let opacityAnim = AnimationIR(property: .opacity, from: 0, to: 1, durationMs: 300,
+                                      trigger: .onPathChange(path: "/HP"))
+        let scaleAnim = AnimationIR(property: .scale, from: 0.8, to: 1, durationMs: 250,
+                                    trigger: .onAction(key: "updateVariable"))
+        let irTree = NativeIRNode.list(items: [
+            .button(label: "加血", action: .updateVariable(path: "/HP", value: JSONValue.int(100))),
+        ])
+
+        // 1) 协调器从 IR 树收集 trigger 并做初始快照（与 NativeAnimationScope 一致）。
+        let coordinator = AnimationTriggerCoordinator()
+        let allAnims = [opacityAnim, scaleAnim] + NativeIRAnimationPlanner.collect(in: irTree)
+        coordinator.watch(allAnims, initialTree: tree)
+        XCTAssertEqual(coordinator.token(for: .onPathChange(path: "/HP")), AnyHashable(0))
+
+        // 2) 用户点击 → dispatcher → VariableStore.apply 真实写库。
+        let store = VariableStore()
+        let sid = UUID()
+        store.seedIfEmpty(sessionId: sid, initData: ["HP": .int(30)])
+        guard case let .list(items) = irTree,
+              case let .button(_, action) = items.first else {
+            return XCTFail()
+        }
+        let ops = NativeActionDispatcher().patches(
+            for: action,
+            currentTree: store.raw(forSession: sid)
+        ) ?? []
+        do {
+            try store.apply(ops, to: sid)
+        } catch {
+            return XCTFail("apply 不应失败：\(error)")
+        }
+
+        // 3) store 变化回调（NativeAnimationScope 的 sink 异步一拍后做的事）：
+        //    新树读回 → HP 变化 → path token +1。
+        tree = store.raw(forSession: sid)
+        coordinator.storeDidChange(tree: tree)
+        XCTAssertEqual(coordinator.token(for: .onPathChange(path: "/HP")), AnyHashable(1))
+
+        // 4) 同一次成功 action 也 fire 到 onAction key。
+        coordinator.fire(action)
+        XCTAssertEqual(coordinator.token(for: .onAction(key: "updateVariable")), AnyHashable(1))
+
+        // 5) token 即 SwiftUI .onChange(of:) 的输入 —— 形状必须可比较。
+        XCTAssertNotNil(coordinator.token(for: .onPathChange(path: "/HP")))
+    }
 }

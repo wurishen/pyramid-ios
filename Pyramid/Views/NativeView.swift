@@ -1,6 +1,10 @@
 import SwiftUI
+import Combine
 
 // P10: Native IR → SwiftUI 原生视图渲染器（端到端闭环）。
+// P10 收口：`AnimationIR.trigger`（onPathChange / onAction）经
+// `AnimationTriggerCoordinator` 反向调度 —— 状态变化 / action 成功后 token bump，
+// `TriggeredAnimModifier` 以 from→to 重放 SwiftUI 原生动画。
 
 /// NativeIRNode → SwiftUI 视图渲染入口。
 struct NativeView: View {
@@ -10,10 +14,48 @@ struct NativeView: View {
     var scale: CGFloat = 1.0
 
     var body: some View {
+        if let store = variableStore, let sid = sessionId {
+            NativeAnimationScope(node: node, store: store, sessionId: sid, scale: scale)
+        } else {
+            NodeRenderer(node: node,
+                        variableStore: variableStore,
+                        sessionId: sessionId,
+                        scale: scale)
+        }
+    }
+}
+
+/// 有状态渲染作用域：创建协调器、订阅 VariableStore（Combine sink + 异步一拍，
+/// 因为 objectWillChange 在 mutation **前**发出）、把 token 注入整棵渲染树。
+private struct NativeAnimationScope: View {
+    let node: NativeIRNode
+    @ObservedObject var store: VariableStore
+    let sessionId: UUID
+    let scale: CGFloat
+
+    @StateObject private var coordinator = AnimationTriggerCoordinator()
+    @State private var subscription: AnyCancellable?
+
+    var body: some View {
         NodeRenderer(node: node,
-                    variableStore: variableStore,
+                    variableStore: store,
                     sessionId: sessionId,
+                    coordinator: coordinator,
                     scale: scale)
+            .onAppear {
+                coordinator.watch(NativeIRAnimationPlanner.collect(in: node),
+                                  initialTree: store.raw(forSession: sessionId))
+                subscribeIfNeeded()
+            }
+    }
+
+    private func subscribeIfNeeded() {
+        guard subscription == nil else { return }
+        subscription = store.objectWillChange.sink { _ in
+            DispatchQueue.main.async {
+                coordinator.storeDidChange(tree: store.raw(forSession: sessionId))
+            }
+        }
     }
 }
 
@@ -22,6 +64,7 @@ private struct NodeRenderer: View {
     let node: NativeIRNode
     var variableStore: VariableStore? = nil
     var sessionId: UUID? = nil
+    var coordinator: AnimationTriggerCoordinator? = nil
     var scale: CGFloat = 1.0
 
     private var currentTree: JSONValue {
@@ -45,12 +88,16 @@ private struct NodeRenderer: View {
             return AnyView(NatFieldView(label: label, value: value, scale: scale))
         case .list(let items):
             return AnyView(NatListView(items: items, variableStore: variableStore,
-                                      sessionId: sessionId, scale: scale))
+                                      sessionId: sessionId,
+                                      coordinator: coordinator,
+                                      scale: scale))
         case .container(let title, let children, let animation):
             return AnyView(NatContainerView(title: title, children: children,
                                             animation: animation,
                                             variableStore: variableStore,
-                                            sessionId: sessionId, scale: scale))
+                                            sessionId: sessionId,
+                                            coordinator: coordinator,
+                                            scale: scale))
         case .boundText(let segments):
             let text = MacroRenderer.render(segments: segments, tree: currentTree)
             return AnyView(TextView(content: text, scale: scale))
@@ -59,19 +106,27 @@ private struct NodeRenderer: View {
             let active = isTrue ? whenTrue : whenFalse
             return AnyView(NatBranchView(activeBranch: active, isTrue: isTrue,
                                         variableStore: variableStore,
-                                        sessionId: sessionId, scale: scale))
+                                        sessionId: sessionId,
+                                        coordinator: coordinator,
+                                        scale: scale))
         case .button(let label, let action):
             return AnyView(NatButtonView(label: label, action: action,
                                         variableStore: variableStore,
-                                        sessionId: sessionId, scale: scale))
+                                        sessionId: sessionId,
+                                        coordinator: coordinator,
+                                        scale: scale))
         case .textInput(let label, let path, let placeholder):
             return AnyView(NatInputView(label: label, path: path, placeholder: placeholder,
                                        variableStore: variableStore,
-                                       sessionId: sessionId, scale: scale))
+                                       sessionId: sessionId,
+                                       coordinator: coordinator,
+                                       scale: scale))
         case .selection(let label, let path, let options):
             return AnyView(NatSelectionView(label: label, path: path, options: options,
                                            variableStore: variableStore,
-                                           sessionId: sessionId, scale: scale))
+                                           sessionId: sessionId,
+                                           coordinator: coordinator,
+                                           scale: scale))
         case .image(let src, let alt):
             return AnyView(NatImageView(src: src, alt: alt, scale: scale))
         case .link(let label, let href):
@@ -80,6 +135,11 @@ private struct NodeRenderer: View {
             return AnyView(NatExternalResourceView(resource: resource, scale: scale))
         case .scriptPlaceholder(let raw, _):
             return AnyView(NatScriptPlaceholderView(hint: raw, scale: scale))
+        case .animation(let anim):
+            // P10 收口：sidecar 元数据节点本身不可视；动画意图已由
+            // NativeIRAnimationPlanner.group 归附到同级下一个兄弟。
+            // 与 MessageCard 的 htmlAnimation 处理同构 —— EmptyView + 保真标注。
+            return AnyView(EmptyView().modifier(AnimationSidecarModifier(anim: anim)))
         }
     }
 }
@@ -222,6 +282,7 @@ private struct NatButtonView: View {
     let action: NativeAction
     var variableStore: VariableStore? = nil
     var sessionId: UUID? = nil
+    var coordinator: AnimationTriggerCoordinator? = nil
     let scale: CGFloat
 
     @State private var dispatchToken: Int = 0
@@ -234,7 +295,13 @@ private struct NatButtonView: View {
                 for: action,
                 currentTree: store.raw(forSession: sid)
             ) else { return }
-            try? store.apply(ops, to: sid)
+            do {
+                try store.apply(ops, to: sid)
+            } catch {
+                return
+            }
+            // P10 收口：action 成功落库 → 通知协调器（path 变化另由 storeDidChange 捕获）。
+            coordinator?.fire(action)
             dispatchToken = dispatchToken &+ 1
         } label: {
             Label(label, systemImage: "hand.tap")
@@ -253,6 +320,7 @@ private struct NatInputView: View {
     let placeholder: String?
     var variableStore: VariableStore? = nil
     var sessionId: UUID? = nil
+    var coordinator: AnimationTriggerCoordinator? = nil
     let scale: CGFloat
 
     @State private var draft: String = ""
@@ -300,7 +368,12 @@ private struct NatInputView: View {
             for: .updateVariable(path: path, value: v),
             currentTree: store.raw(forSession: sid)
         ) else { return }
-        try? store.apply(ops, to: sid)
+        do {
+            try store.apply(ops, to: sid)
+        } catch {
+            return
+        }
+        coordinator?.fire(.updateVariable(path: path, value: v))
     }
 }
 
@@ -310,6 +383,7 @@ private struct NatSelectionView: View {
     let options: [NativeControlOption]
     var variableStore: VariableStore? = nil
     var sessionId: UUID? = nil
+    var coordinator: AnimationTriggerCoordinator? = nil
     let scale: CGFloat
 
     var body: some View {
@@ -357,24 +431,57 @@ private struct NatSelectionView: View {
             for: .updateVariable(path: path, value: v),
             currentTree: store.raw(forSession: sid)
         ) else { return }
-        try? store.apply(ops, to: sid)
+        do {
+            try store.apply(ops, to: sid)
+        } catch {
+            return
+        }
+        coordinator?.fire(.updateVariable(path: path, value: v))
     }
 }
 
 // MARK: - Batch 4: 容器 / 列表 / 分支（递归 + 动画 modifier）
+
+/// 把一个同级分组（节点 + 归附动画）渲染出来：先递归渲染节点，再按顺序叠
+/// `TriggeredAnimModifier`（token 来自协调器；onAppear/onDisappear 无 token → 跳过）。
+private struct NatAnimGroupView: View {
+    let group: NativeIRAnimationPlanner.SiblingGroup
+    var variableStore: VariableStore? = nil
+    var sessionId: UUID? = nil
+    var coordinator: AnimationTriggerCoordinator? = nil
+    let scale: CGFloat
+
+    var body: some View {
+        var view = AnyView(NodeRenderer(node: group.node,
+                                        variableStore: variableStore,
+                                        sessionId: sessionId,
+                                        scale: scale))
+        if let coord = coordinator {
+            for anim in group.animations {
+                if let token = coord.token(for: anim.trigger) {
+                    view = AnyView(view.modifier(TriggeredAnimModifier(anim: anim, token: token)))
+                }
+            }
+        }
+        return view
+    }
+}
+
 private struct NatListView: View {
     let items: [NativeIRNode]
     var variableStore: VariableStore? = nil
     var sessionId: UUID? = nil
+    var coordinator: AnimationTriggerCoordinator? = nil
     let scale: CGFloat
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6 * scale) {
-            ForEach(Array(items.enumerated()), id: \.offset) { _, child in
-                NodeRenderer(node: child,
-                             variableStore: variableStore,
-                             sessionId: sessionId,
-                             scale: scale)
+            ForEach(Array(NativeIRAnimationPlanner.group(items).enumerated()), id: \.offset) { _, group in
+                NatAnimGroupView(group: group,
+                                 variableStore: variableStore,
+                                 sessionId: sessionId,
+                                 coordinator: coordinator,
+                                 scale: scale)
             }
         }
     }
@@ -386,6 +493,7 @@ private struct NatContainerView: View {
     let animation: NativeAnimation?
     var variableStore: VariableStore? = nil
     var sessionId: UUID? = nil
+    var coordinator: AnimationTriggerCoordinator? = nil
     let scale: CGFloat
 
     var body: some View {
@@ -395,11 +503,12 @@ private struct NatContainerView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
-            ForEach(Array(children.enumerated()), id: \.offset) { _, child in
-                NodeRenderer(node: child,
-                             variableStore: variableStore,
-                             sessionId: sessionId,
-                             scale: scale)
+            ForEach(Array(NativeIRAnimationPlanner.group(children).enumerated()), id: \.offset) { _, group in
+                NatAnimGroupView(group: group,
+                                 variableStore: variableStore,
+                                 sessionId: sessionId,
+                                 coordinator: coordinator,
+                                 scale: scale)
             }
         }
         .padding(.horizontal, 12 * scale)
@@ -443,19 +552,76 @@ private struct NatBranchView: View {
     let isTrue: Bool
     var variableStore: VariableStore? = nil
     var sessionId: UUID? = nil
+    var coordinator: AnimationTriggerCoordinator? = nil
     let scale: CGFloat
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6 * scale) {
-            ForEach(Array(activeBranch.enumerated()), id: \.offset) { _, child in
-                NodeRenderer(node: child,
-                             variableStore: variableStore,
-                             sessionId: sessionId,
-                             scale: scale)
+            ForEach(Array(NativeIRAnimationPlanner.group(activeBranch).enumerated()), id: \.offset) { _, group in
+                NatAnimGroupView(group: group,
+                                 variableStore: variableStore,
+                                 sessionId: sessionId,
+                                 coordinator: coordinator,
+                                 scale: scale)
             }
         }
         .id(isTrue)
         .transition(.opacity.combined(with: .move(edge: .top)))
         .animation(.easeInOut(duration: 0.25), value: isTrue)
+    }
+}
+
+// MARK: - P10 收口：trigger → SwiftUI 动画重放
+
+/// 把一条 AnimationIR 挂到视图上：token 变化（watched path 值变化 / action key 命中）
+/// 时以 from→to 重放。静态稳态值是 `to`（与 CSS transition 停在终态一致）；
+/// `.onAppear` / `.onDisappear` 不经此 modifier（由 transition 语义承担）。
+private struct TriggeredAnimModifier: ViewModifier {
+    let anim: AnimationIR
+    let token: AnyHashable
+
+    @State private var value: Double
+
+    init(anim: AnimationIR, token: AnyHashable) {
+        self.anim = anim
+        self.token = token
+        _value = State(initialValue: anim.to)
+    }
+
+    func body(content: Content) -> some View {
+        Group {
+            switch anim.property {
+            case .opacity:
+                content.opacity(CGFloat(value))
+            case .scale:
+                content.scaleEffect(CGFloat(value), anchor: .center)
+            case .scaleX:
+                content.scaleEffect(x: CGFloat(value), y: 1, anchor: .center)
+            case .scaleY:
+                content.scaleEffect(x: 1, y: CGFloat(value), anchor: .center)
+            case .offsetX:
+                content.offset(x: CGFloat(value))
+            case .offsetY:
+                content.offset(y: CGFloat(value))
+            case .rotation:
+                content.rotationEffect(.degrees(value))
+            }
+        }
+        .onChange(of: token) { _ in
+            replay()
+        }
+    }
+
+    private func replay() {
+        // 先无动画归位 from，再按 IR 曲线动画到 to —— 形成 from→to 重放。
+        // 两步分开 runloop：同一事务里连续赋值会被 SwiftUI 合并、看不到起点。
+        var reset = Transaction()
+        reset.disablesAnimations = true
+        withTransaction(reset) { value = anim.from }
+        DispatchQueue.main.async {
+            withAnimation(AnimationRenderer.swiftUIAnimation(anim)) {
+                value = anim.to
+            }
+        }
     }
 }

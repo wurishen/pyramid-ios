@@ -453,6 +453,8 @@ final class TavernTranspilerTests: XCTestCase {
                 out.append("[external:\(ir.kind.rawValue)]")
             case let .scriptPlaceholder(raw, reason):
                 out.append("[scriptPlaceholder \(reason) \(raw.count)B]")
+            case let .animation(anim):
+                out.append("[anim:\(anim.property.rawValue)]")
             }
             if case let .container(_, children, _) = n {
                 for c in children { visit(c) }

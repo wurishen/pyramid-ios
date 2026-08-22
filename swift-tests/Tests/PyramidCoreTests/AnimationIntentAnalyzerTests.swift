@@ -330,13 +330,14 @@ final class AnimationIntentAnalyzerTests: XCTestCase {
 
     // MARK: - RenderNode → NativeIR 桥接
 
-    func test90_htmlAnimationTranspilesToText() {
-        let node = RenderNode.htmlAnimation(
-            AnimationIR(property: .opacity, from: 0, to: 1, durationMs: 300)
-        )
+    func test90_htmlAnimationTranspilesToAnimationIR() {
+        // P10 收口：.htmlAnimation 不再降级为 "[anim:...]" 占位文本，
+        // AnimationIR **完整**进入 NativeIR（.animation case）—— trigger 保真。
+        let original = AnimationIR(property: .opacity, from: 0, to: 1, durationMs: 300)
+        let node = RenderNode.htmlAnimation(original)
         let ir = RenderNodeTranspiler.transpile(node)
-        if case let .text(s) = ir {
-            XCTAssertTrue(s.contains("anim"))
-        } else { XCTFail(".htmlAnimation 桥接应得 .text") }
+        if case let .animation(carried) = ir {
+            XCTAssertEqual(carried, original, "AnimationIR 应原样进入 NativeIR")
+        } else { XCTFail(".htmlAnimation 桥接应得 .animation，实为 \(ir)") }
     }
 }

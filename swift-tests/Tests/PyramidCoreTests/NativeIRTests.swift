@@ -334,6 +334,7 @@ final class NativeIRTests: XCTestCase {
             case let .link(label, href): out.append("[link:\(label)→\(href)]")
             case let .externalResource(ir): out.append("[ext:\(ir.kind.rawValue) \(ir.url)]")
             case let .scriptPlaceholder(raw, reason): out.append("[script:\(reason) (\(raw.count) chars)]")
+            case let .animation(anim): out.append("[anim:\(anim.property.rawValue)]")
             }
         }
         return out.joined(separator: " ")

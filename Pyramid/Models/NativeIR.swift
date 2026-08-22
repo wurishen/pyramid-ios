@@ -79,4 +79,9 @@ indirect enum NativeIRNode: Equatable, Sendable {
     /// 任何 `isSafeURL == false` 的远端调用转译产物。`raw` 是原始片段（含完整开闭标签），
     /// **永不执行**。UI 折叠展示原文 + 「未执行」提示。
     case scriptPlaceholder(raw: String, reason: String)
+    /// P10 动画意图元数据节点：P9 `RenderNode.htmlAnimation(AnimationIR)` 桥接进
+    /// Native IR 的载体 —— 纯数据，不承载可视内容。renderer 把它作为**同级下一个**
+    /// 兄弟节点的修饰信息（trigger = onPathChange / onAction 时由
+    /// `AnimationTriggerCoordinator` 反向调度到 SwiftUI 运行时）。
+    case animation(AnimationIR)
 }
