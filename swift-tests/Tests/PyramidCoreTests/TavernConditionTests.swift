@@ -272,7 +272,7 @@ final class TavernConditionTests: XCTestCase {
         let leafRaw = "<NativeIf path=\"/商店\" op=\"truthy\">" +
             "<NativeInput label=\"备注\" path=\"/备注\"/>" +
             "<NativeSelect label=\"购买\" path=\"/选择\" option=\"药水|地图\"/>" +
-            "<NativeButton label=\"离开\" kind=\"updateVariable\" path=\"/商店\" value=\"false\"/>" +
+            "<NativeAction label=\"离开\" kind=\"updateVariable\" path=\"/商店\" value=\"false\"/>" +
             "</NativeIf>"
         guard case let .condition(node)? = parse(leafRaw, tree: .object(["商店": .bool(true)])).first else {
             return XCTFail("应为 .condition 节点")
