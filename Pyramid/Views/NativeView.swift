@@ -149,7 +149,7 @@ private struct StoreObserver<Content: View>: View {
     let content: () -> Content
 
     var body: some View {
-        if let store {
+        if let store = store {
             ObservedPassthrough(store: store, content: content)
         } else {
             content()
