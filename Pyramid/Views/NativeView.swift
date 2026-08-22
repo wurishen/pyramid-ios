@@ -72,11 +72,6 @@ private struct NodeRenderer: View {
             return AnyView(NatSelectionView(label: label, path: path, options: options,
                                            variableStore: variableStore,
                                            sessionId: sessionId, scale: scale))
-        case .boundText:
-            return AnyView(Text("bound"))
-        case .branch(_, let whenTrue, let whenFalse):
-            _ = whenTrue; _ = whenFalse
-            return AnyView(NodeRenderer(node: .text(content: "branch"), variableStore: variableStore, sessionId: sessionId, scale: scale))
         case .image(let src, let alt):
             return AnyView(NatImageView(src: src, alt: alt, scale: scale))
         case .link(let label, let href):
