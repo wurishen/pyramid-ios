@@ -98,6 +98,7 @@ final class TavernConditionTests: XCTestCase {
         let openForce: JSONValue = .object(["开门": .bool(true), "有钥匙": .bool(false), "力量": .int(20)])
         let openWeakKeyless: JSONValue = .object(["开门": .bool(true), "有钥匙": .bool(false), "力量": .int(3)])
         let openStrongNoForceField: JSONValue = .object(["开门": .bool(true), "有钥匙": .bool(false), "力量": .int(15)])
+        let closed: JSONValue = .object(["开门": .bool(false), "有钥匙": .bool(true), "力量": .int(99)])
 
         guard case let .condition(node)? = parse(raw, tree: openForce).first else {
             return XCTFail("应为 .condition 节点")
