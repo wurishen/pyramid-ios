@@ -535,6 +535,9 @@ final class TavernChainIntegrationTests: XCTestCase {
             presetDisplayRegexIds: [rule.id],
             all: [rule, rule]
         )
-        XCTAssertEqual(segments.compactMap { if case let .text(t) = $0 { return t } }.joined(), "[皮肤]")
+        XCTAssertEqual(segments.compactMap { seg -> String? in
+            if case let .text(t) = seg { return t }
+            return nil
+        }.joined(), "[皮肤]")
     }
 }
