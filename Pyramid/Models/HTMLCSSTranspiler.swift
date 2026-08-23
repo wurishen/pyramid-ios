@@ -169,7 +169,10 @@ enum HTMLCSSTranspiler {
             }
             let key = String(raw[i..<keyEnd]).lowercased()
             if keyEnd >= raw.endIndex || raw[keyEnd] != "=" {
-                i = keyEnd
+                // 裸 token（无 =）。key 为空说明首字符就是 `/` 或 `>` 等终止符
+                // （自闭合 `<div/>` 的属性串即 "/"）—— 此时 keyEnd == i，
+                // 必须强制前进一位，否则死循环卡死整个 swift test。
+                i = (keyEnd == i) ? raw.index(after: i) : keyEnd
                 continue
             }
             i = raw.index(after: keyEnd)

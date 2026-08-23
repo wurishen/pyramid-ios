@@ -377,4 +377,13 @@ final class P11HTMLCSSTranspileTests: XCTestCase {
         })
         XCTAssertNotNil(script, "<script> 应仍降级为 htmlScript(residual)")
     }
+
+    /// 自闭合容器标签（`<div/>` / `<span />`）—— parseAttrs 曾在 `/` 开头的
+    /// 属性串上死循环（keyEnd == i 且无 `=` 时不前进），接线后卡死过整条
+    /// swift test。回归锁定：必须正常终止且产出节点。
+    func test21_selfClosingTagsTerminate() {
+        let html = "<style>.a{color:red}</style><div/><span />ok</span>"
+        let nodes = HTMLCSSTranspiler.transpile(html)
+        XCTAssertFalse(nodes.isEmpty, "自闭合标签输入应正常产出节点")
+    }
 }
