@@ -84,8 +84,10 @@ private struct StyledContainerModifier: ViewModifier {
                 let dx = scaleLength(s.offsetX, unit: .px, scale: scale)
                 let dy = scaleLength(s.offsetY, unit: .px, scale: scale)
                 let blur = scaleLength(s.blur, unit: .px, scale: scale)
-                let color = parseColor(s.color) ?? Color.black.opacity(0.4)
-                v = v.shadow(color: color, radius: CGFloat(blur), x: CGFloat(dx), y: CGFloat(dy)).anyView()
+                let shadowColor: Color = parseColor(s.color) ?? Color.black
+                v = v.shadow(color: shadowColor,
+                             radius: CGFloat(blur),
+                             x: CGFloat(dx), y: CGFloat(dy)).anyView()
             }
         }
 
@@ -452,7 +454,7 @@ private extension Color {
         let r = Double((v >> 16) & 0xff) / 255.0
         let g = Double((v >> 8) & 0xff) / 255.0
         let b = Double(v & 0xff) / 255.0
-        self = Color(red: r, green: g, blue: b)
+        self.init(red: r, green: g, blue: b)
     }
 }
 
