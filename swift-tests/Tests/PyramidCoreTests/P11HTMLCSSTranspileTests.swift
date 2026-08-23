@@ -285,9 +285,15 @@ final class P11HTMLCSSTranspileTests: XCTestCase {
             return XCTFail("expected outer htmlStyled, got \(nodes[0])")
         }
         XCTAssertTrue(outerStyle.declarations.contains(where: { $0.property == "background-color" }))
-        // 内层应也是 htmlStyled（独立 class 样式）
-        guard case let .htmlStyled(_, _, innerStyle, _) = outerChildren[0] else {
-            return XCTFail("expected inner htmlStyled, got \(outerChildren[0])")
+        // 内层应也是 htmlStyled（独立 class 样式）。容器 children 里的空白 text 节点
+        // 被刻意保留（不丢字原则），所以用 first(where:) 查找而不是下标 0。
+        let inner = outerChildren.first(where: {
+            if case let .htmlStyled(_, c, _, _) = $0, c.contains("inner") { return true }
+            return false
+        })
+        XCTAssertNotNil(inner, "inner 应升级为 htmlStyled")
+        guard case let .htmlStyled(_, _, innerStyle, _) = inner else {
+            return XCTFail("expected inner htmlStyled, got \(String(describing: inner))")
         }
         XCTAssertTrue(innerStyle.declarations.contains(where: { $0.property == "color" }))
     }

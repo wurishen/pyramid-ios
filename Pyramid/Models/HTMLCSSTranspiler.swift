@@ -118,7 +118,8 @@ enum HTMLCSSTranspiler {
             guard let gt = input[afterLt...].firstIndex(of: ">") else { break }
             // 找 </style>
             guard let closeStart = input[gt...].range(of: "</style", options: .caseInsensitive) else { break }
-            let body = String(input[gt..<closeStart.lowerBound])
+            // body 从 `>` 的后一位开始 —— 含住 `>` 会让首条 rule 的 selector 变成 ">\n.xxx" 而永不匹配。
+            let body = String(input[input.index(after: gt)..<closeStart.lowerBound])
             out.append(body)
             cursor = closeStart.upperBound
         }
