@@ -20,8 +20,10 @@ struct StyledContainerView<Content: View>: View {
     let tag: String
     let classNames: [String]
     let style: CSSStyleDeclaration
-    let children: () -> Content
     let scale: CGFloat
+    // scale 必须声明在 children 之前 —— 尾随闭包传 children 时，前面的参数按声明顺序
+    // 匹配，`scale:` 放 children 之后会报 incorrect argument label。
+    let children: () -> Content
 
     var body: some View {
         let view = children()
@@ -38,7 +40,9 @@ private struct StyledContainerModifier: ViewModifier {
     let scale: CGFloat
 
     func body(content: Content) -> some View {
-        var v = content
+        // 累加器显式 AnyView —— `var v = content` 的类型是 modifier 关联的
+        // _ViewModifier_Content，后续赋 AnyView 会类型不匹配（macOS swiftc 报错）。
+        var v: AnyView = AnyView(content)
         // CSS 转换规则：
         // 1. display: none → 完全隐藏
         // 2. opacity → .opacity
@@ -332,7 +336,7 @@ private struct StyledContainerAnimationModifier: ViewModifier {
     let scale: CGFloat
 
     func body(content: Content) -> some View {
-        var v = content
+        var v: AnyView = AnyView(content)
         // transition 短手：单条 → .animation + .transition（按 property 推断方向）
         if let t = transitionValue {
             let dur = Double(t.durationMs) / 1000.0
@@ -351,7 +355,7 @@ private struct StyledContainerAnimationModifier: ViewModifier {
                 }
             }.anyView()
         }
-        return AnyView(v)
+        return v
     }
 
     private var transitionValue: CSSShortTransition? {
