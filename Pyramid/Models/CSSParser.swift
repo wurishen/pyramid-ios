@@ -288,14 +288,14 @@ enum CSSParser {
     /// 把 declarations 拆成 `prop: value` 对（按 `;` 切分，保留空 token 过滤）。
     fileprivate static func splitDeclarations(_ text: String) -> [String] {
         return text.split(separator: ";", omittingEmptySubsequences: true)
-            .map { String($0).trimmingCharacters(in: .whitespaces) }
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
     }
 
     fileprivate static func parseDeclaration(_ raw: String) -> CSSDeclaration? {
         guard let colon = raw.firstIndex(of: ":") else { return nil }
-        let property = String(raw[..<colon]).trimmingCharacters(in: .whitespaces).lowercased()
-        let value = String(raw[raw.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+        let property = String(raw[..<colon]).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let value = String(raw[raw.index(after: colon)...]).trimmingCharacters(in: .whitespacesAndNewlines)
         if property.isEmpty || value.isEmpty { return nil }
         let resolved = resolve(property: property, value: value)
         return CSSDeclaration(property: property, value: value, resolved: resolved)
