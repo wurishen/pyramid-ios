@@ -216,10 +216,10 @@ enum HTMLCSSTranspiler {
 
     /// 递归走 RenderNode 树，把每个 .htmlContainer 升级为 .htmlStyled（若匹配 CSS）。
     /// `styleIndex` 指向 elementStyles 数组的下一个待消费位置。
-    private static func upgradeContainer(_ node: HTMLTranspiler.RenderNode,
+    private static func upgradeContainer(_ node: RenderNode,
                                          sheet: CSSStyleSheet,
                                          elementStyles: [ElementStyle],
-                                         styleIndex: inout Int) -> HTMLTranspiler.RenderNode {
+                                         styleIndex: inout Int) -> RenderNode {
         switch node {
         case .htmlContainer(let children):
             // 取下一个 ElementStyle

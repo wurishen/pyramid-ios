@@ -59,6 +59,7 @@ let package = Package(
                 "HTMLTranspilerTests.swift",
                 "AnimationIntentAnalyzerTests.swift",
                 "ClosureLoopTests.swift",
+                "P11HTMLCSSTranspileTests.swift",
             ]
         ),
     ]

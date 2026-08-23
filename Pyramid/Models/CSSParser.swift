@@ -646,24 +646,23 @@ enum CSSParser {
     // MARK: - 内部：rule / @keyframes 顶层解析
 
     /// 找下一条顶层 rule 的结束位置（匹配外层 `}` 后一位）。
-    fileprivate static func findRuleEnd(_ s: String, from: Int) -> Int? {
+    fileprivate static func findRuleEnd(_ s: String, from: String.Index) -> String.Index? {
         var depth = 0
         var i = from
-        let chars = Array(s)
-        while i < chars.count {
-            let ch = chars[i]
+        while i < s.endIndex {
+            let ch = s[i]
             if ch == "{" { depth += 1 }
             else if ch == "}" {
                 depth -= 1
-                if depth == 0 { return i + 1 }
+                if depth == 0 { return s.index(after: i) }
             }
-            i += 1
+            i = s.index(after: i)
         }
         return nil
     }
 
     /// 找 @ 块的结束位置（与 rule 同一规则 —— 顶层第一个 `}` 后一位）。
-    fileprivate static func findAtBlockEnd(_ s: String, from: Int) -> Int? {
+    fileprivate static func findAtBlockEnd(_ s: String, from: String.Index) -> String.Index? {
         return findRuleEnd(s, from: from)
     }
 
