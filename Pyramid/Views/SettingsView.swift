@@ -65,7 +65,7 @@ struct SettingsView: View {
                 // 版本标识：真机排障时先看这里，确认装的是哪个构建。
                 Section {
                 } footer: {
-                    Text("\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?") (\(Bundle.main.object(forInfoDictionaryKey: kCFBundleVersionString as String) as? String ?? "?"))")
+                    Text("\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"))")
                 }
 
                 Section {
