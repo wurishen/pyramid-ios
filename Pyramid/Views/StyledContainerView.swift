@@ -454,7 +454,7 @@ private extension Color {
         let r = Double((v >> 16) & 0xff) / 255.0
         let g = Double((v >> 8) & 0xff) / 255.0
         let b = Double(v & 0xff) / 255.0
-        self.init(red: r, green: g, blue: b)
+        self.init(red: r, green: g, blue: b, opacity: 1.0)
     }
 }
 
