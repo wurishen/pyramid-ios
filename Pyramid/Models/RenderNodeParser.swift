@@ -92,7 +92,9 @@ enum RenderNodeParser {
                         }
                         return [.text(passed)]
                     }
-                    transpilerConsumed = true
+                    // 空文本节点（transpile 对空串恒返 []）不算「消费」——
+                    // 保持空串 → 单 .text("") 的历史语义。
+                    if !t.isEmpty { transpilerConsumed = true }
                     return htmlPass
                 }
             }
