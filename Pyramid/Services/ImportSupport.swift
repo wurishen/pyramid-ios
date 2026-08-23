@@ -37,7 +37,13 @@ enum ImportSupport {
             }
         }
         if let png = try? parsePngCharacters(data) {
-            return png
+            // 图片卡：PNG 文件本身就是头像。内嵌 chara JSON 一般不带 avatar 字段
+            // （ST 的做法是把立绘直接作为卡片文件）—— 原图此前被丢弃导致头像被吞。
+            var out = png
+            if out.count == 1, out[0].avatarData == nil {
+                out[0].avatarData = data
+            }
+            return out
         }
         throw CharacterImportError.invalidData
     }
