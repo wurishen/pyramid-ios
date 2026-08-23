@@ -127,8 +127,7 @@ final class P11HTMLCSSTranspileTests: XCTestCase {
 
     func test09_unknownDeclarationPreservesRaw() {
         // 未识别属性 → .other(property:value) 不失败
-        let sheet = CSSParser.parseSheet(".x { -webkit-thing: foo; }
-        ")
+        let sheet = CSSParser.parseSheet(".x { -webkit-thing: foo; }\n")
         XCTAssertNotNil(sheet)
         let decl = sheet?.rules.first?.declarations.declarations.first
         guard case .other(let p, let v) = decl?.resolved else {
