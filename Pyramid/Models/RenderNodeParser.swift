@@ -68,6 +68,9 @@ enum RenderNodeParser {
         // 第二遍：在剩余的 `.text` 节点里识别 P1 `<status>` 块，递归切分。
         // 第三遍：对仍为 `.text` 的节点做宏切分（含 `{{…}}` 才转 macroText，否则保持 .text 直通）。
         let firstPass = parseP3Blocks(input, statData: statData, applyPatches: applyPatches, depth: depth)
+        // P12a：转译器是否真的消费过内容（抽出样式表 / 产出结构节点）。用于区分
+        // 「整条消息无可视内容是合法结果」与「解析彻底失败需原文兜底」。
+        var transpilerConsumed = false
         // 第二遍：对每个 .text 节点再走 P1 的 status 解析；第三遍：宏切分；第四遍：P8 HTML/Script 静态分析。
         let finalNodes = firstPass.nodes.flatMap { node -> [RenderNode] in
             if case let .text(s) = node {
@@ -83,17 +86,24 @@ enum RenderNodeParser {
                         // P12a：转译器可能已消费掉 `<style>` 等块 —— 此时 passed != t，
                         // 必须采用转译器输出而非原文回退（否则已消费的块逐字回流）。
                         // 宏切分同样基于剩余文本。
+                        if passed != t { transpilerConsumed = true }
                         if TavernMacroParser.containsMacroToken(passed) {
                             return [.macroText(TavernMacroParser.parse(passed))]
                         }
                         return [.text(passed)]
                     }
+                    transpilerConsumed = true
                     return htmlPass
                 }
             }
             return [node]
         }
         if finalNodes.isEmpty {
+            // 内容全部被 CSS 管线合法消费（如整条消息只有一个 <style> 块）→ 空渲染；
+            // 否则是解析失败 → 原文单节点兜底（「不能导致整条消息消失」）。
+            if transpilerConsumed {
+                return RenderTree(nodes: [])
+            }
             return RenderTree(nodes: [.text(input)])
         }
         return RenderTree(nodes: finalNodes)
