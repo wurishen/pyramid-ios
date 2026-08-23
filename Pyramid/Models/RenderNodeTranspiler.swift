@@ -118,6 +118,18 @@ enum RenderNodeTranspiler {
                 animation: nil
             )
 
+        case let .htmlStyled(tag, classNames, style, children):
+            // P11 HTML/CSS → NativeIR 容器（携带样式）。样式声明在 transpile 阶段已合并
+            // 完毕（class + 内联 last-wins），renderer 只需把它翻译成 SwiftUI modifier。
+            // 不引入业务组件 —— tag 只是 HTML 标签名（div / section / article），**不**
+            // 用于派生任何 Pyramid 组件。
+            return .styledContainer(
+                tag: tag,
+                classNames: classNames,
+                style: style,
+                children: children.map(transpile)
+            )
+
         case let .htmlImage(src, alt):
             // P8 通用图像：透传到 NativeIR.image（**不**下载、不绑定 Character avatar）。
             return .image(src: src, alt: alt)

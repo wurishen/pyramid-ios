@@ -54,6 +54,9 @@
 		AB0000000000000000000525 /* AnimationIntentAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000526 /* AnimationIntentAnalyzer.swift */; };
 		AB0000000000000000000532 /* AnimationTriggerCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000533 /* AnimationTriggerCoordinator.swift */; };
 		AB0000000000000000000530 /* NativeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000531 /* NativeView.swift */; };
+		AB0000000000000000000540 /* CSSParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000541 /* CSSParser.swift */; };
+		AB0000000000000000000542 /* HTMLCSSTranspiler.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000543 /* HTMLCSSTranspiler.swift */; };
+		AB0000000000000000000544 /* StyledContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000545 /* StyledContainerView.swift */; };
 		AB0000000000000000000282 /* SillyTavernRegexScript.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000283 /* SillyTavernRegexScript.swift */; };
 		AB0000000000000000000290 /* MessageRendererCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000291 /* MessageRendererCore.swift */; };
 		AB0000000000000000000292 /* RenderEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000293 /* RenderEngine.swift */; };
@@ -151,6 +154,9 @@
 		AB0000000000000000000526 /* AnimationIntentAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimationIntentAnalyzer.swift; sourceTree = "<group>"; };
 		AB0000000000000000000533 /* AnimationTriggerCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimationTriggerCoordinator.swift; sourceTree = "<group>"; };
 		AB0000000000000000000531 /* NativeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeView.swift; sourceTree = "<group>"; };
+		AB0000000000000000000541 /* CSSParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CSSParser.swift; sourceTree = "<group>"; };
+		AB0000000000000000000543 /* HTMLCSSTranspiler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTMLCSSTranspiler.swift; sourceTree = "<group>"; };
+		AB0000000000000000000545 /* StyledContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StyledContainerView.swift; sourceTree = "<group>"; };
 		AB0000000000000000000281 /* AvatarImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarImageCache.swift; sourceTree = "<group>"; };
 		AB0000000000000000000222 /* DisplayRegexListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayRegexListView.swift; sourceTree = "<group>"; };
 		AB00000000000000000000A1 /* ImportSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportSupport.swift; sourceTree = "<group>"; };
@@ -226,6 +232,8 @@
 				AB0000000000000000000522 /* AnimationIR.swift */,
 				AB0000000000000000000526 /* AnimationIntentAnalyzer.swift */,
 				AB0000000000000000000533 /* AnimationTriggerCoordinator.swift */,
+				AB0000000000000000000541 /* CSSParser.swift */,
+				AB0000000000000000000543 /* HTMLCSSTranspiler.swift */,
 				AB0000000000000000000421 /* NativeCondition.swift */,
 				AB000000000000000000041F /* TavernMacro.swift */,
 				AB0000000000000000000415 /* NativeActionDispatcher.swift */,
@@ -293,6 +301,7 @@
 				AB000000000000000000029F /* StatusView.swift */,
 				AB0000000000000000000524 /* AnimationRenderer.swift */,
 				AB0000000000000000000531 /* NativeView.swift */,
+				AB0000000000000000000545 /* StyledContainerView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -445,6 +454,9 @@
 				AB0000000000000000000513 /* HTMLTranspiler.swift in Sources */,
 				AB0000000000000000000521 /* AnimationIR.swift in Sources */,
 				AB0000000000000000000525 /* AnimationIntentAnalyzer.swift in Sources */,
+				AB0000000000000000000540 /* CSSParser.swift in Sources */,
+				AB0000000000000000000542 /* HTMLCSSTranspiler.swift in Sources */,
+				AB0000000000000000000544 /* StyledContainerView.swift in Sources */,
 				AB0000000000000000000523 /* AnimationRenderer.swift in Sources */,
 				AB0000000000000000000530 /* NativeView.swift in Sources */,
 				AB0000000000000000000532 /* AnimationTriggerCoordinator.swift in Sources */,

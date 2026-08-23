@@ -98,6 +98,19 @@ private struct NodeRenderer: View {
                                             sessionId: sessionId,
                                             coordinator: coordinator,
                                             scale: scale))
+        case .styledContainer(let tag, let classNames, let style, let children):
+            // P11: CSS-aware 容器 —— StyledContainerView 把 CSS 声明翻译成 SwiftUI modifier。
+            return AnyView(StyledContainerView(tag: tag, classNames: classNames, style: style, scale: scale) {
+                VStack(alignment: .leading, spacing: 6 * scale) {
+                    ForEach(Array(NativeIRAnimationPlanner.group(children).enumerated()), id: \.offset) { _, group in
+                        NatAnimGroupView(group: group,
+                                         variableStore: variableStore,
+                                         sessionId: sessionId,
+                                         coordinator: coordinator,
+                                         scale: scale)
+                    }
+                }
+            })
         case .boundText(let segments):
             let text = MacroRenderer.render(segments: segments, tree: currentTree)
             return AnyView(TextView(content: text, scale: scale))

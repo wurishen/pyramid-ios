@@ -69,6 +69,12 @@ enum RenderNode: Equatable, Sendable {
     /// UI 把 children 当有序列表依次渲染（缩进或视觉分组由 renderer 决定）。
     /// HTML 标签只是「输入形态」，不决定 UI 组件名。
     indirect case htmlContainer(children: [RenderNode])
+    /// P11 HTML/CSS → NativeIR 通用容器（携带样式）：`htmlContainer` 的样式增强版，
+    /// children 同 `htmlContainer`，额外携带 HTML 标签名 / class 名 / 合并后样式声明。
+    /// renderer 把 CSS 翻译为 SwiftUI modifier；不引入 WebView / 不执行 JS / 不创建
+    /// 业务组件。`style` 是 class + 内联 last-wins 合并后的最终声明，`tag` 仅作
+    /// tag-selector 匹配用，**不**用于派生业务组件名。
+    indirect case htmlStyled(tag: String, classNames: [String], style: CSSStyleDeclaration, children: [RenderNode])
     /// P8 `<img>` 通用原语 —— `src` 记录意图（**不**保证下载，renderer 决定是否加载）。
     /// `alt` 可选，作为 fallback 文本。
     case htmlImage(src: String, alt: String?)

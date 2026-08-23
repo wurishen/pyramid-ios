@@ -48,6 +48,12 @@ indirect enum NativeIRNode: Equatable, Sendable {
     case list(items: [NativeIRNode])
     /// 带标题的容器 / 嵌套分组。`animation` 可选承载容器级动画意图。
     case container(title: String, children: [NativeIRNode], animation: NativeAnimation?)
+    /// P11 HTML/CSS → NativeIR 通用容器（携带样式）：`container` 的样式增强版。
+    /// children 同 `container`，额外携带 HTML 标签名 / class 名 / 合并后的 CSS 声明。
+    /// renderer 把 CSS 翻译为 SwiftUI modifier（padding / background / cornerRadius /
+    /// shadow / opacity / font / transform / animation 等）；不引入 WebView / 不执行 JS
+    /// / 不创建业务组件（无 PhoneContainer / StatusContainer / CharacterPanel）。
+    case styledContainer(tag: String, classNames: [String], style: CSSStyleDeclaration, children: [NativeIRNode])
     /// 按钮：label 给 SwiftUI 渲染，action 给 dispatcher 执行。
     /// 是 Native IR 中唯一允许触发 `NativeAction` 的载体。
     case button(label: String, action: NativeAction)
