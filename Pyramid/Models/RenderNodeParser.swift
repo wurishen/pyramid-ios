@@ -75,9 +75,10 @@ enum RenderNodeParser {
                     guard case let .text(t) = statusNode else {
                         return [statusNode]
                     }
-                    // P8：HTML/Script 静态分析（在宏切分之前 —— 标签 vs 宏互斥，
-                    // HTML 优先；纯文本里的 jQuery load / fetch / iframe src 等也走这一层）。
-                    let htmlPass = HTMLTranspiler.transpile(t)
+                    // P11：HTML/CSS 静态分析（在宏切分之前 —— 标签 vs 宏互斥，
+                    // HTML 优先；`<style>` 块解析为样式表，class/tag/inline 匹配的容器
+                    // 升级 htmlStyled；script / 未知标签仍降级 residual，不丢字）。
+                    let htmlPass = HTMLCSSTranspiler.transpile(t)
                     if htmlPass.count == 1, case .text = htmlPass[0] {
                         // HTMLTranspiler 退回纯文本（无 HTML / Script） → 走宏切分
                         if TavernMacroParser.containsMacroToken(t) {

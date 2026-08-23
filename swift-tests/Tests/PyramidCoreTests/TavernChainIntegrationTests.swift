@@ -349,14 +349,14 @@ final class TavernChainIntegrationTests: XCTestCase {
         }
         let raw = "第一段。\n\n<StatusPlaceHolderImpl/>\n\n最后一段。"
         let result = renderAssistant(raw, rules: [skinRule])
-        // 顺序：头文本 → 残留(CSS) → 占位符 → 按钮 → 尾文本
-        XCTAssertEqual(result.tree.nodes.count, 5)
+        // P11 起 `<style>` 块被 CSSStyleSheet 消费（不再产残留节点）——
+        // 顺序：头文本 → 占位符 → 按钮 → 尾文本。
+        XCTAssertEqual(result.tree.nodes.count, 4)
         guard case let .text(head) = result.tree.nodes[0],
-              case .deferredResidual = result.tree.nodes[1],
-              case .statusPlaceholder = result.tree.nodes[2],
-              case .nativeAction = result.tree.nodes[3],
-              case let .text(tail) = result.tree.nodes[4] else {
-            return XCTFail("节点序列应为 文本/残留/占位符/动作/文本")
+              case .statusPlaceholder = result.tree.nodes[1],
+              case .nativeAction = result.tree.nodes[2],
+              case let .text(tail) = result.tree.nodes[3] else {
+            return XCTFail("节点序列应为 文本/占位符/动作/文本")
         }
         XCTAssertEqual(head, "第一段。\n\n")
         XCTAssertEqual(tail, "\n\n最后一段。")

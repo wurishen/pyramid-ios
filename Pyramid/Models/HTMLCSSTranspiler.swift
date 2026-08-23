@@ -208,6 +208,8 @@ enum HTMLCSSTranspiler {
     }
 
     /// 一组通用容器标签（与 HTMLTranspiler 默认 .htmlContainer 容器集合对齐）。
+    /// 必须与 buildContainerOrLeaf 的容器 case 完全一致 —— 少一个都会让 elementStyles
+    /// 消费序号错位，后续兄弟节点套错样式。
     static let allowedStyleTags: Set<String> = [
         "div", "span", "p", "section", "article", "header", "footer",
         "main", "aside", "details", "summary", "h1", "h2", "h3", "h4",
@@ -215,7 +217,7 @@ enum HTMLCSSTranspiler {
         "sub", "sup", "mark", "del", "ins", "cite", "q", "kbd", "samp",
         "var", "time", "dl", "dt", "dd", "ol", "ul", "li", "table",
         "thead", "tbody", "tr", "td", "th", "fieldset", "legend", "label",
-        "form"
+        "form", "nav", "figure", "figcaption", "address", "blockquote"
     ]
 
     struct ElementStyle {
