@@ -357,7 +357,7 @@ enum CSSParser {
             if let j = CSSJustify(rawValue: value.lowercased()) { return .justifyContent(j) }
             return .other(property: property, value: value)
         case "align-items":
-            if let a = CSSAlign(rawValue: value.lowercased()) { return .align(a) }
+            if let a = CSSAlign(rawValue: value.lowercased()) { return .alignItems(a) }
             return .other(property: property, value: value)
         case "overflow":
             if let o = CSSOverflow(rawValue: value.lowercased()) { return .overflow(o) }

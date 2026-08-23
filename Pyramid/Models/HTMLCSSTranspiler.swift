@@ -249,6 +249,7 @@ enum HTMLCSSTranspiler {
         case let .condition(condNode):
             return .condition(NativeConditionNode(
                 condition: condNode.condition,
+                raw: condNode.raw,
                 whenTrue: condNode.whenTrue.map { upgradeContainer($0, sheet: sheet, elementStyles: elementStyles, styleIndex: &styleIndex) },
                 whenFalse: condNode.whenFalse.map { upgradeContainer($0, sheet: sheet, elementStyles: elementStyles, styleIndex: &styleIndex) }
             ))
