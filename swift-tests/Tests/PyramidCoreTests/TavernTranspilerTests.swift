@@ -455,6 +455,10 @@ final class TavernTranspilerTests: XCTestCase {
                 out.append("[scriptPlaceholder \(reason) \(raw.count)B]")
             case let .animation(anim):
                 out.append("[anim:\(anim.property.rawValue)]")
+            case let .styledContainer(tag, classNames, _, children):
+                let tagSuffix = classNames.isEmpty ? tag : "\(tag).\(classNames.joined(separator: "."))"
+                out.append("[styled:\(tagSuffix) \(children.count)]")
+                for c in children { visit(c) }
             }
             if case let .container(_, children, _) = n {
                 for c in children { visit(c) }
