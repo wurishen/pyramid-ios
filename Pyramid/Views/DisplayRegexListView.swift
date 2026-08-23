@@ -60,7 +60,7 @@ struct DisplayRegexListView: View {
         }
         .fileImporter(
             isPresented: $showImporter,
-            allowedContentTypes: [.json],
+            allowedContentTypes: importContentTypes,
             allowsMultipleSelection: false
         ) { result in
             handleImport(result)
@@ -87,6 +87,18 @@ struct DisplayRegexListView: View {
 
     /// ST Regex Script JSON 导入（单条对象或数组）。停用 / promptOnly /
     /// 非显示 placement 的脚本由 importer 过滤；全部被过滤时提示无可导入项。
+    /// 与世界书导入同一套宽类型列表（缺 UTI 标注的 JSON 才能被勾选）。
+    private var importContentTypes: [UTType] {
+        [
+            .json,
+            .text,
+            .plainText,
+            .data,
+            .item,
+            UTType(filenameExtension: "json", conformingTo: .data) ?? .json,
+        ]
+    }
+
     private func handleImport(_ result: Result<[URL], Error>) {
         guard case .success(let urls) = result, let url = urls.first else { return }
         do {

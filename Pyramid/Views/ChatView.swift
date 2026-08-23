@@ -341,15 +341,16 @@ struct ChatView: View {
                 }
                 .padding(.vertical, 8)
             }
+            // iOS17：滚动默认锚点定在底部 —— 进入页面 / 内容增长时视口贴底，
+            // 从根上避免「停在第一楼」与「滚到内容末尾之外的空白区」。
+            .defaultScrollAnchor(.bottom)
             .onChange(of: viewModel.scrollVersion) { _, _ in
                 if let last = viewModel.messages.last {
-                    withAnimation {
-                        proxy.scrollTo(last.id, anchor: .bottom)
-                    }
+                    proxy.scrollTo(last.id, anchor: .bottom)
                 }
             }
             // 切换会话 / 首次进入：静默定位到最后一楼（不动画）。
-            // LazyVStack 需要一帧完成布局，async 到下一个 runloop 再滚。
+            // LazyVStack 布局与会话消息装载都是异步的 —— 单帧滚动经常滚早了。
             .onChange(of: store.currentSessionID) { _, _ in
                 scrollToBottom(proxy: proxy)
             }
@@ -360,10 +361,15 @@ struct ChatView: View {
         }
     }
 
+    /// 多帧重试定位到底部：会话切换后 messages 装载与 LazyVStack 逐页布局都需要
+    /// 若干个 runloop；只 async 一跳会落在旧列表 / 空列表上（真机表现为停在一楼）。
+    /// 每次都滚向「当前最后一条」，收敛后多余调用无害；全程无动画（静默定位）。
     private func scrollToBottom(proxy: ScrollViewProxy) {
-        DispatchQueue.main.async {
-            guard let last = viewModel.messages.last else { return }
-            proxy.scrollTo(last.id, anchor: .bottom)
+        for delay in [0.0, 0.08, 0.2, 0.45] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                guard let last = viewModel.messages.last else { return }
+                proxy.scrollTo(last.id, anchor: .bottom)
+            }
         }
     }
 

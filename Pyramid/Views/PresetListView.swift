@@ -74,7 +74,7 @@ struct PresetListView: View {
         }
         .fileImporter(
             isPresented: $showImporter,
-            allowedContentTypes: [.json],
+            allowedContentTypes: importContentTypes,
             allowsMultipleSelection: false
         ) { result in
             handleImport(result)
@@ -102,6 +102,19 @@ struct PresetListView: View {
 
     /// SillyTavern OpenAI 预设 JSON 导入：文件名作预设名，prompts/prompt_order
     /// 拼系统提示词，采样标量直接映射。失败弹错误（含角色卡误投提示）。
+    /// 与世界书导入同一套宽类型列表：iCloud / 部分网盘导出的 JSON 常缺 UTI 标注，
+    /// 只放行 `.json` 会让文件在选择器里灰掉无法勾选（真机已踩坑）。
+    private var importContentTypes: [UTType] {
+        [
+            .json,
+            .text,
+            .plainText,
+            .data,
+            .item,
+            UTType(filenameExtension: "json", conformingTo: .data) ?? .json,
+        ]
+    }
+
     private func handleImport(_ result: Result<[URL], Error>) {
         guard case .success(let urls) = result, let url = urls.first else { return }
         do {

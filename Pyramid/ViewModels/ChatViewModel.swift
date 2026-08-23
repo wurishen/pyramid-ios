@@ -408,11 +408,17 @@ final class ChatViewModel: ObservableObject {
         streamingMessageID = assistant.id
         streamingContent = ""
         var full = ""
+        // 流式跟随：每若干个 delta 触发一次滚动信号，让视口贴着正在生长的气泡。
+        // 之前只在完成时滚一次 —— 长回复期间视口停在旧位置，气泡在屏幕外生长，
+        // 看起来像「滚过头停在空白区」。
+        var chunkCount = 0
         do {
             for try await delta in client.stream(messages: history) {
                 if Task.isCancelled { break }
                 full += delta
                 streamingContent = full
+                chunkCount += 1
+                if chunkCount % 8 == 0 { scrollVersion += 1 }
             }
             if Task.isCancelled {
                 // 取消：把已生成部分落盘，保留给用户查看。
