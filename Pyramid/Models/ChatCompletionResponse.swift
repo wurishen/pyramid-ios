@@ -51,7 +51,24 @@ struct ChatCompletionResponse: Decodable {
 
     struct Message: Decodable {
         let role: String
-        let content: String
+        /// 部分后端（reasoning-only 响应）会省略 content —— 缺失按空串处理。
+        let content: String?
+        /// DeepSeek R1 风格思维链字段；缺失为 nil。
+        let reasoningContent: String?
+
+        enum Keys: String, CodingKey {
+            case role, content
+            case reasoningContent = "reasoning_content"
+            case reasoning
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: Keys.self)
+            role = try c.decodeIfPresent(String.self, forKey: .role) ?? "assistant"
+            content = try? c.decodeIfPresent(String.self, forKey: .content)
+            reasoningContent = (try? c.decodeIfPresent(String.self, forKey: .reasoningContent))
+                ?? (try? c.decodeIfPresent(String.self, forKey: .reasoning))
+        }
     }
 }
 
@@ -64,6 +81,20 @@ struct ChatCompletionStreamChunk: Decodable {
 
     struct Delta: Decodable {
         let content: String?
+        let reasoningContent: String?
+
+        enum Keys: String, CodingKey {
+            case content
+            case reasoningContent = "reasoning_content"
+            case reasoning
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: Keys.self)
+            content = try? c.decodeIfPresent(String.self, forKey: .content)
+            reasoningContent = (try? c.decodeIfPresent(String.self, forKey: .reasoningContent))
+                ?? (try? c.decodeIfPresent(String.self, forKey: .reasoning))
+        }
     }
 }
 

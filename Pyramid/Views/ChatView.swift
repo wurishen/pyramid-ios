@@ -17,6 +17,8 @@ struct ChatView: View {
     @State private var showDeleteSessionAlert = false
     @FocusState private var inputFocused: Bool
     @State private var lastSessionID: UUID?
+    /// 由 ContentView 注入：切到设置 Tab（聊天页工具栏齿轮快捷入口）。
+    var onOpenSettings: () -> Void = {}
 
     init(
         settings: AppSettings,
@@ -123,6 +125,12 @@ struct ChatView: View {
         }
         ToolbarItem(placement: .topBarTrailing) {
             HStack(spacing: 12) {
+                Button {
+                    onOpenSettings()
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .accessibilityLabel("设置")
                 Button {
                     copyAllToPasteboard()
                 } label: {
@@ -338,7 +346,22 @@ struct ChatView: View {
                     }
                 }
             }
+            // 切换会话 / 首次进入：静默定位到最后一楼（不动画）。
+            // LazyVStack 需要一帧完成布局，async 到下一个 runloop 再滚。
+            .onChange(of: store.currentSessionID) { _, _ in
+                scrollToBottom(proxy: proxy)
+            }
+            .onAppear {
+                scrollToBottom(proxy: proxy)
+            }
             .scrollDismissesKeyboard(.interactively)
+        }
+    }
+
+    private func scrollToBottom(proxy: ScrollViewProxy) {
+        DispatchQueue.main.async {
+            guard let last = viewModel.messages.last else { return }
+            proxy.scrollTo(last.id, anchor: .bottom)
         }
     }
 
@@ -431,7 +454,8 @@ struct ChatView: View {
             worldBook: WorldBookStore(),
             presets: PresetStore(),
             characters: CharacterStore(),
-            displayRegexes: DisplayRegexStore()
+            displayRegexes: DisplayRegexStore(),
+            onOpenSettings: {}
         )
     }
 }

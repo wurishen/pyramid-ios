@@ -24,7 +24,8 @@ struct ContentView: View {
                 worldBook: worldBook,
                 presets: presets,
                 characters: characters,
-                displayRegexes: displayRegexes
+                displayRegexes: displayRegexes,
+                onOpenSettings: { selectedTab = 1 }
             )
             .opacity(selectedTab == 0 ? 1 : 0)
             .allowsHitTesting(selectedTab == 0)

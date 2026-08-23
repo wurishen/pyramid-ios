@@ -292,12 +292,21 @@ final class ChatViewModel: ObservableObject {
         // 宏展开：���作用于送入 API 的消息文本，不修改存储 / 显示。
         var apiHistory = expandMacros(in: trimmedHistory)
         // ST `prompt_only` 规则：在 outgoing prompt 阶段把酒馆思维链 / 状态栏等
-        // 对 AI 隐藏��内容剥掉。仅作用于送入 API 的消息，不动存储 / 显示。
+        // 对 AI 隐藏的内容剥掉。仅作用于送入 API 的消息，不动存储 / 显示。
+        // 思维链（<think> 块 / reasoning_content 包裹产物）同样不回传给模型。
         let presetDisplayIds = currentPreset?.displayRegexIds ?? []
+        let hideTagStripEnabled = settings.hideTagStripEnabled
+        let hideTags = settings.hideTags
         apiHistory = apiHistory.map { msg in
             var copy = msg
+            if hideTagStripEnabled, msg.role == .assistant {
+                let parsed = ThinkingParser.parse(copy.content, tags: hideTags)
+                if parsed.thinking != nil {
+                    copy.content = parsed.body
+                }
+            }
             copy.content = MessageRendererCore.applyPromptOnly(
-                text: msg.content,
+                text: copy.content,
                 presetDisplayRegexIds: presetDisplayIds,
                 all: displayRegexes.regexes
             )

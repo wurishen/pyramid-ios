@@ -69,10 +69,24 @@ struct OpenAIClient {
 
         do {
             let decoded = try Self.sharedDecoder.decode(ChatCompletionResponse.self, from: data)
-            guard let content = decoded.choices.first?.message.content, !content.isEmpty else {
+            guard let choice = decoded.choices.first else {
                 throw ChatError.emptyResponse
             }
-            return content
+            // reasoning_content（DeepSeek R1 风格）统一包上 <think> 标签，
+            // 与正文里模型自带的思维链走同一条展示路径。
+            let content = choice.message.content ?? ""
+            let reasoning = choice.message.reasoningContent ?? ""
+            if content.isEmpty && reasoning.isEmpty {
+                throw ChatError.emptyResponse
+            }
+            var combined = ""
+            if !reasoning.isEmpty {
+                combined += "<think>\(reasoning)</think>"
+            }
+            if !content.isEmpty {
+                combined += (combined.isEmpty ? "" : "\n\n") + content
+            }
+            return combined
         } catch let error as ChatError {
             throw error
         } catch {
@@ -96,6 +110,16 @@ struct OpenAIClient {
                         throw ChatError.badStatus(http.statusCode, String(data: body, encoding: .utf8) ?? "")
                     }
 
+                    // reasoning_content 流：整段只包一对 <think> 标签（逐 token 包会
+                    // 产生成千上万个小块，下游 ThinkingParser 会用空行把它们隔开）。
+                    var inReasoningRun = false
+                    func closeReasoningRun() {
+                        if inReasoningRun {
+                            continuation.yield("</think>")
+                            inReasoningRun = false
+                        }
+                    }
+
                     for try await line in bytes.lines {
                         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard trimmed.hasPrefix("data:") else { continue }
@@ -103,10 +127,22 @@ struct OpenAIClient {
                         guard !payload.isEmpty else { continue }
                         if payload == "[DONE]" { break }
                         if let chunk = try? Self.sharedDecoder.decode(ChatCompletionStreamChunk.self, from: Data(payload.utf8)),
-                           let delta = chunk.choices.first?.delta.content {
-                            continuation.yield(delta)
+                           let delta = chunk.choices.first?.delta {
+                            if let r = delta.reasoningContent, !r.isEmpty {
+                                if !inReasoningRun {
+                                    continuation.yield("<think>")
+                                    inReasoningRun = true
+                                }
+                                continuation.yield(r)
+                            } else {
+                                closeReasoningRun()
+                                if let c = delta.content, !c.isEmpty {
+                                    continuation.yield(c)
+                                }
+                            }
                         }
                     }
+                    closeReasoningRun()
                     continuation.finish()
                 } catch is CancellationError {
                     continuation.finish()

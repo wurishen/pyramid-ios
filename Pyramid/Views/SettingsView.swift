@@ -52,7 +52,12 @@ struct SettingsView: View {
                         Label("预设", systemImage: "slider.horizontal.3")
                     }
                     NavigationLink {
-                        DisplaySettingsView(settings: settings, displayRegexes: displayRegexes)
+                        DisplayRegexListView(store: displayRegexes)
+                    } label: {
+                        Label("正则脚本", systemImage: "text.badge.checkmark")
+                    }
+                    NavigationLink {
+                        DisplaySettingsView(settings: settings)
                     } label: {
                         Label("渲染", systemImage: "text.alignleft")
                     }
@@ -304,7 +309,6 @@ struct WorldBookSettingsView: View {
 
 struct DisplaySettingsView: View {
     @ObservedObject var settings: AppSettings
-    @ObservedObject var displayRegexes: DisplayRegexStore
 
     var body: some View {
         Form {
@@ -320,17 +324,10 @@ struct DisplaySettingsView: View {
             } header: {
                 Text("隐藏标签")
             } footer: {
-                Text("默认包含 think、thinking。剥离形如 <tag>...</tag> 的整段，失败则保留原文。")
+                Text("默认包含 think、thinking。助手消息里的思维链块会剥离成卡片左上角的「思考过程」折叠块；其余标签整段剥离，失败则保留原文。")
             }
             Section {
-                NavigationLink("显示用正则") {
-                    DisplayRegexListView(store: displayRegexes)
-                }
-            } footer: {
-                Text("仅作用于助手消息的「渲染前」管道。")
-            }
-            Section {
-                Text("上述所有规则仅作用于气泡显示；复制 / 编辑 / 重新生成 / 发送 API 始终使用原始消息。")
+                Text("正则与思维链仅作用于气泡显示；复制 / 编辑 / 重新生成 / 发送 API 始终使用原始消息（思维链不回传给模型）。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

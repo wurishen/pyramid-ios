@@ -243,6 +243,106 @@ enum ImportSupport {
         guard decodedLength > 0 else { return nil }
         return Data(output.prefix(decodedLength))
     }
+
+    // MARK: - 预设导入（SillyTavern OpenAI 聊天补全预设 JSON）
+
+    /// 映射策略：
+    /// - `prompts` + `prompt_order`：按 order 里 enabled 的条目顺序，把有 content 的
+    ///   prompt（含 main / jailbreak / nsfw 等系统段）拼成系统提示词；无 content 的
+    ///   注入标记（chatHistory / worldInfoBefore 等）自然跳过。
+    ///   优先取 character_id == 100001（ST 默认角色）的 order 列表。
+    /// - 标量：temperature；top_p（别名 openai_top_p）；openai_max_tokens /
+    ///   max_tokens → maxTokens；model / openai_model → modelName。
+    /// - 文件名作为预设名。不识别的字段一律丢弃（Preset 没有对应通道）。
+    static func parsePresets(from data: Data, fallbackName: String) throws -> [Preset] {
+        guard let object = try? JSONSerialization.jsonObject(with: data) else {
+            throw PresetImportError.invalidData
+        }
+        if let dict = object as? [String: Any] {
+            if let spec = dict["spec"] as? String, spec.contains("chara_card"), dict["data"] != nil {
+                throw PresetImportError.characterCardHint
+            }
+            return [presetFromSillyTavern(dict, name: fallbackName)]
+        }
+        if let array = object as? [[String: Any]] {
+            return array.map { presetFromSillyTavern($0, name: fallbackName) }
+        }
+        throw PresetImportError.invalidData
+    }
+
+    static func presetFromSillyTavern(_ json: [String: Any], name: String) -> Preset {
+        var systemParts: [String] = []
+        if let prompts = json["prompts"] as? [[String: Any]] {
+            let byID = Dictionary(
+                prompts.compactMap { prompt -> (String, [String: Any])? in
+                    guard let id = prompt["identifier"] as? String else { return nil }
+                    return (id, prompt)
+                },
+                uniquingKeysWith: { first, _ in first }
+            )
+            let orderLists = json["prompt_order"] as? [[String: Any]] ?? []
+            let chosenOrder =
+                (orderLists.first { ($0["character_id"] as? NSNumber)?.intValue == 100001 }
+                 ?? orderLists.first)?["order"] as? [[String: Any]] ?? []
+            // 无 prompt_order 时退化为按数组原序取全部 prompt。
+            let entries: [[String: Any]] =
+                chosenOrder.isEmpty
+                ? prompts
+                : chosenOrder.compactMap { entry in
+                    guard entry["enabled"] as? Bool ?? true,
+                          let id = entry["identifier"] as? String else { return nil }
+                    return byID[id]
+                }
+            for prompt in entries {
+                guard let content = prompt["content"] as? String,
+                      !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+                systemParts.append(content)
+            }
+        }
+
+        func doubleValue(_ keys: [String]) -> Double? {
+            for key in keys {
+                if let number = json[key] as? NSNumber { return number.doubleValue }
+            }
+            return nil
+        }
+        func intValue(_ keys: [String]) -> Int? {
+            for key in keys {
+                if let number = json[key] as? NSNumber { return number.intValue }
+            }
+            return nil
+        }
+        func stringValue(_ keys: [String]) -> String? {
+            for key in keys {
+                if let s = json[key] as? String, !s.isEmpty { return s }
+            }
+            return nil
+        }
+
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return Preset(
+            name: trimmedName.isEmpty ? "导入的预设" : trimmedName,
+            modelName: stringValue(["openai_model", "model"]),
+            systemPrompt: systemParts.isEmpty ? nil : systemParts.joined(separator: "\n\n"),
+            temperature: doubleValue(["temperature"]),
+            topP: doubleValue(["openai_top_p", "top_p"]),
+            maxTokens: intValue(["openai_max_tokens", "max_tokens"])
+        )
+    }
+}
+
+enum PresetImportError: LocalizedError {
+    case invalidData
+    case characterCardHint
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidData:
+            return "不是 SillyTavern 预设格式（需要 OpenAI 聊天补全预设 JSON，含 prompts 或采样参数字段）"
+        case .characterCardHint:
+            return "这是角色卡文件，不是预设。请到「设置 → 角色卡」导入。"
+        }
+    }
 }
 
 enum CharacterImportError: LocalizedError {

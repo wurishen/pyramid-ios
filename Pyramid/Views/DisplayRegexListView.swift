@@ -1,8 +1,12 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct DisplayRegexListView: View {
     @ObservedObject var store: DisplayRegexStore
     @State private var editing: DisplayRegexEditing?
+    @State private var showImporter = false
+    @State private var importError: String?
+    @State private var importSuccess: String?
 
     var body: some View {
         List {
@@ -39,6 +43,13 @@ struct DisplayRegexListView: View {
         }
         .navigationTitle("显示用正则")
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    showImporter = true
+                } label: {
+                    Label("导入 SillyTavern 正则", systemImage: "square.and.arrow.down")
+                }
+            }
             ToolbarItem(placement: .confirmationAction) {
                 Button {
                     editing = DisplayRegexEditing()
@@ -46,6 +57,23 @@ struct DisplayRegexListView: View {
                     Label("新建", systemImage: "plus")
                 }
             }
+        }
+        .fileImporter(
+            isPresented: $showImporter,
+            allowedContentTypes: [.json],
+            allowsMultipleSelection: false
+        ) { result in
+            handleImport(result)
+        }
+        .alert("导入失败", isPresented: importErrorBinding) {
+            Button("好", role: .cancel) { importError = nil }
+        } message: {
+            Text(importError ?? "")
+        }
+        .alert("导入完成", isPresented: importSuccessBinding) {
+            Button("好", role: .cancel) { importSuccess = nil }
+        } message: {
+            Text(importSuccess ?? "")
         }
         .sheet(item: $editing) { editing in
             DisplayRegexEditView(
@@ -55,6 +83,40 @@ struct DisplayRegexListView: View {
                 }
             )
         }
+    }
+
+    /// ST Regex Script JSON 导入（单条对象或数组）。停用 / promptOnly /
+    /// 非显示 placement 的脚本由 importer 过滤；全部被过滤时提示无可导入项。
+    private func handleImport(_ result: Result<[URL], Error>) {
+        guard case .success(let urls) = result, let url = urls.first else { return }
+        do {
+            let data = try ImportSupport.readImportedData(from: url)
+            let regexes = try SillyTavernScriptImporter.importScripts(from: data)
+            guard !regexes.isEmpty else {
+                importError = "文件里没有可导入的显示用正则（已停用 / 仅提示词 / 非显示作用域的脚本会被跳过）"
+                return
+            }
+            for regex in regexes {
+                store.upsert(regex)
+            }
+            importSuccess = "已导入 \(regexes.count) 条正则脚本"
+        } catch {
+            importError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    private var importErrorBinding: Binding<Bool> {
+        Binding(
+            get: { importError != nil },
+            set: { if !$0 { importError = nil } }
+        )
+    }
+
+    private var importSuccessBinding: Binding<Bool> {
+        Binding(
+            get: { importSuccess != nil },
+            set: { if !$0 { importSuccess = nil } }
+        )
     }
 
     private func deleteRegexes(at offsets: IndexSet) {

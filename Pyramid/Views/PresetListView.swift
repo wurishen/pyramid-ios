@@ -1,10 +1,14 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct PresetListView: View {
     @ObservedObject var store: PresetStore
     @ObservedObject var worldBook: WorldBookStore
     @ObservedObject var displayRegexes: DisplayRegexStore
     @State private var editingPreset: Preset?
+    @State private var showImporter = false
+    @State private var importError: String?
+    @State private var importSuccess: String?
 
     var body: some View {
         List {
@@ -55,13 +59,35 @@ struct PresetListView: View {
         }
         .navigationTitle("预设管理")
         .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
+            ToolbarItemGroup(placement: .confirmationAction) {
+                Button {
+                    showImporter = true
+                } label: {
+                    Label("导入预设", systemImage: "square.and.arrow.down")
+                }
                 Button {
                     editingPreset = Preset(name: "")
                 } label: {
                     Label("新建", systemImage: "plus")
                 }
             }
+        }
+        .fileImporter(
+            isPresented: $showImporter,
+            allowedContentTypes: [.json],
+            allowsMultipleSelection: false
+        ) { result in
+            handleImport(result)
+        }
+        .alert("导入失败", isPresented: importErrorBinding) {
+            Button("好", role: .cancel) { importError = nil }
+        } message: {
+            Text(importError ?? "")
+        }
+        .alert("导入完成", isPresented: importSuccessBinding) {
+            Button("好", role: .cancel) { importSuccess = nil }
+        } message: {
+            Text(importSuccess ?? "")
         }
         .sheet(item: $editingPreset) { preset in
             PresetEditView(
@@ -72,6 +98,37 @@ struct PresetListView: View {
                 store.upsert(updated)
             }
         }
+    }
+
+    /// SillyTavern OpenAI 预设 JSON 导入：文件名作预设名，prompts/prompt_order
+    /// 拼系统提示词，采样标量直接映射。失败弹错误（含角色卡误投提示）。
+    private func handleImport(_ result: Result<[URL], Error>) {
+        guard case .success(let urls) = result, let url = urls.first else { return }
+        do {
+            let data = try ImportSupport.readImportedData(from: url)
+            let name = url.deletingPathExtension().lastPathComponent
+            let presets = try ImportSupport.parsePresets(from: data, fallbackName: name)
+            for preset in presets {
+                store.upsert(preset)
+            }
+            importSuccess = "已导入 \(presets.count) 个预设：\(presets.map(\.name).joined(separator: "、"))"
+        } catch {
+            importError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    private var importErrorBinding: Binding<Bool> {
+        Binding(
+            get: { importError != nil },
+            set: { if !$0 { importError = nil } }
+        )
+    }
+
+    private var importSuccessBinding: Binding<Bool> {
+        Binding(
+            get: { importSuccess != nil },
+            set: { if !$0 { importSuccess = nil } }
+        )
     }
 
     private func deletePresets(at offsets: IndexSet) {

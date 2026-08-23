@@ -4,7 +4,8 @@ import SwiftUI
 ///
 /// 卡片组成（自上而下）：
 /// - 头部：头像 + 角色名 / 用户名 + 楼层号 + 时间戳（用户 / 助手视觉区分）
-/// - 正文：渲染后的内容（MarkdownTextView）；超长自动折叠（>800 字）
+/// - 思维链（助手）：`<think>` 块剥离后以左上角小折叠块展示，默认收起
+/// - 正文：渲染后的内容（MarkdownTextView），不自动折叠
 ///
 /// 渲染管线仅作用于展示层：`RenderEngine.render(raw:context:)`（显示用正则 + 隐藏标签剥离 + RenderNode 解析）
 /// → `MarkdownTextView(text:)` 块级 Markdown 排版。原始 `message.content` 始终保留，
@@ -35,8 +36,6 @@ struct MessageCard: View {
     var onDelete: () -> Void = {}
     var onToggleInclude: () -> Void = {}
 
-    private static let collapseThreshold = 800
-    @State private var expanded = false
     @State private var showRenderInspector = false
 
     var body: some View {
@@ -48,6 +47,9 @@ struct MessageCard: View {
         }()
         let avatarData: Data? = isUser ? userAvatarData : character?.avatarData
         let raw = liveContent ?? message.content
+        // 思维链提取：助手消息把 <think> 块剥成折叠块；流式中未闭合 → 「思考中…」。
+        let thinking: ThinkingParser.Result? =
+            isUser ? nil : ThinkingParser.parse(raw, tags: settings.hideTags)
         // 界面整体缩放档位（来自 AppSettings.uiScale.factor）。
         // 与「紧凑模式」叠加：先按 scale 调基准，再叠加紧凑模式的间距减项。
         let scale = settings.uiScale.factor
@@ -63,7 +65,7 @@ struct MessageCard: View {
             variableStore: variableStore,
             sessionId: sessionId
         )
-        let result = RenderEngine.render(raw: raw, context: context)
+        let result = RenderEngine.render(raw: thinking?.body ?? raw, context: context)
 
         VStack(alignment: .leading, spacing: 6 * scale) {
             headerRow(
@@ -72,6 +74,14 @@ struct MessageCard: View {
                 avatarData: avatarData,
                 scale: scale
             )
+            if let t = thinking, t.thinking != nil || t.isIncomplete {
+                ThinkingBlockView(
+                    text: t.thinking ?? "",
+                    incomplete: t.isIncomplete,
+                    streaming: liveContent != nil,
+                    scale: scale
+                )
+            }
             contentCard(isUser: isUser, raw: raw, tree: result.tree, scale: scale)
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
@@ -169,31 +179,18 @@ struct MessageCard: View {
 
     @ViewBuilder
     private func bodyContent(tree: RenderTree, isUser: Bool, scale: CGFloat) -> some View {
-        // 渲染前折叠判断：按全部 .text 节点的拼回长度判断，>800 默认折叠。
-        // 折叠只影响 .text 节点；.status 节点不受折叠限制。
-        let flattened = tree.flattenedText
-        let isLong = flattened.count > Self.collapseThreshold
-
         VStack(alignment: .leading, spacing: 8 * scale) {
             ForEach(Array(tree.nodes.enumerated()), id: \.offset) { _, node in
-                renderNode(node, isLong: isLong, scale: scale)
+                renderNode(node, scale: scale)
             }
-        }
-
-        if isLong {
-            Button(expanded ? "收起" : "展开") {
-                withAnimation { expanded.toggle() }
-            }
-            .font(.system(size: 12 * scale))
-            .foregroundStyle(Color.accentColor)
         }
     }
 
     @ViewBuilder
-    private func renderNode(_ node: RenderNode, isLong: Bool, scale: CGFloat) -> some View {
+    private func renderNode(_ node: RenderNode, scale: CGFloat) -> some View {
         switch node {
         case let .text(text):
-            textNodeView(text, isLong: isLong, scale: scale)
+            textNodeView(text, scale: scale)
         case let .status(hp, affection):
             // .status 节点不受折叠影响；视觉上本身是一个紧凑面板。
             // 单独 .scaleEffect 而不是改内部字面量，让面板整体放大。
@@ -222,11 +219,11 @@ struct MessageCard: View {
             // 宏绑定文本：解析产物对**当前**变量树求值。store 是 @ObservedObject ——
             // 任意交互 / patch 写入触发刷新 → 重算片段（不重新解析）→ 文本同步更新。
             // store 缺失（fixture）→ 空树求值，缺失变量回退原文，内容不丢。
-            macroTextView(segments, isLong: isLong, scale: scale)
+            macroTextView(segments, scale: scale)
         case let .condition(node):
             // 条件分支：对当前变量树求值选支，递归渲染该分支的预解析节点。
             // store 变化 → 重算 → 分支自动切换（无需重发消息）。
-            conditionBranchView(node, isLong: isLong, scale: scale)
+            conditionBranchView(node, scale: scale)
         case let .variableUpdate(summary):
             // P3 native transpile：`<UpdateVariable>…</UpdateVariable>` 块 → 可折叠摘要。
             VariableUpdateView(summary: summary, scale: scale)
@@ -234,7 +231,7 @@ struct MessageCard: View {
             // P8 HTML 容器：递归渲染子节点；不引入业务视觉（无 PhoneContainer / StatusContainer）。
             // 与 conditionBranchView 同款 —— `renderNode` 与本函数互相递归，
             // 用 AnyView 而非泛型 closure 避免 Release archive 触发无穷类型展开崩溃。
-            htmlContainerView(children: children, isLong: isLong, scale: scale)
+            htmlContainerView(children: children, scale: scale)
         case let .htmlImage(src, alt):
             // P8 通用图像：URL 记录在 IR，**不**自动下载；alt 作为 fallback 文本。
             HTMLImageView(src: src, alt: alt, scale: scale)
@@ -255,15 +252,14 @@ struct MessageCard: View {
         case let .htmlStyled(tag, classNames, style, children):
             // P11 CSS-aware 容器：StyledContainerView 把 CSS 声明翻译成 SwiftUI 原生 modifier 链。
             htmlStyledView(tag: tag, classNames: classNames, style: style,
-                           children: children, isLong: isLong, scale: scale)
+                           children: children, scale: scale)
         }
     }
 
     /// 宏绑定文本：对当前会话变量树求值后复用普通文本渲染。
-    private func macroTextView(_ segments: [MacroSegment], isLong: Bool, scale: CGFloat) -> some View {
+    private func macroTextView(_ segments: [MacroSegment], scale: CGFloat) -> some View {
         textNodeView(
             MacroRenderer.render(segments: segments, tree: currentVariableTree),
-            isLong: isLong,
             scale: scale
         )
     }
@@ -271,11 +267,11 @@ struct MessageCard: View {
     /// 条件分支：对当前变量树求值选支，递归渲染分支内的预解析节点（可含嵌套条件）。
     /// 返回 `AnyView` 而非 `some View` —— 本函数与 renderNode 互相递归，
     /// 不透明类型会让 Release 全模块优化展开无穷类型（Debug 可过、Archive 崩）。
-    private func conditionBranchView(_ node: NativeConditionNode, isLong: Bool, scale: CGFloat) -> AnyView {
+    private func conditionBranchView(_ node: NativeConditionNode, scale: CGFloat) -> AnyView {
         let (branch, _) = node.activeBranch(in: currentVariableTree)
         return AnyView(
             ForEach(Array(branch.enumerated()), id: \.offset) { _, sub in
-                renderNode(sub, isLong: isLong, scale: scale)
+                renderNode(sub, scale: scale)
             }
         )
     }
@@ -287,13 +283,12 @@ struct MessageCard: View {
 
     /// P8 HTML 容器递归入口 —— 用 AnyView 包装 renderNode 调用，避免泛型递归导致的
     /// Release archive 类型展开崩溃（参见 conditionBranchView 注释）。
-    private func htmlContainerView(children: [RenderNode], isLong: Bool, scale: CGFloat) -> AnyView {
+    private func htmlContainerView(children: [RenderNode], scale: CGFloat) -> AnyView {
         AnyView(
             HTMLContainerView(
                 children: children,
-                isLong: isLong,
                 scale: scale,
-                renderChild: { child in AnyView(renderNode(child, isLong: isLong, scale: scale)) }
+                renderChild: { child in AnyView(renderNode(child, scale: scale)) }
             )
         )
     }
@@ -301,28 +296,24 @@ struct MessageCard: View {
     /// P11 styled 容器递归入口 —— 同 htmlContainerView，外层套 StyledContainerView
     /// 应用 CSS 声明（颜色 / 背景 / padding / 圆角 / 阴影 / 字体 / transform 等）。
     private func htmlStyledView(tag: String, classNames: [String], style: CSSStyleDeclaration,
-                                children: [RenderNode], isLong: Bool, scale: CGFloat) -> AnyView {
+                                children: [RenderNode], scale: CGFloat) -> AnyView {
         AnyView(
             StyledContainerView(tag: tag, classNames: classNames, style: style, scale: scale) {
                 ForEach(Array(children.enumerated()), id: \.offset) { _, child in
-                    renderNode(child, isLong: isLong, scale: scale)
+                    renderNode(child, scale: scale)
                 }
             }
         )
     }
 
     @ViewBuilder
-    private func textNodeView(_ text: String, isLong: Bool, scale: CGFloat) -> some View {        // 长文折叠时截断 .text 节点；保留所有节点原顺序。
-        let visibleText: String = (isLong && !expanded)
-            ? String(text.prefix(Self.collapseThreshold)) + "…"
-            : text
-
+    private func textNodeView(_ text: String, scale: CGFloat) -> some View {
         Group {
             // 三态：预设 nil → 用全局；预设 Bool → 用预设。
             if markdownEnabled(settings: settings, preset: preset) {
-                MarkdownTextView(text: visibleText, uiScale: scale)
+                MarkdownTextView(text: text, uiScale: scale)
             } else {
-                Text(visibleText)
+                Text(text)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .font(.system(size: 17 * scale))
@@ -460,6 +451,60 @@ struct MessageCard: View {
             return flag
         }
         return settings.enableMarkdown
+    }
+}
+
+// MARK: - 思维链折叠块
+
+/// 思维链展示：贴卡片左上角的小折叠块（对齐酒馆 reasoning 折叠块形态）。
+/// 默认收起只显示标签；点开显示思考原文。流式生成中（未闭合块）显示「思考中…」。
+struct ThinkingBlockView: View {
+    let text: String
+    let incomplete: Bool
+    let streaming: Bool
+    var scale: CGFloat = 1.0
+    @State private var expanded = false
+
+    private var label: String {
+        (streaming && incomplete) ? "思考中…" : "思考过程"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4 * scale) {
+            Button {
+                withAnimation { expanded.toggle() }
+            } label: {
+                HStack(spacing: 5 * scale) {
+                    Image(systemName: "brain.head.profile")
+                        .font(.system(size: 11 * scale))
+                    Text(label)
+                        .font(.system(size: 11 * scale, weight: .medium))
+                    if streaming && incomplete && !expanded {
+                        ProgressView()
+                            .scaleEffect(0.55)
+                            .frame(height: 11 * scale)
+                    }
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 9 * scale))
+                }
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 9 * scale)
+                .padding(.vertical, 4 * scale)
+                .background(Color(.systemGray5), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            if expanded {
+                Text(text.isEmpty ? "（暂无思考内容）" : text)
+                    .font(.system(size: 13 * scale))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8 * scale)
+                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 8 * scale))
+            }
+        }
+        .padding(.vertical, 1 * scale)
     }
 }
 
@@ -908,7 +953,6 @@ struct VariableUpdateView: View {
 /// RenderNode（含嵌套 htmlContainer / 文本 / 控件）。
 struct HTMLContainerView: View {
     let children: [RenderNode]
-    let isLong: Bool
     let scale: CGFloat
     /// `renderChild` 必须返回 `AnyView` —— `renderNode` 与本视图互相递归，泛型 / 不透明
     /// 返回类型会在 Release 全模块优化里展开无穷类型（与 `conditionBranchView` 同款原因）。
