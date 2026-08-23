@@ -79,12 +79,14 @@ enum RenderNodeParser {
                     // HTML 优先；`<style>` 块解析为样式表，class/tag/inline 匹配的容器
                     // 升级 htmlStyled；script / 未知标签仍降级 residual，不丢字）。
                     let htmlPass = HTMLCSSTranspiler.transpile(t)
-                    if htmlPass.count == 1, case .text = htmlPass[0] {
-                        // HTMLTranspiler 退回纯文本（无 HTML / Script） → 走宏切分
-                        if TavernMacroParser.containsMacroToken(t) {
-                            return [.macroText(TavernMacroParser.parse(t))]
+                    if htmlPass.count == 1, case let .text(passed) = htmlPass[0] {
+                        // P12a：转译器可能已消费掉 `<style>` 等块 —— 此时 passed != t，
+                        // 必须采用转译器输出而非原文回退（否则已消费的块逐字回流）。
+                        // 宏切分同样基于剩余文本。
+                        if TavernMacroParser.containsMacroToken(passed) {
+                            return [.macroText(TavernMacroParser.parse(passed))]
                         }
-                        return [.text(t)]
+                        return [.text(passed)]
                     }
                     return htmlPass
                 }
