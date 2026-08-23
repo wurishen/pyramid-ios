@@ -26,7 +26,8 @@ struct ChatView: View {
         worldBook: WorldBookStore,
         presets: PresetStore,
         characters: CharacterStore,
-        displayRegexes: DisplayRegexStore
+        displayRegexes: DisplayRegexStore,
+        onOpenSettings: @escaping () -> Void = {}
     ) {
         self.store = store
         self.worldBook = worldBook
@@ -34,6 +35,7 @@ struct ChatView: View {
         self.presets = presets
         self.characters = characters
         self.displayRegexes = displayRegexes
+        self.onOpenSettings = onOpenSettings
         _viewModel = StateObject(wrappedValue: ChatViewModel(settings: settings, store: store, worldBook: worldBook, characters: characters, presets: presets, displayRegexes: displayRegexes))
     }
 
