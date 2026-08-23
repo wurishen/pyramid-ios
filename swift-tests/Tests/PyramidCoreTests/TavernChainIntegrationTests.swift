@@ -261,17 +261,16 @@ final class TavernChainIntegrationTests: XCTestCase {
 
     func testUnknownExpressionsPreservedVerbatimAsResidual() {
         let js = "<script src=\"https://evil.example/x.js\"></script>"
-        let css = "<style>.a{color:red}</style>"
         let html = "<iframe src=\"https://evil.example\"></iframe><div>卡片</div>"
         let rule = makeRule(
             pattern: "\\[面板\\]",
-            replacement: js + css + html
+            replacement: js + html
         )
         XCTAssertTrue(MessageRendererCore.isDeferredCandidate(rule), "含脚本标记的 replacement 应进 deferred")
         let result = renderAssistant("A[面板]B", rules: [rule])
         let rs = residuals(in: result)
         XCTAssertEqual(rs.count, 1)
-        XCTAssertEqual(rs[0].replacement, js + css + html, "原文必须逐字保留")
+        XCTAssertEqual(rs[0].replacement, js + html, "原文必须逐字保留")
         XCTAssertEqual(rs[0].sourcePattern, rule.pattern)
         // 文本流零泄漏；正文前后缀原样。
         XCTAssertEqual(textContents(of: result).joined(), "AB")
@@ -280,6 +279,111 @@ final class TavernChainIntegrationTests: XCTestCase {
                 XCTAssertFalse(t.contains("<"), "文本流不得泄漏标记：\(t)")
             }
         }
+    }
+
+    // MARK: - P12a. replacement 内嵌 <style> 接入 CSS 管线
+
+    /// 递归收集 RenderNode 树里的纯文本（htmlContainer / htmlStyled 深处也覆盖）。
+    private func collectTexts(_ node: RenderNode, into out: inout [String]) {
+        switch node {
+        case let .text(s):
+            out.append(s)
+        case let .htmlContainer(children):
+            children.forEach { collectTexts($0, into: &out) }
+        case let .htmlStyled(_, _, _, children):
+            children.forEach { collectTexts($0, into: &out) }
+        default:
+            break
+        }
+    }
+
+    /// 万界 / 圣樱类卡的典型形态：replacement = `<style>` 表 + class 标记容器。
+    /// 期望：CSS 进管线、外层 div 升级 htmlStyled（声明被解析）、无残留、正文保留。
+    func testCompleteStyleBlockInReplacementDrivesCSSPipeline() {
+        let replacement = """
+        <style>
+        .card { color: #ff0000; background: #222222; border-radius: 8px; padding: 12px; }
+        </style>
+        <div class="card"><span>面板正文</span></div>
+        """
+        let rule = makeRule(pattern: "\\[皮肤\\]", replacement: replacement)
+        XCTAssertTrue(MessageRendererCore.containsCompleteStyleBlock(replacement))
+        let result = renderAssistant("前[皮肤]后", rules: [rule])
+        XCTAssertTrue(residuals(in: result).isEmpty, "完整 <style> 块应被 CSS 管线消费而非冻结")
+        // 找到升级后的 htmlStyled(.card) 节点并验证解析出的强类型声明。
+        var styled: (tag: String, classNames: [String], style: CSSStyleDeclaration)?
+        for node in result.tree.nodes {
+            if case let .htmlStyled(tag, classes, style, _) = node, classes.contains("card") {
+                styled = (tag, classes, style)
+            }
+        }
+        guard let s = styled else {
+            return XCTFail("应有 .card 容器被升级为 htmlStyled，节点：\(result.tree.nodes)")
+        }
+        XCTAssertEqual(s.tag, "div")
+        XCTAssertEqual(s.style.value(forProperty: "color"), "#ff0000")
+        XCTAssertNotNil(s.style.declarations.first(where: { $0.resolved != nil }))
+        // 正文文本完整可达（容器深处）。
+        var texts: [String] = []
+        for node in result.tree.nodes { collectTexts(node, into: &texts) }
+        XCTAssertTrue(texts.joined().contains("面板正文"))
+        XCTAssertEqual(textContents(of: result).joined(), "前后", "文本流只留 style/容器之外的前后缀")
+    }
+
+    /// 未闭合 `<style>`（流式截断 / 掉格式）：不命中 → 维持残留冻结，原文逐字保留。
+    func testUnclosedStyleBlockStaysFrozenResidual() {
+        let broken = "<style>.card{color:red"
+        let rule = makeRule(pattern: "\\[残卡\\]", replacement: broken + "<div>x</div>")
+        XCTAssertFalse(MessageRendererCore.containsCompleteStyleBlock(broken))
+        let result = renderAssistant("A[残卡]B", rules: [rule])
+        let rs = residuals(in: result)
+        XCTAssertEqual(rs.count, 1, "畸形 style 块必须走残留冻结")
+        XCTAssertEqual(rs[0].replacement, broken + "<div>x</div>")
+        XCTAssertEqual(textContents(of: result).joined(), "AB")
+    }
+
+    /// style 与标记分属两条规则：相邻文本段在 deferred 层合并后整体进 htmlPass，
+    /// 同样点亮样式（跨规则皮肤注入场景）。
+    func testStyleAndMarkupFromSeparateRulesMergeIntoPipeline() {
+        let cssRule = makeRule(name: "css", pattern: "@CSS@", replacement: "<style>.box{color:#00ff00}</style>")
+        let htmlRule = makeRule(name: "html", pattern: "@HTML@", replacement: "<div class=\"box\">合并内容</div>")
+        let result = renderAssistant("@CSS@@HTML@", rules: [cssRule, htmlRule])
+        XCTAssertTrue(residuals(in: result).isEmpty)
+        var found = false
+        for node in result.tree.nodes {
+            if case let .htmlStyled(_, classes, style, _) = node, classes.contains("box") {
+                found = true
+                XCTAssertEqual(style.value(forProperty: "color"), "#00ff00")
+            }
+        }
+        XCTAssertTrue(found, "相邻段合并后 .box 应升级 htmlStyled：\(result.tree.nodes)")
+    }
+
+    /// style 片段里夹带 script / iframe：脚本永不执行、不泄漏进可见文本流，
+    /// 只以 htmlScript 冻结节点的形态存在；CSS 照常消费。
+    func testScriptInsideStyleBearingPieceNeverExecutes() {
+        let replacement = "<script>alert(1)</script><style>.t{color:blue}</style><div class=\"t\">安全正文</div>"
+        let rule = makeRule(pattern: "\\[混合\\]", replacement: replacement)
+        let result = renderAssistant("X[混合]Y", rules: [rule])
+        // 无任何可见文本携带标记或脚本体。
+        let visible = textContents(of: result).joined()
+        XCTAssertEqual(visible, "XY")
+        XCTAssertFalse(visible.contains("alert"))
+        // 脚本体以冻结节点存在（htmlScript / deferredResidual 均为「不执行只保存」）。
+        var frozenScripts = 0
+        for node in result.tree.nodes {
+            if case .htmlScript = node { frozenScripts += 1 }
+        }
+        XCTAssertGreaterThanOrEqual(frozenScripts, 1, "脚本体应冻结为 htmlScript 节点：\(result.tree.nodes)")
+        // CSS 照常生效。
+        var styledFound = false
+        for node in result.tree.nodes {
+            if case let .htmlStyled(_, classes, style, _) = node, classes.contains("t"),
+               style.value(forProperty: "color") == "blue" {
+                styledFound = true
+            }
+        }
+        XCTAssertTrue(styledFound)
     }
 
     // MARK: - 8. 无重复处理
@@ -349,19 +453,19 @@ final class TavernChainIntegrationTests: XCTestCase {
         }
         let raw = "第一段。\n\n<StatusPlaceHolderImpl/>\n\n最后一段。"
         let result = renderAssistant(raw, rules: [skinRule])
-        // replacement 里的 `<style>` 块在 deferred 预解析层就被抽成残留段（原文逐字
-        // 保留）—— 不走 RenderNodeParser 的 CSS 管线。顺序：
-        // 头文本 → 残留(CSS) → 占位符 → 按钮 → 尾文本。
-        XCTAssertEqual(result.tree.nodes.count, 5)
+        // P12a：replacement 里的完整 `<style>` 块改送文本流，由 RenderNodeParser 的
+        // htmlPass 抽进 stylesheet（空规则体无可视产物 → 节点消失），不再冻结为残留。
+        // 顺序：头文本 → 占位符 → 按钮 → 尾文本。
+        XCTAssertEqual(result.tree.nodes.count, 4)
         guard case let .text(head) = result.tree.nodes[0],
-              case .deferredResidual = result.tree.nodes[1],
-              case .statusPlaceholder = result.tree.nodes[2],
-              case .nativeAction = result.tree.nodes[3],
-              case let .text(tail) = result.tree.nodes[4] else {
-            return XCTFail("节点序列应为 文本/残留/占位符/动作/文本")
+              case .statusPlaceholder = result.tree.nodes[1],
+              case .nativeAction = result.tree.nodes[2],
+              case let .text(tail) = result.tree.nodes[3] else {
+            return XCTFail("节点序列应为 文本/占位符/动作/文本")
         }
         XCTAssertEqual(head, "第一段。\n\n")
         XCTAssertEqual(tail, "\n\n最后一段。")
+        XCTAssertTrue(residuals(in: result).isEmpty, "已消费的 <style> 块不应再以残留出现")
         // raw 永不被改写
         XCTAssertEqual(raw, "第一段。\n\n<StatusPlaceHolderImpl/>\n\n最后一段。")
     }

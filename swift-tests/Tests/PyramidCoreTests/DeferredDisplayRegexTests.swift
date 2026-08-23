@@ -198,21 +198,40 @@ final class DeferredDisplayRegexTests: XCTestCase {
         XCTAssertEqual(textContents(of: result).joined(), "A[状态栏]B")
     }
 
-    /// 全 HTML replacement → 整体残留，原文一字不丢；token 已被消费，
-    /// 不再产生占位符面板（防重复 transpile）。
-    func testUnconvertibleReplacementPreservedAsResidual() {
+    /// 含完整 `<style>` 的全 HTML replacement（P12a）→ 整体进 CSS 管线：
+    /// token 已被消费不再产生占位符；style 被样式表消费；脚本冻结为 htmlScript
+    /// 节点（永不执行、原文逐字保留）；容器正文可达；文本流零泄漏。
+    func testStyleBearingHtmlReplacementGoesThroughCSSPipeline() {
         let html = "<style>.a{color:red}</style><script src=\"//x/y.js\"></script><div>卡片</div>"
         let rule = makeRule(pattern: "<StatusPlaceHolderImpl\\s*/?>", replacement: html)
         let result = renderAssistant("<StatusPlaceHolderImpl/>", rules: [rule])
-        let rs = residuals(in: result)
-        XCTAssertEqual(rs.count, 1)
-        XCTAssertEqual(rs[0].replacement, html)
         // token 已消费 → 无占位符节点
         for node in result.tree.nodes {
             if case .statusPlaceholder = node { XCTFail("不应再有占位符节点") }
         }
-        // 文本流里没有泄漏 HTML
+        // P12a：style 块被管线消费 → 不再冻结为 deferred 残留
+        XCTAssertTrue(residuals(in: result).isEmpty)
+        // 脚本体不执行、原文保留：无 src → htmlScript 冻结；带安全 src →
+        // htmlExternalResource（同样只存 raw，不发请求）
+        let scriptHandled = result.tree.nodes.contains { node in
+            switch node {
+            case let .htmlScript(r):
+                return r.replacement.contains("<script")
+            case let .htmlExternalResource(res):
+                return res.raw.contains("<script")
+            default:
+                return false
+            }
+        }
+        XCTAssertTrue(scriptHandled, "脚本体应冻结保存：\(result.tree.nodes)")
+        // 容器正文可达；可见文本零标记泄漏
         XCTAssertFalse(textContents(of: result).contains(where: { $0.contains("<div>") }))
+        for node in result.tree.nodes {
+            if case let .text(t) = node {
+                XCTAssertFalse(t.contains("<"), "文本流不得泄漏标记：\(t)")
+                XCTAssertFalse(t.contains("alert"))
+            }
+        }
     }
 
     /// 空替换（剥除类规则）：按卡面意图移除 token，不崩溃、不动周边文本。

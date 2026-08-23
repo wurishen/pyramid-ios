@@ -280,6 +280,19 @@ enum MessageRendererCore {
         return re.firstMatch(in: s, options: [], range: NSRange(location: 0, length: ns.length)) != nil
     }
 
+    /// 片段是否含**完整** `<style…>…</style>` 块（大小写不敏感）。
+    /// P12a：这类片段不再冻成残留 —— 送回文本流，由 RenderNodeParser 的
+    /// htmlPass（HTMLCSSTranspiler）抽出 stylesheet、升级 htmlStyled，并剥掉
+    /// 已消费的 `<style>` 原文节点。未闭合 / 畸形块不命中 → 维持残留冻结，
+    /// 原文逐字保留（万界 / 圣樱类卡的正则皮肤由此点亮）。
+    static func containsCompleteStyleBlock(_ s: String) -> Bool {
+        guard let re = try? NSRegularExpression(
+            pattern: "(?is)<style\\b[^>]*>[\\s\\S]*?</style\\s*>"
+        ) else { return false }
+        let ns = s as NSString
+        return re.firstMatch(in: s, options: [], range: NSRange(location: 0, length: ns.length)) != nil
+    }
+
     /// 替换产物切片：原生表达片段 vs 其余片段（保序）。
     struct ReplacementPiece: Equatable, Sendable {
         var content: String
@@ -389,7 +402,9 @@ enum MessageRendererCore {
     }
 
     /// 一份 expanded replacement 的分流：原生表达片段 → 文本流（parser 转译）；
-    /// 含标记片段 → 残留冻结；其余 → 普通文本。空产物（剥除类替换）不产生节点。
+    /// 含完整 `<style>` 块的片段 → 文本流（P12a：CSS 管线消费，见
+    /// `containsCompleteStyleBlock`）；其余含标记片段 → 残留冻结；再其余 → 普通
+    /// 文本。空产物（剥除类替换）不产生节点。
     private static func emitReplacement(
         _ expanded: String,
         rule: DisplayRegex,
@@ -399,11 +414,17 @@ enum MessageRendererCore {
             if piece.isNativeExpression {
                 out.append(.text(piece.content))
             } else if containsTagMarkup(piece.content) {
-                out.append(.residual(DeferredResidual(
-                    ruleName: rule.name,
-                    sourcePattern: rule.pattern,
-                    replacement: piece.content
-                )))
+                if containsCompleteStyleBlock(piece.content) {
+                    // P12a：style + 标记整体进文本流。HTMLTranspiler 对不识别的
+                    // 部分逐字降级为纯文本 / residual 节点，原文绝不丢弃。
+                    out.append(.text(piece.content))
+                } else {
+                    out.append(.residual(DeferredResidual(
+                        ruleName: rule.name,
+                        sourcePattern: rule.pattern,
+                        replacement: piece.content
+                    )))
+                }
             } else {
                 out.append(.text(piece.content))
             }
