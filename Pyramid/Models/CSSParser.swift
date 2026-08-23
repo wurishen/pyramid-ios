@@ -384,6 +384,11 @@ enum CSSParser {
     /// 解析 `16px` / `1.5em` / `.5rem` / `50%` —— `(数值, 单位)`。纯数字默认 px。
     fileprivate static func parseLength(_ s: String) -> (Double, CSSLengthUnit)? {
         let t = s.trimmingCharacters(in: .whitespaces).lowercased()
+        // 数字 + 单位 / 数字裸。函数调用 / 颜色 token 必含字母（含括号名/十六进制/
+        // 命名色），直接拒收以免被误吃成 `0.3`。
+        if t.contains(where: { $0.isLetter || $0 == "(" || $0 == ")" || $0 == "," }) {
+            return nil
+        }
         // 数字 + 单位 / 数字裸
         var digits = ""
         var rest = ""

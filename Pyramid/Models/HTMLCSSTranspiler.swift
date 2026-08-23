@@ -74,6 +74,17 @@ enum HTMLCSSTranspiler {
             return true
         }
 
+        // 6. 剥离开头 / 结尾的纯空白 text 节点 —— `<style>...\n</style>\n<div>...`
+        //    这种典型输入里，HTMLTranspiler 会在最前面产出 `\n` text 节点，
+        //    使 nodes[0] 不再是 styled container；测试期望外层 .card div 是 nodes[0]。
+        //    纯空白 text 节点无可视内容、不会带 binding / path，丢弃无害。
+        while let first = nodes.first, case .text(let s) = first, s.allSatisfy({ $0.isWhitespace || $0.isNewline }) {
+            nodes.removeFirst()
+        }
+        while let last = nodes.last, case .text(let s) = last, s.allSatisfy({ $0.isWhitespace || $0.isNewline }) {
+            nodes.removeLast()
+        }
+
         return nodes
     }
 
