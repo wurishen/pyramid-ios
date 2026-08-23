@@ -1,9 +1,9 @@
 # Pyramid 产品规格文档
 
 > 本文档为 iOS / Android 双端共用的产品规格，描述当前已实现功能与计划功能（TODO）。
-> 最后更新：2026-08-19（v0.7.1 新增 RenderNode 渲染管线 + 原生 StatusView + Render Inspector 调试覆盖层 + 客户端界面缩放 uiScale）
+> 最后更新：2026-08-23（v0.8 新增原生交互渲染层：变量树 + `{{getvar::}}` 宏 + 原生控件 `<NativeAction>/<NativeInput>/<NativeSelect>` + `<NativeIf>` 条件分支 + `AnimationIR` P10 收口；`UpdateVariable` 兼容双尖拼写；RenderNode 增 `.statusFields` / `.variableUpdate` / `.macroText` / `.condition` / `.nativeAction` / `.nativeControl` / `.htmlContainer` / `.htmlImage` / `.htmlLink` / `.htmlScript` / `.htmlExternalResource` / `.htmlAnimation` / `.deferredResidual`；ST V3 字段运行时语义全部生效）
 >
-> **当前版本**：v0.7.1（iOS 端）
+> **当前版本**：v0.8（iOS 端）
 
 ---
 
@@ -60,58 +60,130 @@ TabView
 
 渲染管线（仅作用于展示层，**不动 `message.content`**）：
 
-1. `RenderEngine.render(raw:context:)` — 显示用正则 → 隐藏标签剥离 → **RenderNode 解析**（识别 `<status>` 块等结构化标签）→ `RenderTree`
-2. `MessageCard` 遍历 `RenderTree.nodes`，按节点类型分发：`.text` → `MarkdownTextView`（块级 Markdown 排版：段落 / 围栏代码块 / 列表）/ `Text`（纯文本）；`.status` → 原生 `StatusView` 面板
+1. `RenderEngine.render(raw:context:)` — 显示用正则 → 隐藏标签剥离 → **RenderNode 解析**（多遍扫描：v0.8 起识别 `<status>` / `<StatusPlaceHolderImpl>` / `<UpdateVariable>` / `<NativeAction>` / `<NativeInput>` / `<NativeSelect>` / `<NativeIf>` / `<NativeAll|Any|Not>` / `<NativeThen|Else>` 等结构化标签，外加 `{{getvar::path}}` 宏切分 + HTML/Script 静态分析）→ `RenderTree`
+2. `MessageCard` 遍历 `RenderTree.nodes`，按节点类型分发：`.text` → `MarkdownTextView`（块级 Markdown 排版：段落 / 围栏代码块 / 列表）/ `Text`（纯文本）；`.status` / `.statusFields` → 原生 `StatusView` 面板；`.statusPlaceholder` / `.variableUpdate` / `.nativeAction` / `.nativeControl` / `.macroText` / `.condition` / `.htmlContainer` / `.htmlImage` / `.htmlLink` / `.htmlScript` / `.htmlExternalResource` / `.htmlAnimation` / `.deferredResidual` → `NativeView` 原生渲染层
 3. 三态 Markdown 开关：预设 `enableMarkdown: Bool?` 三态 > 全局 `AppSettings.enableMarkdown`
 
 > 流式期间仅 `streamingMessageID` 对应的卡片接收 `liveContent`，其余卡片不重绘。
 
-### 2.1.2 RenderNode 渲染架构（v0.7.1）
+### 2.1.2 RenderNode 渲染架构（v0.7.1 → v0.8）
 
-**目标**：让模型原始输出里的结构化标签（如 `<status>`）能转为**原生 SwiftUI 视图**，而不是被当作普通 Markdown 文本渲染。
+**目标**：让模型原始输出里的结构化标签（`<status>` / `<StatusPlaceHolderImpl>` / `<UpdateVariable>` / `<NativeAction>` / `<NativeInput>` / `<NativeSelect>` / `<NativeIf>` 家族 / `<script>` / `<style>` / `<a>` / `<img>` 等）能转为**原生 SwiftUI 视图**，而不是被当作普通 Markdown 文本渲染；同时支持 `{{getvar::path}}` 宏的显示期取值。
 
 **数据模型**（`Models/RenderNode.swift`，纯 enum，Equatable + Sendable，无 SwiftUI 依赖）：
 
 ```swift
-enum RenderNode: Equatable, Sendable {
-    case text(String)                 // 普通段落，走 Markdown / 纯文本
-    case status(hp: Int, affection: Int)  // 角色状态面板
+indirect enum RenderNode: Equatable, Sendable {
+    // v0.7.1 基础
+    case text(String)                         // 普通段落（可能含 Markdown）
+    case status(hp: Int, affection: Int)      // 角色状态 fast-path（仅 HP + 好感度 两个整数）
+    case statusFields([StatusField])          // 通用 <status> 面板（任意 key/value）
+
+    // v0.8 原生交互层
+    case statusPlaceholder(statData: JSONValue)           // <StatusPlaceHolderImpl/>
+    case variableUpdate(summary: VariableUpdateSummary)    // <UpdateVariable>…</UpdateVariable> 摘要
+    case nativeAction(label: String, action: NativeAction) // <NativeAction kind=… path=… value=…/>
+    case nativeControl(NativeControl)                      // <NativeInput/> / <NativeSelect/> 通用控件
+    case macroText([MacroSegment])                          // {{getvar::path}} 宏绑定片段
+    case condition(NativeConditionNode)                    // <NativeIf> 组合条件 + 预解析双分支
+
+    // v0.8 HTML 通用容器 / 静态分析
+    case htmlContainer(children: [RenderNode])             // <div>/<span>/<p>/<section>…
+    case htmlImage(src: String, alt: String?)              // <img src="…"/>
+    case htmlLink(label: String, href: String)             // <a href="…">
+    case htmlScript(residual: DeferredResidual)            // <script>/<style> —— 永不执行，原文保留
+    case htmlExternalResource(ExternalResourceIR)          // <script src>/<iframe src>/$.load()/fetch()
+    case htmlAnimation(AnimationIR)                        // AnimationIR 修饰元数据
+    case deferredResidual(DeferredResidual)                // P6 deferred residual（HTML / CSS / 远程脚本）
 }
 
 struct RenderTree: Equatable, Sendable {
     var nodes: [RenderNode]
-    var flattenedText: String { … }   // 仅拼接 .text，用于折叠长度判断
+    /// 仅拼接 `.text` / `.deferredResidual` 节点的字符串，供折叠长度判断 / 调试。
+    var flattenedText: String { … }
 }
 ```
 
-**渲染管线**：
+**渲染管线**（v0.8）：
 
 ```
-Raw Message → DisplayRegex → HideTags → RenderNodeParser → RenderTree → MessageCard
-                                                                                         ├─ .text  → MarkdownTextView / Text
-                                                                                         └─ .status → StatusView（原生）
+Raw Message
+   │
+   ▼
+[1] DisplayRegex（仅 assistant.display.pre；按 MessageRendererCore.orderedRegexes 排序；
+   │            promptOnly / isHtmlBeautify(replacement) 跳过显示链 —— 见 §14）
+   ▼
+[2] HideTags（<tag>…</tag> 默认含 think / thinking；按 hideTagsRaw 列表逐条 strip）
+   ▼
+[3] RenderNodeParser.parse(_:variableStore:sessionId:)（多遍扫描，详见下文）
+   │   • P3 新增块：<StatusPlaceHolderImpl/> / <UpdateVariable>…</UpdateVariable> /
+   │     <NativeAction/Input/Select/> / <NativeIf …>…</NativeIf>
+   │   • P1 <status>…</status>（fast-path + statusFields）
+   │   • 宏切分：{{getvar::path}} → .macroText；其余宏逐字保留
+   │   • P8 HTML/Script 静态分析：<div>/<p>/<img>/<a>/<script>/<style>/<iframe>…
+   ▼
+RenderTree（[RenderNode]）
+   ▼
+[4] MessageCard 遍历 nodes，按 case 分发：
+       .text            → MarkdownTextView（块级 Markdown 排版）/ Text
+       .status          → StatusView（HP 颜色梯度 fast-path）
+       .statusFields    → StatusFieldsView（任意 key/value 面板）
+       .statusPlaceholder / .variableUpdate / .nativeAction / .nativeControl /
+       .macroText / .condition / .htmlContainer / .htmlImage / .htmlLink /
+       .htmlScript / .htmlExternalResource / .htmlAnimation / .deferredResidual
+                       → NativeView（v0.8 新增原生交互渲染层）
 ```
 
 **StatusView**（`Views/StatusView.swift`，v0.7.1 新增）：
 
 - 输入：`hp: Int`、`affection: Int`
 - 视觉：紧凑面板（圆角 + 浅灰底 + 半透明描边），HP 数值带颜色梯度（≥60 绿 / 30-60 橙 / <30 红），好感度用强调色
-- **不可交互**（v0.7.1 范围）；后续如需点击 / 滑入可单独迭代
+- **仅 fast-path**：当 `<status>` 块**只**含 HP + 好感度 两个整数时走本节点；含其他字段或非整数 → 降级为 `.statusFields`
 - 纯展示组件：不持有状态、不查 store、不调网络
+
+**StatusFieldsView**（v0.8 新增）：`.statusFields([StatusField])` 的渲染入口，按字段对 label/value 横向排列（不做 HP 颜色梯度之类的固定业务语义，由 UI 层通用化呈现）。
+
+**NativeView**（`Views/NativeView.swift`，v0.8 新增）：
+
+- 渲染 `.statusPlaceholder` / `.variableUpdate` / `.nativeAction` / `.nativeControl` / `.macroText` / `.condition` / `.htmlContainer` / `.htmlImage` / `.htmlLink` / `.htmlScript` / `.htmlExternalResource` / `.htmlAnimation` / `.deferredResidual` 等 v0.8 新增节点
+- **零业务模板**：节点携带纯数据（path / value / segment / condition / raw / AnimationIR），UI 不绑定 HP / 好感度 / 角色卡 等业务概念
+- **action 闭环**：`.nativeAction` / `.nativeControl` 提交 → `NativeActionDispatcher.dispatch(...)` → VariableStore 写入 → 触发 NativeIR 重投影（`.statusPlaceholder` / `.macroText` / `.condition` 自动重算并更新视图，**无需重发消息**）
 
 **RenderNodeParser**（`Models/RenderNodeParser.swift`）：
 
-- 单遍扫描：`NSRegularExpression` 匹配 `<status>...</status>` 块（`(?is)` + `.dotMatchesLineSeparators`，允许跨行）
-- 块内解析：识别 `HP: <int>` 与 `好感度: <int>`（支持中文全角冒号 `：`）；**任一缺失 / 非整数 → 整块降级为 `.text`**，保证不丢内容
-- 多次重渲染同 raw → 相同 RenderTree（无副作用 / 无缓存）
+- **多遍扫描**（v0.8）：
+  1. P3 新增块：`<StatusPlaceHolderImpl/>` / `<UpdateVariable>…</UpdateVariable>`（canonical 单 `<` + fallback 双 `<<`）/ `<NativeAction|Input|Select …/>` / `<NativeIf …>…</NativeIf>`（含嵌套同名标签的配平扫描）
+  2. P1 `<status>…</status>` 解析（fast-path + statusFields）
+  3. 宏切分：`TavernMacroParser.containsMacroToken` 命中 → `.macroText(TavernMacroParser.parse(...))`；未命中保持 `.text` 直通
+  4. P8 HTML/Script 静态分析（`HTMLTranspiler.transpile`）：`<div>` 等容器 → `.htmlContainer`；`<img>` → `.htmlImage`；`<a>` → `.htmlLink`；`<script>` / `<style>` → `.htmlScript(residual:)`（**永不执行 body**，原文完整保留）；`<script src>` / `<iframe src>` / `$.load()` / `fetch()` → `.htmlExternalResource`；无 HTML → 退回纯文本
+- **容错策略**（v0.8，与 v0.7.1 同精神："不能导致整条消息消失"）：
+  1. 单块解析失败（属性缺失 / 未知 kind / op 非法 / JSON Patch 抛错）→ 该块降级 `.text(原文)`，**绝不静默丢弃**；其余块正常处理
+  2. 整体结构错乱（未配对 `<NativeIf>` 等）→ 整段降级 `.text`，`depth` 防病态嵌套（递归上限由 `depth` 参数控制，生产入口恒为 0）
+  3. **永不抛错**：任何异常路径都返回有效 RenderTree，最坏 `[.text(input)]`
+  4. **保真规则**：畸形 / 未配对的交互标签整段留在文本流逐字可见；未识别的宏（`{{setvar}}` / `{{roll:...}}` / 自造语法）原文逐字保留，不替换不删除
+- 多次重渲染同 raw + 同 VariableStore → 相同 RenderTree（无副作用 / 无缓存）
 
 **MessageCard 集成**（`Views/MessageCard.swift`）：
 
 ```swift
 ForEach(tree.nodes) { node in
     switch node {
-    case let .text(text):    textNodeView(text, isLong: isLong)
-    case let .status(hp, a): StatusView(hp: hp, affection: a)   // 不受折叠影响
+    case let .text(text):              textNodeView(text, isLong: isLong)
+    case let .status(hp, a):           StatusView(hp: hp, affection: a)
+    case let .statusFields(fields):    StatusFieldsView(fields: fields)
+    case let .statusPlaceholder(tree): NativeView.statusPlaceholder(tree)
+    case let .variableUpdate(summary): NativeView.variableUpdate(summary)
+    case let .nativeAction(label, a):  NativeView.button(label: label, action: a)
+    case let .nativeControl(ctrl):     NativeView.control(ctrl)
+    case let .macroText(segs):         NativeView.macroText(segs, in: variableStore)
+    case let .condition(node):         NativeView.condition(node, in: variableStore)
+    case let .htmlContainer(children): NativeView.htmlContainer(children)
+    case let .htmlImage(src, alt):     NativeView.htmlImage(src: src, alt: alt)
+    case let .htmlLink(label, href):   NativeView.htmlLink(label: label, href: href)
+    case let .htmlScript(residual):    NativeView.htmlScript(residual: residual)
+    case let .htmlExternalResource(r): NativeView.htmlExternalResource(r)
+    case let .htmlAnimation(anim):     NativeView.htmlAnimation(anim)
+    case let .deferredResidual(r):     NativeView.deferredResidual(r)
     }
 }
 ```
@@ -119,16 +191,23 @@ ForEach(tree.nodes) { node in
 **约束**：
 
 1. **Raw Message 不被修改**——`RenderTree` 只在展示层计算，每次从 raw 重新算；流式期间 `liveContent` 覆盖 `message.content`，渲染管线不变
-2. **Markdown / DisplayRegex 行为保持**——`<status>` 块先经正则替换与剥离，再解析为 `.status` 节点；不在 RenderNodeParser 里复刻正则逻辑
-3. **不新增 Tavern 标签**——只识别 `<status>` 一种；其它结构化标签后续按需扩展
+2. **Markdown / DisplayRegex 行为保持**——结构化块先经正则替换与剥离，再解析为原生节点；不在 RenderNodeParser 里复刻正则逻辑
+3. **不引入 WKWebView / UIWebView / SFSafariViewController**——HTML/Script 节点永不执行 JS；远端 URL 仅记录意图，不下载不跳转
 4. **不缓存 RenderNode**——`RenderTree` 每次重算；`RenderNode` 是 Equatable，SwiftUI diff 直接走结构相等
+5. **保真（v0.8 加强）**：畸形 / 未配对 / 未识别的标签与宏原文保留在文本流，绝不静默删除；解析失败 = 整段降级 `.text`，不是 false、不是空串
 
-**Render Inspector**（`Views/RenderInspectorView.swift`，v0.7.1 新增，开发用）：
+**Render Inspector**（`Views/RenderInspectorView.swift`，v0.7.1 新增，v0.8 增 condition / macroText 行）：
 
 - **触发**：长按消息卡片 0.5s 弹出 Sheet
-- **展示**：原文（raw）/ 处理后（cleanedText）/ RenderNode 树（逐节点类型 + 内容预览）/ 命中的 DisplayRegex / 隐藏标签剥离状态
+- **展示**：原文（raw）/ 处理后（cleanedText）/ RenderNode 树（逐节点类型 + 内容预览，含 v0.8 新增的 `.condition` 节点 condition 表达式与当前命中分支、`.macroText` 节点的 binding 列表）/ 命中的 DisplayRegex / 隐藏标签剥离状态
 - **只读**：不修改 raw / context / Result，不暴露 API 给普通用户
 - **替代挂 lldb / view debugger** 的开发辅助：开发机 / 真机都能用
+
+**AnimationRenderer**（`Views/AnimationRenderer.swift`，v0.8 新增 / P10 收口）：
+
+- 接 `AnimationTriggerCoordinator` 派发的 trigger token（`.onPathChange(path)` / `.onAction(key)`），把它喂给 `TriggeredAnimModifier` 渲染 SwiftUI `.animation` / `.transition` / `withAnimation`
+- `.onAppear` / `.onDisappear` 不经协调器，由 SwiftUI transition 语义承担
+- 不引入 WebView，不执行 JS
 
 ### 2.2 导航逻辑
 
@@ -164,16 +243,44 @@ ForEach(tree.nodes) { node in
 
 ### 3.2 关键词匹配算法
 
+**阶段 1：基础过滤**
+
 1. 从当前消息 + 最近 N 条消息（N = `scanDepth`）构建可搜索文本
 2. 跳过 `isEnabled == false` 的条目
-3. `isConstant == true` 的条目始终注入
-4. 主关键词匹配：根据 `matchMode` 检查文本
-   - `contains`：不区分大小写的子串匹配
+3. `weight` 守卫：`entry.weight != nil && weight <= 0` → 视为关闭，跳过
+4. `isConstant == true` 的条目始终注入（绕过 V3 关键词 / 概率门槛）
+
+**阶段 2：V3 关键词匹配**（`entry.caseSensitive == true` 时全流程**不大写化**文本与 keywords）
+
+5. **主关键词（`keywords`）匹配**：根据 `matchMode` 检查文本
+   - `contains`：子串匹配（默认 case-insensitive；V3 case_sensitive=true 时严格大小写）
    - `exact`：全词边界匹配（前后不能是字母/数字/下划线）
-5. 若主关键词匹配且存在次关键词，至少一个次关键词也必须匹配
-6. 概率过滤：对 `(entryId + 可搜索文本)` 做哈希，实现注入概率
-7. 按 `priority` 升序排序
-8. 硬性限制：最多 **20 条**注入，内容总长最多 **2000 字符**（超出总长上限的条目被跳过）
+6. **次关键词（`secondaryKeywords`）匹配**（仅 V3）：按 `selectiveLogicRaw`（0..3）决定与主关键词的组合逻辑——
+
+   | `selectiveLogic` | 语义 | 行为 |
+   |---|---|---|
+   | `0`（默认） | `AND_ANY` | 主关键词命中且至少一个次关键词命中 |
+   | `1` | `NOT_ALL` | 主关键词命中且**没有**次关键词**全部**命中（即至少一个不命中） |
+   | `2` | `NOT_ANY` | 主关键词命中且**没有一个**次关键词命中 |
+   | `3` | `AND_ALL` | 主关键词命中且**全部**次关键词命中 |
+
+   无次关键词（V1/V2 风格）→ 仅走主关键词命中即可（等价于 `AND_ANY` 的退路）
+
+7. **V3 `triggers` 增强**：当 `triggers` 非空时，至少一个 trigger 命中（主 + 次关键词 + triggers 全部通过才视为匹配）
+8. **V3 `excludes` 排除**：当 `excludes` 非空时，任一 exclude 命中 → **整条排除**（即使主 / 次 / triggers 全部通过）
+
+**阶段 3：概率与排序**
+
+9. **概率过滤**（V1/V2）：对 `(entryId + 可搜索文本)` 做哈希，实现注入概率
+10. **V3 effective sort key** = `priority + decay 偏移 + weight tiebreaker`：
+    - `decay ∈ [0,1]`：`decayBoost = (1.0 - decay) × 1000.0`；decay 越小优先级数字越大（推后）；decay=1 不变；decay=0 加 1000
+    - `weight > 0`：`weightTiebreaker = -weight × 0.001`（weight 大 → 排得更前，tiebreaker 级别）
+11. **V3 group scoring**（`useGroupScoring == true && groupKey` 非空）：同 `groupKey` 条目仅保留 effective sort key 最高的一条，`groupWeight` 作为组内 tiebreaker
+
+**阶段 4：注入限额**
+
+12. 按 effective sort key 升序排序
+13. **硬性限制**：最多 **20 条**注入，内容总长最多 **2000 字符**（超出总长上限的条目被跳过，不报错）
 
 > **概率确定性说明**：当前实现使用 Swift 标准库 `Hasher`，其种子在每次进程启动时随机化，因此**同一输入在同一进程内结果稳定，但跨启动（及跨 Android 端）无法保证结果一致**。见「已知限制」。
 
@@ -218,7 +325,7 @@ ForEach(tree.nodes) { node in
 - 会话可绑定特定世界书（`worldBookId`）
 - 未绑定的会话使用全局世界书
 
-### 3.5 SillyTavern 导入兼容
+### 3.6 SillyTavern 导入兼容
 
 支持导入 SillyTavern 格式的 JSON 世界书，字段映射（V1/V2/V3 共用）：
 
@@ -234,9 +341,18 @@ ForEach(tree.nodes) { node in
 | `matchWholeWords` | `matchMode = .exact` |
 | `useProbability` / `probability` | `probability`（钳制 0-100；`useProbability=false` 视为恒触发） |
 | `depth` / `scanDepth` | `scanDepth` |
-| `position` (0=before, 1-2=afterSystem, 3-6=afterHistory) | `insertionPosition` + `positionRaw`（保留 ST 原值 0-6，避免折叠漂移） |
+| `position` ST 原值 0..6 | `insertionPosition` + `positionRaw`（保留 ST 原值 0-6，避免折叠漂移） |
+| `position` 0 = before char defs | `insertionPosition = .beforeSystem` |
+| `position` 1 = after char defs | `insertionPosition = .afterSystem` |
+| `position` 2 = after example messages | `insertionPosition = .afterSystem`（v0.8 起与 1 区分显示，按 ST 原值渲染在对话示例之后但仍在 system 段内） |
+| `position` 3 = top of author’s note | `insertionPosition = .afterHistory` |
+| `position` 4 = bottom of author's note | `insertionPosition = .afterHistory` |
+| `position` 5 = top of chat history | `insertionPosition = .afterHistory`（按 history head 插入） |
+| `position` 6 = bottom of chat history | `insertionPosition = .afterHistory`（按 history tail 插入） |
 
-**V3 新增字段（仅存储，运行时未消费；导出/重导入 round-trip 不丢）**：
+> v0.8 起 position 1/2 不再合并：`positionRaw` 单独保留 0-6 供 `WorldBookService` 在 `afterSystem` 段内按原值细分顺序注入。
+
+**V3 新增字段（v0.8 起全部参与运行时语义；详见 §3.2 算法；存储+运行时均生效，导出/重导入 round-trip 不丢）**：
 
 | ST V3 字段 | Pyramid 字段 |
 |---|---|
@@ -650,22 +766,40 @@ V3 角色卡可在 `data.extensions.depth_prompt` 定义一条消息：指定 `r
   - 含「关闭」按钮：清空 `errorMessage` / `lastFailedUserMessageID` / `lastFailedReason`。
 - API 正文（向 `OpenAIClient` 发送的 `messages`）**永远不包含**楼层号、时间戳、「已注入世界书 N 条」、草稿、未发送输入；这些都是纯 UI 装饰。
 
-### 8.4 消息显示管线
+### 8.5 消息显示管线（v0.8）
 
-> **核心约束**：存储 / 编辑 / 复制 / 重新生成 / 发送 API 全部使用 `message.content` 原始内容；以下 4 个阶段**仅**作用于气泡渲染。
+> **核心约束**：存储 / 编辑 / 复制 / 重新生成 / 发送 API 全部使用 `message.content` 原始内容；以下管线**仅**作用于气泡渲染（每一步都不写回 `message.content`）。
 
 ```
-原始 content
-  ↓ (1) 显示用正则（仅助手消息，作用域 assistant.display.pre）
-  ↓ (2) 隐藏标签剥离（<tag>...</tag> 默认含 think / thinking）
-  ↓ (3) Markdown 渲染（AttributedString(markdown:)，失败则降级为剥离 HTML 后的纯文本）
-  ↓ (4) HTML 兜底（<…> 全部剥掉，避免残留）
+原始 content (message.content / streaming liveContent)
+  │
+  ▼
+[1] DisplayRegex（仅助手消息；按 MessageRendererCore.orderedRegexes 排序；
+  │            promptOnly=true / isHtmlBeautify(replacement)=true → 跳过显示链 —— §14）
+  ▼
+[2] HideTags（<tag>...</tag> 默认含 think / thinking；按 hideTagsRaw 列表逐条 strip；
+  │          单个 pattern 编译失败 → 跳过该标签，不影响其它）
+  ▼
+[3] RenderNodeParser.parse(_:variableStore:sessionId:)  —— 4 遍扫描
+  │   3a. P3 新增块（<StatusPlaceHolderImpl/> / <UpdateVariable>…</UpdateVariable> /
+  │       <NativeAction|Input|Select …/> / <NativeIf …>…</NativeIf> 家族）
+  │   3b. P1 <status>…</status> 解析（fast-path .status(hp:affection:) + 通用 .statusFields）
+  │   3c. 宏切分（TavernMacroParser 仅识别 {{getvar::path}} → .macroText；未命中 → 直通 .text）
+  │   3d. P8 HTML/Script 静态分析（HTMLTranspiler.transpile：容器 → .htmlContainer /
+  │       <img> → .htmlImage / <a> → .htmlLink / <script>&<style> → .htmlScript /
+  │       远程 src → .htmlExternalResource / 动画意图 → .htmlAnimation；无 HTML → 退回纯文本）
+  ▼
+RenderTree（[RenderNode]）  ——  statusFieldsView / StatusView / NativeView / AnimationRenderer 分发
+  │
+  ▼
 气泡显示
 ```
 
-四阶段均不写回 `message.content`；任何阶段失败（正则不合法 / 隐藏标签 pattern 编译失败 / Markdown 解析失败）均回退到当前 stage 的原文，不崩溃。
+任何阶段失败（正则不合法 / 隐藏标签 pattern 编译失败 / Markdown 解析失败 / RenderNodeParser 解析失败）均回退到当前 stage 的原文 / 整段 `.text`，不崩溃。
 
-#### 8.4.1 显示用正则（Display Regex）
+> **v0.8 与 v0.7.1 差异**：v0.7.1 管线为 4 道 markdown → html-兜底阶段；v0.8 起改为"正则 + 隐藏标签 + 多遍 RenderNodeParser"，结构化标签全部走原生节点（不再依赖 markdown 解析），Markdown 仅作用于 `.text` 节点的内部渲染。
+
+#### 8.5.1 显示用正则（Display Regex）
 
 - 字段：`id` / `name` / `pattern` / `replacement` / `enabled` / `scope`（固定 `assistant.display.pre`）/ `sourceCharacterId`（可空，来自角色内嵌 ST Regex Script 自动转出）
 - 行为：仅对 `role == .assistant` 的消息在渲染前依次应用；用户消息不经过。
@@ -674,20 +808,20 @@ V3 角色卡可在 `data.extensions.depth_prompt` 定义一条消息：指定 `r
 - 来源：① 用户在「显示用正则」面板手动创建；② 酒馆角色卡导入时由 §4.6 的 ST Regex Script 自动转出（带 `sourceCharacterId`，删除角色时同步清理）。
 - **Phase 1 无 ST 脚本 / 扩展市场**：不做全量 JS 沙箱；只接受酒馆已落盘的 JSON 字段（详见 §4.6 表）。
 
-#### 8.4.2 隐藏标签剥离
+#### 8.5.2 隐藏标签剥离
 
 - 全局开关 `hideTagStripEnabled`（默认 true）。
 - 标签列表 `hideTagsRaw`（逗号或换行分隔），默认 `think,thinking`。
 - 模式：兼容 `<tag>...</tag>`、`<tag attr="...">...</tag>`、`<tag>` 与 `</tag>` 配对不严格的情况（`.` 跨行匹配）。
 - 失败：单个标签 pattern 编译失败时跳过该标签，不影响其他标签；绝不修改原文。
 
-#### 8.4.3 Markdown 渲染
+#### 8.5.3 Markdown 渲染
 
 - `settings.enableMarkdown` 与 `preset.enableMarkdown` 同时为空 / 同时为 false 时，渲染为纯文本（仍会剥离 HTML 兜底）。
 - 实际生效：`preset.enableMarkdown` ≠ nil 时它覆盖全局；否则读全局 `enableMarkdown`（默认 true）。
 - 助手与用户气泡均生效；用户气泡走相同的 `MessageRenderer` 路径，因此同样保留隐藏标签剥离与正则管道（用户消息上的正则不会触发，因作用域限定助手）。
 
-### 8.5 Markdown 渲染（原生）
+### 8.6 Markdown 渲染（原生）
 
 原生 `AttributedString` 渲染（iOS 15+），支持：
 
@@ -699,7 +833,7 @@ V3 角色卡可在 `data.extensions.depth_prompt` 定义一条消息：指定 `r
 
 > **无 WebView**：禁止使用 `WKWebView` / `SFSafariViewController` 作为聊天列表或气泡。
 
-### 8.6 宏
+### 8.7 宏
 
 进入 API 之前在消息文本上展开 `{{user}}` / `{{char}}` 及其大小写变体（`{{User}}` / `{{CHAR}}` 等，匹配 `(?i)\{\{\s*<token>\s*\}\}`）。
 
@@ -708,7 +842,7 @@ V3 角色卡可在 `data.extensions.depth_prompt` 定义一条消息：指定 `r
 - 替换对象：**仅** 送入 `OpenAIClient` 的 `messages` 副本；**不**写回 `message.content`，**不**作用于气泡显示。
 - 顺序（与 SPEC §10.2 同步）：用户人设 → 角色 → 会话/预设 → 世界书 → 历史（已展开宏）→ 用户最新消息（已展开宏）。
 
-### 8.7 其他
+### 8.8 其他
 
 - **上下文长度提示**：可选栏显示当前上下文字符数，超过阈值变橙色警告（默认 12000，可调 2000-50000）
 - **注入调试指示器**：可选显示世界书注入状态
@@ -888,29 +1022,233 @@ iOS 和 Android 双端应实现**相同的核心功能集**，包括：
 
 ---
 
+## 13. 已知限制
+
+> 已知问题细节见 `docs/KNOWN_ISSUES.md`；本节为顶层大纲。完整清单按"对用户的影响"排序，分模块在 KNOWN_ISSUES.md。
+
+1. **存储可靠性**：全部数据存于 UserDefaults，数据量大时（长对话、多角色、大世界书）可能出现性能与容量问题。**TODO**：迁移到 SwiftData / Core Data / 文件系统。
+2. **概率匹配确定性**：注入概率用 Swift `Hasher`（每次进程启动随机种子），同一输入在同一进程内稳定，但**跨启动不稳定，且无法与 Android 端复现相同结果**。若需跨端一致，应改用确定性哈希（如基于文本的 stable hash）。
+3. **CI 产物未签名**：GitHub Actions 打出的 `Pyramid-unsigned.ipa` 为**未签名**归档，无法直接安装到真机，仅用于测试/发布流程验证。真机安装需另配签名。
+4. **PNG 角色卡解压上限**：解压 `chara` 数据时输出缓冲上限为 2MB，超大卡片可能解压失败。
+5. **世界书注入硬上限**：单次最多注入 20 条、内容总长最多 2000 字符；超出上限的条目会被跳过（不报错）。
+6. **ST 世界书合并去重**：合并到当前世界书时按 `content` 去重，标题/关键词变化而内容相同的条目不会被再次导入。
+7. **角色卡 PNG 识别范围**：仅解析 PNG 顶层 `tEXt` chunk 的 `chara` 关键字；zTXt / iTXt（压缩）或其它存储方式不识别。
+8. **无云端同步**：所有数据仅存本机，不做任何服务器同步（属设计原则）。
+9. **V3 WorldBookEntry V3 字段 UI 编辑面板未做**（v0.7.1+ 历史未实现，详见 KNOWN_ISSUES §2）—— 通过 JSON 导入导出 round-trip 仍保留全部字段。
+10. **聊天 ChatMessage 不支持 system role**（v0.7.x 暂不做）—— ST 导入的 system 消息映射为 assistant（数据丢失语义）。
+11. **SPM 测试在 Linux 不能跑**（v0.7.x 暂不做）—— `WorldBookService` / `BackupService` 用 `import os`（OSAllocatedUnfairLock），Linux 无实现。
+
+---
+
 ## 14. 原生 Transpile 流水线（v0.8）
 
-助手消息的渲染走纯原生 iOS 路径，不引入 JavaScript / WebView / HTML 渲染层。酒馆侧 `<StatusPlaceHolderImpl/>` 与 `<UpdateVariable>…</UpdateVariable>`（酒馆 canonical 拼写：单 `<`）标记在 Pyramid 内部被原生节点取代：
+助手消息的渲染走**纯原生 iOS 路径**，不引入 JavaScript / WebView / HTML 渲染层。酒馆 / MVU 标记在 Pyramid 内部被原生节点取代，闭合的"识别 → 求值 → 副作用 → 重投影" 全部跑在 SwiftUI / Foundation 上。
+
+### 14.1 顶层架构
+
+```
+Raw Message (assistant.content / streaming liveContent)
+   │
+   ▼
+[1] DisplayRegex（assistant.display.pre；按 MessageRendererCore.orderedRegexes 排序）
+   │   promptOnly / isHtmlBeautify(replacement) → 跳过显示链（仅 outgoing prompt 阶段剥离）
+   ▼
+[2] HideTags（<tag>…</tag> 默认含 think / thinking；按 hideTagsRaw 列表逐条 strip）
+   ▼
+[3] TavernTranspiler（v0.8 新增；识别酒馆 transclude 块，转换为 RenderNode 树）
+   ▼
+[4] RenderNodeParser（4 遍扫描：P3 新增块 → P1 status → 宏切分 → P8 HTML/Script）
+   ▼
+RenderTree（[RenderNode]）
+   │
+   ├─ NativeIRProjector.project(statData:)   ← 仅在 .statusPlaceholder / .macroText /
+   │                                            .condition 等"依赖变量树"节点需要重投影时触发
+   ▼
+[5] MessageCard / NativeView / AnimationRenderer
+```
+
+### 14.2 变量树（Variable Tree）
+
+**形态**：每个会话一棵 `JSONValue` 树，按会话隔离并持久化（`UserDefaults`，key = sessionId）。运行时入口在 `Models/VariableStore.swift`。
+
+**种子**：`seedIfEmpty(sessionId:, initData:)` —— 该会话首次被请求 seed 时写入；后续 patch **不**覆盖已有值（避免后续 update 把 initData 抹掉）。
+
+**初始化路径**：角色卡导入时 lift `data.extensions.initStatData` / `data.initStatData`（ST 字段）→ `Character.initStatData: [String: JSONValue]?` → 会话创建时通过 `VariableStore.seedIfEmpty` 写入。
+
+**写入路径**（仅由以下两个原语触发）：
+- `<UpdateVariable>…</UpdateVariable>` 块（v0.8 新增支持 `<<UpdateVariable>>` 双尖拼写 fallback）
+- `<NativeAction kind=updateVariable|toggle>` 按钮点击（v0.8）
+
+**读取路径**：
+- `<StatusPlaceHolderImpl/>` → `.statusPlaceholder(statData)` 把整棵树喂给 `NativeIRProjector.project(statData:)`
+- `{{getvar::path}}` → `.macroText([MacroSegment])`，每个 binding 对当前树按 JSON Pointer 求值
+- `<NativeIf>` / `<NativePredicate>` → `.condition(NativeConditionNode)`，求值时按 JSON Pointer 取值
+
+**UI 重投影**：VariableStore 变化触发 `storeDidChange(tree:)` 通知 → 所有 `.statusPlaceholder` / `.macroText` / `.condition` 视图自动重算并切换显示内容（无需重发消息、无需重新解析）。
+
+### 14.3 宏绑定（`{{getvar::path}}`）
+
+**解析器**：`TavernMacroParser.parse(_:)` 把含 `{{…}}` 的文本切成 `[MacroSegment]`：
+
+| 宏形态 | 解析产物 | 渲染行为 |
+|--------|---------|---------|
+| 普通文本（无 `{{…}}`） | `MacroSegment.literal(text)` | 原样输出（直通，零开销） |
+| `{{getvar::/path/to/value}}` | `MacroSegment.binding(MacroBinding(path, raw))` | 按 JSON Pointer 取值；缺失 / null / array / object 无法内联 → `.unresolved(raw)` 原文回退 |
+| `{{getvar::区域/房间/计数}}`（裸名） | `MacroSegment.binding(MacroBinding(path="/区域/房间/计数", raw))` | 自动补根 `/` |
+| `{{GETVAR::/X}}` / `{{ getvar :: /X }}` | 同上 | 大小写不敏感、空白容忍 |
+| `{{setvar::...}}` / `{{roll:...}}` / 自造 | `MacroSegment.literal(原文)` | **逐字保留原文**，绝不静默删除 |
+| 未配对 `{{` | 同 literal | 当普通文本，嵌套花括号按最内层完整 token 处理 |
+
+**求值**：`MacroRenderer.render(segments:, tree:)` —— segments 与变量值**解耦**，变量变化只需重新求值（便宜），无需重新解析表达式（贵）。
+
+**作用域**：仅作用于气泡显示。**不影响** API 出站（`{{user}}` / `{{char}}` 走 `MacroExpander.expand(...)`，与 `getvar` 互不干扰）。**不写回** `message.content`。
+
+### 14.4 原生控件
 
 | 酒馆标记 | 原生渲染节点 | 副作用 |
 |---------|------------|--------|
-| `<StatusPlaceHolderImpl/>` | `.statusPlaceholder(snapshot)` — 列出当前会话 `VariableStore` 拍扁后的所有变量；空时显示「状态（等待变量）」 | 仅读取 |
-| `<UpdateVariable>…</UpdateVariable>`（内含 `<JSONPatch>[…]</JSONPatch>` 子块） | `.variableUpdate(summary)` — 可折叠摘要：applied 计数 + 受影响 path 列表；同时把 ops 应用到 `VariableStore` | 写 `VariableStore`（每会话一份，`UserDefaults` 持久化） |
+| `<NativeAction label="…" kind="updateVariable\|toggle" path="/…" value="…"/>` | `.nativeAction(label, action)` → SwiftUI `Button` | dispatcher → JSONPatchApplier → VariableStore 写入；成功后触发重投影 |
+| `<NativeInput label? placeholder? path="/…"/>` | `.nativeControl(NativeControl(kind: .input, …))` → SwiftUI `TextField` | 提交时把字符串值写到 path |
+| `<NativeSelect label? path="/…" values="v1,v2" labels?="甲,乙"/>` | `.nativeControl(NativeControl(kind: .select, …))` → SwiftUI `Picker` | 选中项的 value 字符串写到 path |
 
-**MVU 契约**：RFC 6902 JSON Patch，仅消费 `replace | add | remove | move | delta | insert`（`delta` 与 `insert` 为 MVU 扩展；`copy` / `test` MVU 自身 silently dropped，native 一致）；以 `_` 开头的 path（私有视图态）协议层静默 skip，不写入也不进 affectedPaths。
+**零业务语义**：path 即 JSON Pointer，不解释字段名、不预置任何 HP / 好感度 / 金币 模板。角色卡想表达"小手机电量"就直接写 `path="/小手机电量"`，Pyramid 不替它判断。
 
-**跳过规则（HTML beautify 防滥用）**：渲染前的显示用正则按 `MessageRendererCore.orderedRegexes` 排序时，再叠加两道过滤门：
+**action 闭环**：
+
+```
+SwiftUI Button 点击
+   → NativeActionDispatcher.dispatch(action, to: &tree)
+   → JSONPatchApplier.apply(ops, to: &tree)  // RFC 6902
+   → VariableStore.apply(ops, to: sessionId) // 持久化
+   → storeDidChange(tree:) 通知
+   → NativeIRProjector.project(statData:) 重投影
+   → 新 NativeIRNode 树
+   → SwiftUI 自动 diff 更新视图
+```
+
+### 14.5 `<UpdateVariable>` 块
+
+**形态**：canonical 单 `<UpdateVariable>…</UpdateVariable>`（酒馆 / MVU 源码一致）；fallback 双 `<<UpdateVariable>>…<</UpdateVariable>>`（Pyramid 历史拼写）。
+
+**内容**：内含 `<JSONPatch>[…]</JSONPatch>` 子块，RFC 6902 + MVU 扩展 JSON Patch ops 数组。
+
+**渲染产物**：`.variableUpdate(VariableUpdateSummary)` → 可折叠摘要面板（`appliedCount` + `affectedPaths` 列表）。
+
+**MVU 契约**（RFC 6902 JSON Patch）：
+
+| Op | 是否消费 | 备注 |
+|----|---------|------|
+| `replace` | ✅ | 替换 path 处值 |
+| `add` | ✅ | 添加 / 创建 path 处值 |
+| `remove` | ✅ | 删除 path 处值 |
+| `move` | ✅ | 移动 |
+| `delta` | ✅（MVU 扩展） | 数值增量 |
+| `insert` | ✅（MVU 扩展） | 数组插入 |
+| `copy` | ❌ silently dropped | MVU 自身不支持；native 一致 |
+| `test` | ❌ silently dropped | MVU 自身不支持；native 一致 |
+
+**路径前缀**：以 `_` 开头的 path（私有视图态）协议层静默 skip，不写入也不进 `affectedPaths`。
+
+**失败降级**：JSON 解析失败 / `applyPatches` 抛错 → **整段降级为 `.text(原文)`**（不仅降级 `.variableUpdate` 节点，标签 + body 一起保留在文本流），绝不丢内容。
+
+### 14.6 `<NativeIf>` 条件分支
+
+**设计原则**：解析一次，**显示期求值** —— 变量树一变即重算并自动切换分支，无需重发消息或重新解析。
+
+**两种形态**：
+
+**A. 叶形态**（属性版）：
+
+```xml
+<NativeIf path="/好感度" op="gte" value="60">
+  真体（任意 RenderNode / NativeIRNode 内容）
+  [<NativeElse/>假体]
+</NativeIf>
+```
+
+属性：`path`（JSON Pointer）/ `op`（操作符）/ `value?`（比较操作数，仅比较类 op 必需）。
+
+**B. 结构化形态**（子节点版）：
+
+```xml
+<NativeIf>
+  <NativeAll|NativeAny|NativeNot>
+    <NativeWhen path="…" op="…" value="…"/>
+    <NativeWhen path="…" op="…" value="…"/>
+    …
+  </NativeAll|Any|Not>
+  <NativeThen>真体</NativeThen>
+  [<NativeElse>假体</NativeElse>]
+</NativeIf>
+```
+
+组合器：`NativeAll`（全部）/ `NativeAny`（任一）/ `NativeNot`（取反），可任意嵌套。
+
+**操作符集**：
+
+| Op | 操作数 | 语义 |
+|----|-------|------|
+| `eq` / `ne` | value | 相等 / 不等（按 JSONValue 比较） |
+| `gt` / `gte` / `lt` / `lte` | value | 数值比较（别名 `ge`/`le` → `gte`/`lte`） |
+| `exists` | — | 路径存在（任意值，含 null） |
+| `notexists` | — | 路径不存在 |
+| `truthy` | — | 非 null 且按类型非空 / 非零 / 非 false |
+| `isempty` | — | 存在且为空（null / 空串 / 空数组 / 空对象）；路径缺失 → false |
+| `nonempty` | — | 存在且有内容；路径缺失 → false |
+
+**解析失败**：缺 path / path 非指针 / op 非法 / 比较 op 缺 value → 整段降级 `.text(原文)`；"无法解析" ≠ false（不静默猜假分支）。
+
+**Inspector 增强**：Render Inspector 的 RenderNode 树新增 condition 节点行，显示条件表达式与当前命中的分支。
+
+### 14.7 AnimationIR（P9 IR + P10 trigger 派发）
+
+**静态识别**：酒馆 / 角色卡表达的 CSS / 内联 style / script class-toggle → `HTMLTranspiler` 静态分析 → `AnimationIR`（位于 `Models/AnimationIR.swift`）。
+
+**触发器**（`AnimationTrigger`）：
+
+| Trigger | 触发条件 | 实现 |
+|---------|---------|------|
+| `.onAppear` | 视图出现 | SwiftUI `.transition` 承担，**不经协调器** |
+| `.onDisappear` | 视图消失 | SwiftUI `.transition` 承担，**不经协调器** |
+| `.onPathChange(path)` | VariableStore 该 path 值变化 | `AnimationTriggerCoordinator` 监听 `storeDidChange(tree:)` |
+| `.onAction(key)` | `NativeAction` 触发 | `NativeActionDispatcher` 调用 `fire(action)`；key 映射：`updateVariable` → `"updateVariable"`、`toggle` → `"toggle"`、`custom(key: k)` → k、`navigate` → 无 key |
+
+**派发闭环**（P10 收口，commit `0f61999`）：
+
+```
+NativeIRNode.animation(AnimationIR)
+   ↓ NativeIRAnimationPlanner.group(items)（同级 sidecar 配对 → 修饰下一兄弟）
+SiblingGroup(node, animations)
+   ↓ SwiftUI NativeView 渲染
+AnimationTriggerCoordinator（Foundation-only ObservableObject，桥接 SwiftUI runtime）
+   ↓ token +1（onPathChange 变化 / onAction 命中）
+TriggeredAnimModifier 接收 token 变化
+   ↓ SwiftUI .animation / .transition / withAnimation 重放 from→to
+```
+
+**Renderer**：渲染 `AnimationProperty`（`opacity` / `scale` / `scaleX/Y` / `offsetX/Y` / `rotation`）+ `AnimationTimingCurve`（`linear` / `easeIn` / `easeOut` / `easeInOut` / `cubicBezier(x1,y1,x2,y2)` / `spring(response,damping)`）。
+
+**失败 / 无法识别** → 走 `.htmlScript(residual:)` 路径，原始表达完整保留。
+
+### 14.8 跳过规则（HTML beautify 防滥用）
+
+渲染前的显示用正则按 `MessageRendererCore.orderedRegexes` 排序时，再叠加两道过滤门：
+
 1. `DisplayRegex.promptOnly == true` → 不进显示链（仅 outgoing prompt 阶段剥离）。
 2. `MessageRendererCore.isHtmlBeautify(replacement)` → `replacement` 含 `<script` / `.load(` / `<object` / `<iframe` / `<details` / `<style` / `<div` 任一 → 不进显示链。
 
-跳过规则的协议层覆盖由 `swift-tests/Tests/PyramidCoreTests/P3TranspileProtocolTests.swift`（`HTML beautify` 跳过、`promptOnly` 过滤、`UpdateVariable` / `StatusPlaceHolderImpl` 块识别、`message.content` 永不被改写）配合 `JSONPatchTests.swift`（RFC 6902 词汇表、JSON Pointer 解析、`_` 前缀 skip）在 Linux SPM 上驱动；不含角色名 / 卡面路径 / 脚本名的卡味夹具已移除，详见 `swift-tests/Fixtures/README.md`。
+跳过规则的协议层覆盖由 `swift-tests/Tests/PyramidCoreTests/P3TranspileProtocolTests.swift`（`HTML beautify` 跳过、`promptOnly` 过滤、`UpdateVariable` / `StatusPlaceHolderImpl` 块识别、`message.content` 永不被改写）配合 `JSONPatchTests.swift`（RFC 6902 词汇表、JSON Pointer 解析、`_` 前缀 skip）以及 v0.8 新增的 `MacroBindingTests.swift` / `NativeConditionTests.swift` / `TavernTranspilerTests.swift` / `NativeIRProjectorTests.swift` 在 Linux SPM 上驱动；不含角色名 / 卡面路径 / 脚本名的卡味夹具已移除，详见 `swift-tests/Fixtures/README.md`。
 
-**硬边界**（与 §13 已知限制并列）：
+### 14.9 硬边界（与 §13 已知限制并列）
+
 - `message.content` 原文永不被改写；`RenderNodeParser` 只读，复制 / 编辑 / 重新生成 / 发送 API 始终拿原文。
-- `VariableStore` 仅在客户端持有，不上传任何数据；写入仅由当前会话的 UpdateVariable 块触发。
-- 不引入 WKWebView / UIWebView / SFSafariViewController；不解析任何远程 `<script>` / `<object>` / `$('body').load(...)`。
+- `VariableStore` 仅在客户端持有，不上传任何数据；写入仅由当前会话的 `<UpdateVariable>` 块 + `<NativeAction>` 触发。
+- 不引入 WKWebView / UIWebView / SFSafariViewController；不解析任何远程 `<script>` / `<object>` / `$('body').load(...)`；不下载任何 `<img src>` / `<script src>` / `<iframe src>`（仅记录 URL 意图）。
+- `<script>` / `<style>` body **永不执行**，原文完整保留在 `.htmlScript(residual:)` / `.deferredResidual(replacement)` 供 UI 折叠展示。
+- 大小写不敏感 / 空白容忍仅作用于 `{{getvar::}}` 解析；其他宏、tag、JSON Patch op 全部严格大小写。
 
-**调研参考文档**（Phase 7 源码结论，2026-08-20）：
+### 14.10 调研参考文档（Phase 7 源码结论，2026-08-20）
+
 - [`ST_SOURCE_CONCLUSIONS.md`](./ST_SOURCE_CONCLUSIONS.md) — 酒馆 / Tavern Helper / MagVarUpdate 三仓分工、关键源文件路径、显示数据流、JsonPatch dialect 词汇表
 - [`ST_FIELD_LIST.md`](./ST_FIELD_LIST.md) — chara_card_v3 / regex_scripts / stat_data 字段的 D（数据）/ S（皮肤）/ P（协议）分类
 - [`ST_TO_NATIVE_MAPPING.md`](./ST_TO_NATIVE_MAPPING.md) — 酒馆概念 → NativeDisplayModel 原语映射表（每条附源码依据）
@@ -934,18 +1272,3 @@ iOS 和 Android 双端应实现**相同的核心功能集**，包括：
 **上下文长度提示**：`ChatView.contextHintBar` 显示的字符数 = 「裁剪后历史字符数 + 世界书注入估算字符数」，与实际请求体一致。
 
 **裁剪对象**：仅 `messages` 历史；系统提示词（角色 / 会话 / 全局 / 用户人设 / 世界书注入段）**不被裁剪**，且不被计入裁剪预算。
-
----
-
-## 13. 已知限制
-
-> 当前无独立 `KNOWN_ISSUES.md`，以下限制统一记录于此。
-
-1. **存储可靠性**：全部数据存于 UserDefaults，数据量大时（长对话、多角色、大世界书）可能出现性能与容量问题。**TODO**：迁移到 SwiftData / Core Data / 文件系统。
-2. **概率匹配确定性**：注入概率用 Swift `Hasher`（每次进程启动随机种子），同一输入在同一进程内稳定，但**跨启动不稳定，且无法与 Android 端复现相同结果**。若需跨端一致，应改用确定性哈希（如基于文本的 stable hash）。
-3. **CI 产物未签名**：GitHub Actions 打出的 `Pyramid-unsigned.ipa` 为**未签名**归档，无法直接安装到真机，仅用于测试/发布流程验证。真机安装需另配签名。
-4. **PNG 角色卡解压上限**：解压 `chara` 数据时输出缓冲上限为 2MB，超大卡片可能解压失败。
-5. **世界书注入硬上限**：单次最多注入 20 条、内容总长最多 2000 字符；超出上限的条目会被跳过（不报错）。
-6. **ST 世界书合并去重**：合并到当前世界书时按 `content` 去重，标题/关键词变化而内容相同的条目不会被再次导入。
-7. **角色卡 PNG 识别范围**：仅解析 PNG 顶层 `tEXt` chunk 的 `chara` 关键字；zTXt / iTXt（压缩）或其它存储方式不识别。
-8. **无云端同步**：所有数据仅存本机，不做任何服务器同步（属设计原则）。

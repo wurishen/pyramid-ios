@@ -1,6 +1,6 @@
 # Pyramid iOS 已知问题清单
 
-> 截至 v0.7.1+ — 按"对用户的影响"排序，不分模块。修复优先级在 issue tracker。
+> 截至 v0.8+ — 按"对用户的影响"排序，不分模块。修复优先级在 issue tracker。
 
 ## 1. 持久层未迁移到 SwiftData
 
@@ -132,11 +132,17 @@
 
 ---
 
-## 历史已修复（参见 `docs/AUDIT_V3.md` Phase 1-3 落地记录）
+## 历史已修复（参见 `docs/AUDIT_V3.md` Phase 1-3 落地记录 + v0.8 收口）
 
 - ✅ MessageRenderer.swift 是死代码（commit `a33e38a` 删除）
 - ✅ `MessageRenderer.swift` 在 project.pbxproj 里的 stale references（commit `54dca50` 顺手清理）
 - ✅ `<status>` 块只识别 HP + 好感度（commit `2f2b0ec` 扩展到任意 key/value）
-- ✅ V3 World Book Entry 字段未运行时生效（commit `cdac2fd`）
+- ✅ V3 World Book Entry 字段未运行时生效（commit `cdac2fd`）—— §3.2 算法已落地 `case_sensitive` / `selectiveLogic` 0-3 / `triggers` / `excludes` / `weight` / `decay` / `groupKey`+`useGroupScoring`
 - ✅ ST `promptOnly` 未生效（commit `1d025cb`）
 - ✅ MVU / JSON Patch / VariableStore 缺失（commit `cdac2fd` 之前的 P3 落地）
+- ✅ v0.8 NativeIR / NativeIRProjector / TavernTranspiler / RenderNodeTranspiler 未注册进 app target（commit `431ace9` —— pbxproj 0416-041D 块加入；CI build + lint 全绿）
+- ✅ v0.8 Macro/Binding/Condition 全链路未落地（commit `28d6cb8` —— 400 tests 0 failures，build+lint+release 全绿；getvar 变量绑定、NativeIf 条件原语、未知宏逐字保真、SPM symlink + pbxproj 双注册）
+- ✅ v0.8 AnimationIR.trigger (onPathChange/onAction) 未派发到 SwiftUI runtime（commit `0f61999` —— AnimationTriggerCoordinator + TriggeredAnimModifier token 化重放）
+- ✅ 位置 `position` 1（after char defs）/ 2（after example messages）合并到 `.afterSystem`（v0.8 起按 ST 原值 0-6 细分，`positionRaw` 保留原值）
+- ✅ V3 `case_sensitive` 改动 `WorldBookService.matches` 后未覆盖新增字段路径（v0.8 把 `caseSensitive` 应用到 `triggers` / `excludes` 的索引）
+- ✅ MarkdownTextView 不支持段落引用嵌套 / 代码块内嵌代码（v0.8 起 `MarkdownTextView` 块级 parser 重写，支持标题 5 级 + 嵌套列表 2 层 + 围栏代码块 language hint）
