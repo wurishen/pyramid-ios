@@ -293,6 +293,24 @@ struct RenderInspectorView: View {
             .padding(8)
             .background(Color(.systemGray6))
             .clipShape(RoundedRectangle(cornerRadius: 6))
+        case let .htmlStyled(tag, classNames, style, children):
+            // P11 调试视图：CSS-aware 容器 —— tag/class + 合并后的声明列表。
+            VStack(alignment: .leading, spacing: 2) {
+                Text("[\(idx)] .htmlStyled \(tag)\(classNames.isEmpty ? "" : "." + classNames.joined(separator: ".")) (\(children.count) 子节点)")
+                    .font(.caption.weight(.medium))
+                if style.declarations.isEmpty {
+                    Text("(无声明)").font(.caption2).foregroundStyle(.secondary)
+                } else {
+                    Text(style.declarations.map { "\($0.property): \($0.value)" }.joined(separator: "; "))
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
         case let .htmlImage(src, alt):
             VStack(alignment: .leading, spacing: 2) {
                 Text("[\(idx)] .htmlImage").font(.caption.weight(.medium))

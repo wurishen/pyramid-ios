@@ -252,6 +252,10 @@ struct MessageCard: View {
             // 为避免丢失数据，先吞下；上层动画 modifier 由 htmlContainerView 等统一接管。
             // 具体转换见 HTMLContainerView / nativeActionButton —— 在那边触发 AnimationIR 的应用。
             EmptyView().modifier(AnimationSidecarModifier(anim: anim))
+        case let .htmlStyled(tag, classNames, style, children):
+            // P11 CSS-aware 容器：StyledContainerView 把 CSS 声明翻译成 SwiftUI 原生 modifier 链。
+            htmlStyledView(tag: tag, classNames: classNames, style: style,
+                           children: children, isLong: isLong, scale: scale)
         }
     }
 
@@ -291,6 +295,19 @@ struct MessageCard: View {
                 scale: scale,
                 renderChild: { child in AnyView(renderNode(child, isLong: isLong, scale: scale)) }
             )
+        )
+    }
+
+    /// P11 styled 容器递归入口 —— 同 htmlContainerView，外层套 StyledContainerView
+    /// 应用 CSS 声明（颜色 / 背景 / padding / 圆角 / 阴影 / 字体 / transform 等）。
+    private func htmlStyledView(tag: String, classNames: [String], style: CSSStyleDeclaration,
+                                children: [RenderNode], isLong: Bool, scale: CGFloat) -> AnyView {
+        AnyView(
+            StyledContainerView(tag: tag, classNames: classNames, style: style, scale: scale) {
+                ForEach(Array(children.enumerated()), id: \.offset) { _, child in
+                    renderNode(child, isLong: isLong, scale: scale)
+                }
+            }
         )
     }
 
